@@ -1,0 +1,76 @@
+<svg viewBox="0 0 1800 900" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="wave1" x1="0%" y1="0%" x2="100%" y2="60%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="45%" stop-color="#ec4899"/>
+      <stop offset="100%" stop-color="#c026d3"/>
+    </linearGradient>
+    <linearGradient id="wave2" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#f472b6" stop-opacity="0.35"/>
+    </linearGradient>
+    <linearGradient id="orb1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d946ef"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+    <linearGradient id="chip1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c026d3"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+    <radialGradient id="donut" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1800" height="900" fill="#ffffff"/>
+
+  <!-- top-right orb -->
+  <circle cx="1730" cy="80" r="150" fill="url(#orb1)" opacity="0.9"/>
+  <path d="M1350,10 C1500,120 1550,220 1780,180" stroke="url(#orb1)" stroke-width="2" fill="none" opacity="0.5"/>
+
+  <!-- bottom-left flowing waves -->
+  <path d="M-50,520 C250,400 400,620 650,560 C950,490 1050,650 1350,600 C1550,570 1700,650 1850,600 L1850,900 L-50,900 Z" fill="url(#wave1)" opacity="0.9"/>
+  <path d="M-50,600 C300,520 500,700 800,650 C1050,610 1200,720 1500,680 C1650,660 1750,720 1850,700 L1850,900 L-50,900 Z" fill="url(#wave2)"/>
+
+  <!-- floating analytics card top-left -->
+  <g transform="translate(40,80)" opacity="0.97">
+    <rect x="10" y="30" width="300" height="150" rx="20" fill="#f4f0ff" opacity="0.6"/>
+    <rect x="0" y="10" width="300" height="150" rx="20" fill="#ffffff" stroke="#eee6fb" stroke-width="1.5"/>
+    <rect x="30" y="90" width="14" height="40" rx="3" fill="#c084fc"/>
+    <rect x="52" y="70" width="14" height="60" rx="3" fill="#a855f7"/>
+    <rect x="74" y="50" width="14" height="80" rx="3" fill="#7c3aed"/>
+    <rect x="120" y="55" width="70" height="8" rx="4" fill="#ddd6f5"/>
+    <rect x="120" y="75" width="55" height="8" rx="4" fill="#ddd6f5"/>
+    <rect x="120" y="95" width="60" height="8" rx="4" fill="#ddd6f5"/>
+    <circle cx="255" cy="85" r="35" fill="none" stroke="#ede9fe" stroke-width="14"/>
+    <circle cx="255" cy="85" r="35" fill="none" stroke="url(#donut)" stroke-width="14" stroke-dasharray="140 220" stroke-linecap="round"/>
+  </g>
+
+  <!-- connected node icons right side -->
+  <g opacity="0.95">
+    <line x1="1330" y1="480" x2="1440" y2="530" stroke="#d8b4fe" stroke-width="2"/>
+    <line x1="1330" y1="640" x2="1440" y2="580" stroke="#d8b4fe" stroke-width="2"/>
+    <line x1="1550" y1="530" x2="1620" y2="500" stroke="#d8b4fe" stroke-width="2"/>
+    <line x1="1550" y1="580" x2="1620" y2="620" stroke="#d8b4fe" stroke-width="2"/>
+
+    <rect x="1290" y="450" width="60" height="60" rx="14" fill="#ffffff" stroke="#eee6fb" stroke-width="1.5"/>
+    <path d="M1310,470 h20 M1310,478 h20 M1310,486 h12" stroke="#a855f7" stroke-width="2.5" stroke-linecap="round"/>
+
+    <rect x="1290" y="610" width="60" height="60" rx="14" fill="#ffffff" stroke="#eee6fb" stroke-width="1.5"/>
+    <circle cx="1312" cy="633" r="6" fill="#c026d3"/>
+    <path d="M1302,652 q10,-12 20,0" stroke="#c026d3" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+
+    <rect x="1440" y="470" width="110" height="110" rx="22" fill="url(#chip1)"/>
+    <rect x="1465" y="495" width="26" height="26" rx="6" fill="#ffffff" opacity="0.95"/>
+    <rect x="1497" y="495" width="26" height="26" rx="6" fill="#ffffff" opacity="0.7"/>
+    <rect x="1465" y="527" width="26" height="26" rx="6" fill="#ffffff" opacity="0.7"/>
+    <rect x="1497" y="527" width="26" height="26" rx="6" fill="#ffffff" opacity="0.95"/>
+
+    <rect x="1610" y="470" width="60" height="60" rx="14" fill="#ffffff" stroke="#eee6fb" stroke-width="1.5"/>
+    <rect x="1628" y="488" width="24" height="24" rx="4" fill="none" stroke="#7c3aed" stroke-width="2.5"/>
+
+    <rect x="1610" y="590" width="60" height="60" rx="14" fill="#ffffff" stroke="#eee6fb" stroke-width="1.5"/>
+    <path d="M1628,605 h24 M1628,613 h24 M1628,621 h16 M1628,629 h20" stroke="#7c3aed" stroke-width="2.5" stroke-linecap="round"/>
+  </g>
+</svg>
