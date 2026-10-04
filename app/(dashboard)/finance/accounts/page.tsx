@@ -20,11 +20,20 @@ import { downloadCsv } from "@/lib/utils/csv";
 
 const ACCOUNT_TYPES = ["asset", "liability", "equity", "revenue", "expense"] as const;
 
+// Report category for revenue/expense accounts; drives the expense reports.
+const CATEGORY_LABELS: Record<string, string> = {
+  marketing: "Biaya Pemasaran",
+  admin_general: "Biaya Administrasi & Umum",
+  non_operating: "Di Luar Usaha",
+  cogs: "Harga Pokok Penjualan",
+};
+
 interface Account {
   id: string;
   code: string;
   name: string;
   type: string;
+  category?: string;
   balance: number;
   currency: string;
   status: string;
@@ -37,6 +46,7 @@ export default function AccountsPage() {
   const [code, setCode] = React.useState("");
   const [name, setName] = React.useState("");
   const [type, setType] = React.useState<(typeof ACCOUNT_TYPES)[number]>("asset");
+  const [category, setCategory] = React.useState("");
 
   React.useEffect(() => {
     financeApi
@@ -48,6 +58,7 @@ export default function AccountsPage() {
               code: a.code,
               name: a.name,
               type: a.type,
+              category: a.category,
               balance: a.balance,
               currency: a.currency,
               status: a.status,
@@ -79,19 +90,23 @@ export default function AccountsPage() {
     setIsSubmitting(true);
     setFormError(null);
     try {
-      const res = await financeApi.createAccount({ code, name, type, isActive: true });
+      const res = await financeApi.createAccount({
+        code, name, type, isActive: true,
+        ...(type === "revenue" || type === "expense" ? { category } : {}),
+      });
       if (!res.success || !res.data) {
         throw new Error(res.message || "Gagal membuat akun.");
       }
       const a = res.data;
       setAccounts([
-        { id: a.id, code: a.code, name: a.name, type: a.type, balance: a.balance, currency: a.currency, status: a.status },
+        { id: a.id, code: a.code, name: a.name, type: a.type, category: a.category, balance: a.balance, currency: a.currency, status: a.status },
         ...accounts,
       ]);
       setIsAddOpen(false);
       setCode("");
       setName("");
       setType("asset");
+      setCategory("");
       setNotice("Akun baru berhasil ditambahkan.");
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Gagal menambahkan akun. Silakan coba lagi.");
@@ -118,6 +133,11 @@ export default function AccountsPage() {
       header: "Account Classification",
       sortable: true,
       render: (a) => <span className="text-xs text-muted-foreground">{a.type}</span>,
+    },
+    {
+      key: "category",
+      header: "Report Category",
+      render: (a) => <span className="text-xs text-muted-foreground">{a.category ? CATEGORY_LABELS[a.category] ?? a.category : "-"}</span>,
     },
     {
       key: "balance",
@@ -213,6 +233,22 @@ export default function AccountsPage() {
                 ))}
               </select>
             </div>
+
+            {(type === "revenue" || type === "expense") && (
+              <div className="space-y-1">
+                <label className="font-bold text-foreground">Report Category</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full h-9 px-2 rounded-lg border border-border bg-white text-xs"
+                >
+                  <option value="">Default (by account code)</option>
+                  {Object.entries(CATEGORY_LABELS)
+                    .filter(([k]) => type === "expense" || k === "non_operating")
+                    .map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                </select>
+              </div>
+            )}
 
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" size="sm" onClick={() => setIsAddOpen(false)}>

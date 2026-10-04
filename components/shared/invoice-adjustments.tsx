@@ -11,10 +11,12 @@ interface Props {
   onChange: (next: InvoiceAdjustments) => void;
   /** Label for the additional-cost field, e.g. "Ongkir / biaya lain". */
   additionalLabel?: string;
+  /** "output" = sales (PPN Keluaran); "input" = purchases (PPN Masukan, can be marked creditable). */
+  vatKind?: "output" | "input";
 }
 
 /** Discount, additional cost and rounding inputs with a live breakdown of the final total. */
-export function InvoiceAdjustmentsFields({ subtotal, value, onChange, additionalLabel = "Biaya tambahan (ongkir, dll.)" }: Props) {
+export function InvoiceAdjustmentsFields({ subtotal, value, onChange, additionalLabel = "Biaya tambahan (ongkir, dll.)", vatKind = "output" }: Props) {
   const amounts = previewInvoiceAmounts(subtotal, value);
   const set = (patch: Partial<InvoiceAdjustments>) => onChange({ ...value, ...patch });
   return (
@@ -53,6 +55,26 @@ export function InvoiceAdjustmentsFields({ subtotal, value, onChange, additional
           <option value={1000}>Ke Rp1.000 terdekat</option>
         </select>
       </div>
+      <div className="space-y-1.5 rounded-md bg-slate-50 p-2.5">
+        <label className="flex items-center gap-2 text-xs font-medium text-foreground">
+          <input type="checkbox" checked={value.applyVat} onChange={(e) => set({ applyVat: e.target.checked })} />
+          {vatKind === "output" ? "Kenakan PPN 12%" : "Invoice memuat PPN Masukan 12%"}
+        </label>
+        {value.applyVat && (
+          <>
+            <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+              <input type="checkbox" checked={value.vatOtherValueBase} onChange={(e) => set({ vatOtherValueBase: e.target.checked })} />
+              DPP nilai lain (11/12 dari harga, PPN efektif 11%)
+            </label>
+            {vatKind === "input" && (
+              <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <input type="checkbox" checked={value.vatCreditable} onChange={(e) => set({ vatCreditable: e.target.checked })} />
+                Dapat dikreditkan (didukung Faktur Pajak Masukan); jika tidak, PPN masuk ke harga pokok
+              </label>
+            )}
+          </>
+        )}
+      </div>
       {amounts.error ? (
         <p role="alert" className="text-xs text-rose-700">{amounts.error}</p>
       ) : (
@@ -60,6 +82,7 @@ export function InvoiceAdjustmentsFields({ subtotal, value, onChange, additional
           <div className="flex justify-between"><dt className="text-muted-foreground">Subtotal</dt><dd><MoneyDisplay amount={amounts.subtotal} /></dd></div>
           {amounts.discount > 0 && <div className="flex justify-between"><dt className="text-muted-foreground">Diskon</dt><dd>−<MoneyDisplay amount={amounts.discount} /></dd></div>}
           {amounts.additionalCost > 0 && <div className="flex justify-between"><dt className="text-muted-foreground">Biaya tambahan</dt><dd>+<MoneyDisplay amount={amounts.additionalCost} /></dd></div>}
+          {amounts.vat > 0 && <div className="flex justify-between"><dt className="text-muted-foreground">PPN (DPP <MoneyDisplay amount={amounts.taxBase} />)</dt><dd>+<MoneyDisplay amount={amounts.vat} /></dd></div>}
           {amounts.rounding !== 0 && <div className="flex justify-between"><dt className="text-muted-foreground">Pembulatan</dt><dd>{amounts.rounding > 0 ? "+" : "−"}<MoneyDisplay amount={Math.abs(amounts.rounding)} /></dd></div>}
           <div className="flex justify-between font-bold border-t border-border pt-1"><dt>Total ditagihkan</dt><dd><MoneyDisplay amount={amounts.total} /></dd></div>
         </dl>

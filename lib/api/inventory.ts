@@ -131,6 +131,75 @@ export interface OpnameItem {
   createdAt?: string;
 }
 
+export interface OpnameCountRow {
+  sku: string;
+  countedQty: number;
+}
+
+export interface OpnameImportResult {
+  applied: number;
+  errors: { row: number; sku: string; message: string }[];
+  opname: OpnameItem;
+}
+
+// Stock documents (Transaksi Stock)
+
+export type StockDocumentType = "material_issue" | "finished_goods_receipt" | "scrap" | "memo_in" | "memo_out";
+
+export interface StockDocumentLineInput {
+  productId: string;
+  quantity: number;
+  /** Finished goods receipts only: production cost per unit (defaults to the product's cost price). */
+  unitCost?: number;
+  batchNo?: string;
+  expiryDate?: string;
+}
+
+export interface CreateStockDocumentInput {
+  type: StockDocumentType;
+  date?: string;
+  warehouseId: string;
+  reference?: string;
+  reason?: string;
+  notes?: string;
+  /** Material issues only: the production order the materials are issued to. */
+  productionOrderId?: string;
+  lines: StockDocumentLineInput[];
+}
+
+export interface StockDocumentLine {
+  id: string;
+  productId: string;
+  productSku: string;
+  productName: string;
+  quantity: number;
+  unitCost: number;
+  amount: number;
+  batchNo?: string;
+  expiryDate?: string;
+}
+
+export interface StockDocument {
+  id: string;
+  number: string;
+  type: StockDocumentType;
+  typeLabel: string;
+  direction: "in" | "out";
+  date: string;
+  warehouseId: string;
+  warehouseName: string;
+  reference: string;
+  productionOrderId?: string;
+  reason: string;
+  notes: string;
+  totalValue: number;
+  /** False when the stock moved but the journal could not be posted. */
+  posted: boolean;
+  createdBy?: string;
+  lines: StockDocumentLine[];
+  createdAt?: string;
+}
+
 export interface StockBatchItem {
   id: string;
   productId: string;
@@ -221,6 +290,15 @@ export const inventoryApi = {
   finalizeOpname: async (id: string): Promise<ApiResponse<OpnameItem>> => {
     return apiClient<OpnameItem>(`/inventory/opname/${id}/finalize`, { method: "POST" });
   },
+  importOpnameCounts: async (id: string, rows: OpnameCountRow[]): Promise<ApiResponse<OpnameImportResult>> => {
+    return apiClient<OpnameImportResult>(`/inventory/opname/${id}/import`, { method: "POST", body: JSON.stringify({ rows }) });
+  },
+
+  listStockDocuments: async (params?: { type?: StockDocumentType; from?: string; to?: string }): Promise<ApiResponse<StockDocument[]>> =>
+    apiClient<StockDocument[]>("/inventory/documents", { params }),
+  getStockDocument: async (id: string): Promise<ApiResponse<StockDocument>> => apiClient<StockDocument>(`/inventory/documents/${id}`),
+  createStockDocument: async (data: CreateStockDocumentInput): Promise<ApiResponse<StockDocument>> =>
+    apiClient<StockDocument>("/inventory/documents", { method: "POST", body: JSON.stringify(data) }),
 };
 
 export interface MovementSummaryRow {

@@ -16,6 +16,8 @@ interface Customer {
   email: string;
   phone: string;
   city: string;
+  npwp: string;
+  nik: string;
   creditLimit: number;
   status: string;
 }
@@ -39,6 +41,8 @@ export default function CustomersPage() {
     phone: "",
     city: "",
     creditLimit: 0,
+    npwp: "",
+    nik: "",
   });
 
   const [isEditOpen, setIsEditOpen] = React.useState(false);
@@ -50,6 +54,8 @@ export default function CustomersPage() {
     email: "",
     phone: "",
     city: "",
+    npwp: "",
+    nik: "",
   });
 
   const fetchCustomers = () => {
@@ -64,6 +70,8 @@ export default function CustomersPage() {
             email: c.email || "-",
             phone: c.phone || "-",
             city: c.address || "-",
+            npwp: c.npwp || "",
+            nik: c.nik || "",
             creditLimit: 0,
             status: c.status?.toLowerCase() === "active" ? "active" : "inactive",
           }));
@@ -89,6 +97,8 @@ export default function CustomersPage() {
         email: formData.email,
         phone: formData.phone,
         address: formData.city,
+        npwp: formData.npwp,
+        nik: formData.nik,
         segment: formData.contactPerson || "Enterprise B2B",
       });
       setIsAddOpen(false);
@@ -107,6 +117,8 @@ export default function CustomersPage() {
       email: c.email,
       phone: c.phone,
       city: c.city,
+      npwp: c.npwp,
+      nik: c.nik,
     });
     setIsEditOpen(true);
   };
@@ -121,6 +133,8 @@ export default function CustomersPage() {
         email: editFormData.email,
         phone: editFormData.phone,
         address: editFormData.city,
+        npwp: editFormData.npwp,
+        nik: editFormData.nik,
         segment: editFormData.contactPerson || "Enterprise B2B",
       });
       const updated = res.data;
@@ -135,6 +149,8 @@ export default function CustomersPage() {
                 email: updated?.email ?? editFormData.email,
                 phone: updated?.phone ?? editFormData.phone,
                 city: updated?.address ?? editFormData.city,
+                npwp: updated?.npwp ?? editFormData.npwp,
+                nik: updated?.nik ?? editFormData.nik,
               }
             : c
         )
@@ -325,6 +341,26 @@ export default function CustomersPage() {
                 placeholder="Jakarta Barat"
               />
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="font-semibold text-foreground">NPWP</label>
+                <Input
+                  value={formData.npwp}
+                  onChange={(e) => setFormData({ ...formData, npwp: e.target.value })}
+                  placeholder="15 atau 16 digit"
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="font-semibold text-foreground">NIK</label>
+                <Input
+                  value={formData.nik}
+                  onChange={(e) => setFormData({ ...formData, nik: e.target.value })}
+                  placeholder="16 digit (jika tanpa NPWP)"
+                  inputMode="numeric"
+                />
+              </div>
+            </div>
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" size="sm" onClick={() => setIsAddOpen(false)}>
                 Batal
@@ -382,6 +418,26 @@ export default function CustomersPage() {
                 value={editFormData.city}
                 onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
               />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="font-semibold text-foreground">NPWP</label>
+                <Input
+                  value={editFormData.npwp}
+                  onChange={(e) => setEditFormData({ ...editFormData, npwp: e.target.value })}
+                  placeholder="15 atau 16 digit"
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="font-semibold text-foreground">NIK</label>
+                <Input
+                  value={editFormData.nik}
+                  onChange={(e) => setEditFormData({ ...editFormData, nik: e.target.value })}
+                  placeholder="16 digit (jika tanpa NPWP)"
+                  inputMode="numeric"
+                />
+              </div>
             </div>
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" size="sm" onClick={() => setIsEditOpen(false)}>

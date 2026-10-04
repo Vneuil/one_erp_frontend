@@ -36,6 +36,39 @@ export interface UpdateAssetInput {
   usefulLifeYears?: number;
 }
 
+export interface DepreciationReportLine {
+  assetId: string;
+  assetCode: string;
+  name: string;
+  category: string;
+  purchaseDate: string;
+  status: string;
+  cost: number;
+  usefulLifeYears: number;
+  monthlyDepreciation: number;
+  postedInPeriod: number;
+  accumulatedPosted: number;
+  bookValue: number;
+  unpostedMonths: number;
+}
+
+export interface DepreciationReport {
+  period: string;
+  lines: DepreciationReportLine[];
+  totalCost: number;
+  totalPostedInPeriod: number;
+  totalAccumulated: number;
+  totalBookValue: number;
+}
+
+export interface DepreciationPostResult {
+  period: string;
+  postedCount: number;
+  totalAmount: number;
+  alreadyPosted: number;
+  items: { assetId: string; assetCode: string; name: string; period: string; amount: number }[];
+}
+
 export const assetsApi = {
   listAssets: async (params?: { page?: number; perPage?: number; search?: string }): Promise<ApiResponse<AssetItem[]>> => {
     return apiClient<AssetItem[]>("/assets", { params });
@@ -57,5 +90,11 @@ export const assetsApi = {
   },
   recalculateAllDepreciation: async (): Promise<ApiResponse<AssetItem[]>> => {
     return apiClient<AssetItem[]>("/assets/recalculate-all", { method: "POST" });
+  },
+  depreciationReport: async (period?: string): Promise<ApiResponse<DepreciationReport>> => {
+    return apiClient<DepreciationReport>("/assets/depreciation/report", { params: { period } });
+  },
+  postDepreciation: async (period: string, catchUp: boolean): Promise<ApiResponse<DepreciationPostResult>> => {
+    return apiClient<DepreciationPostResult>("/assets/depreciation/post", { method: "POST", body: JSON.stringify({ period, catchUp }) });
   },
 };

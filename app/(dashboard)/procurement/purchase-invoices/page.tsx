@@ -166,6 +166,13 @@ export default function PurchaseInvoicesPage() {
       render: (vi) => <MoneyDisplay amount={vi.totalAmount} className="text-xs font-bold" />,
     },
     {
+      key: "vatAmount",
+      header: "PPN",
+      align: "right",
+      render: (inv) =>
+        inv.vatAmount ? <MoneyDisplay amount={inv.vatAmount} className="text-xs" /> : <span className="text-xs text-muted-foreground">-</span>,
+    },
+    {
       key: "outstanding",
       header: "Outstanding",
       align: "right",
@@ -283,7 +290,7 @@ export default function PurchaseInvoicesPage() {
                 <Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(Number(e.target.value))} required />
               </div>
             </div>
-            <InvoiceAdjustmentsFields subtotal={totalAmount} value={adjust} onChange={setAdjust} additionalLabel="Ongkir / biaya masuk" />
+            <InvoiceAdjustmentsFields subtotal={totalAmount} value={adjust} onChange={setAdjust} additionalLabel="Ongkir / biaya masuk" vatKind="input" />
             {formError && <p className="text-xs text-rose-600 font-semibold">{formError}</p>}
             <DialogFooter>
               <Button type="submit" variant="gradient" className="text-xs font-semibold">

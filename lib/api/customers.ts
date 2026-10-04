@@ -7,6 +7,9 @@ export interface CustomerItem {
   email: string;
   phone: string;
   address: string;
+  /** NPWP (15/16 digits) and NIK (16 digits); the buyer identity on Faktur Pajak. */
+  npwp?: string;
+  nik?: string;
   segment: string;
   status: string;
   createdAt?: string;
@@ -19,6 +22,8 @@ export interface CreateCustomerInput {
   email: string;
   phone: string;
   address: string;
+  npwp?: string;
+  nik?: string;
   segment: string;
   status?: string;
 }

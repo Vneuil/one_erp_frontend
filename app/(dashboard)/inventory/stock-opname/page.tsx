@@ -2,7 +2,8 @@
 
 import { useNavigationAccess } from "@/providers/navigation-access";
 import * as React from "react";
-import { Plus, ClipboardCheck, CheckCircle2, Save } from "lucide-react";
+import Link from "next/link";
+import { Plus, ClipboardCheck, CheckCircle2, Save, Upload, Download, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/shared/page-header";
@@ -15,7 +16,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { inventoryApi, OpnameItem, WarehouseItem } from "@/lib/api/inventory";
+import { inventoryApi, OpnameImportResult, OpnameItem, WarehouseItem } from "@/lib/api/inventory";
+import { downloadCsv } from "@/lib/utils/csv";
+import { parseCountSheet, RowError } from "@/lib/utils/opname-count-sheet";
 
 interface StockOpname {
   id: string;
@@ -42,6 +45,8 @@ export default function StockOpnamePage() {
   const [savingLineId, setSavingLineId] = React.useState<string | null>(null);
   const [isFinalizing, setIsFinalizing] = React.useState(false);
   const [detailError, setDetailError] = React.useState<string | null>(null);
+  const [importing, setImporting] = React.useState(false);
+  const [importReport, setImportReport] = React.useState<{ applied: number; errors: RowError[] } | null>(null);
 
   const mapOpname = (o: OpnameItem): StockOpname => ({
     id: o.id,
@@ -87,6 +92,7 @@ export default function StockOpnamePage() {
 
   const openDetail = async (opnameId: string) => {
     setDetailError(null);
+    setImportReport(null);
     try {
       const res = await inventoryApi.getOpname(opnameId);
       setActiveOpname(res.data);
@@ -116,6 +122,42 @@ export default function StockOpnamePage() {
       setDetailError(err instanceof Error ? err.message : "Gagal menyimpan hasil hitung");
     } finally {
       setSavingLineId(null);
+    }
+  };
+
+  const downloadTemplate = () => {
+    if (!activeOpname) return;
+    downloadCsv(`template-opname-${activeOpname.warehouseName}-${activeOpname.auditDate}.csv`, ["SKU", "Produk", "Stok Sistem", "Hasil Hitung"],
+      activeOpname.lines.map((l) => [l.productSku, l.productName, l.systemQty, l.counted ? l.countedQty : ""]));
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !activeOpname) return;
+    setImporting(true);
+    setDetailError(null);
+    setImportReport(null);
+    try {
+      const { rows, errors: parseErrors } = parseCountSheet(await file.text());
+      if (rows.length === 0) {
+        setImportReport({ applied: 0, errors: parseErrors.length ? parseErrors : [{ row: 0, sku: "", message: "Tidak ada baris dengan hasil hitung yang terisi." }] });
+        return;
+      }
+      const res = await inventoryApi.importOpnameCounts(activeOpname.id, rows);
+      const result: OpnameImportResult = res.data;
+      setImportReport({ applied: result.applied, errors: [...parseErrors, ...result.errors].sort((a, b) => a.row - b.row) });
+      setActiveOpname(result.opname);
+      const drafts: Record<string, string> = {};
+      result.opname.lines.forEach((l) => {
+        drafts[l.id] = l.counted ? String(l.countedQty) : "";
+      });
+      setCountDrafts(drafts);
+      fetchAudits();
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "Gagal mengimpor hasil hitung");
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -268,6 +310,29 @@ export default function StockOpnamePage() {
               {detailError && (
                 <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 font-semibold text-xs">
                   {detailError}
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Link href={`/inventory/stock-opname/${activeOpname.id}/print`} target="_blank" className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border text-[11px] font-semibold hover:bg-slate-50">
+                  <Printer className="h-3.5 w-3.5" /> Cetak Form
+                </Link>
+                <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-[11px]" onClick={downloadTemplate}><Download className="h-3.5 w-3.5" /> Template CSV</Button>
+                {activeOpname.status !== "completed" && mayApprove && (
+                  <label className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border text-[11px] font-semibold cursor-pointer hover:bg-slate-50 ${importing ? "opacity-50 pointer-events-none" : ""}`}>
+                    <Upload className="h-3.5 w-3.5" /> {importing ? "Mengimpor..." : "Impor Hasil Hitung (CSV)"}
+                    <input type="file" accept=".csv,.tsv,.txt,text/csv" className="sr-only" onChange={handleImportFile} aria-label="Impor hasil hitung" />
+                  </label>
+                )}
+              </div>
+              {importReport && (
+                <div role="status" className={`p-2.5 rounded-lg border text-xs ${importReport.errors.length ? "bg-amber-50 border-amber-200 text-amber-900" : "bg-emerald-50 border-emerald-200 text-emerald-800"}`}>
+                  <div className="font-semibold">{importReport.applied} SKU berhasil diimpor{importReport.errors.length ? `, ${importReport.errors.length} baris bermasalah:` : "."}</div>
+                  {importReport.errors.length > 0 && (
+                    <ul className="mt-1 max-h-24 overflow-y-auto list-disc pl-4">
+                      {importReport.errors.map((er, i) => <li key={i}>{er.row ? `Baris ${er.row}` : "File"}{er.sku ? ` (${er.sku})` : ""}: {er.message}</li>)}
+                    </ul>
+                  )}
                 </div>
               )}
 

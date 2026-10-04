@@ -8,6 +8,9 @@ export interface SupplierItem {
   email: string;
   phone: string;
   address: string;
+  /** NPWP (15/16 digits) and NIK (16 digits); the seller identity on Faktur Pajak Masukan. */
+  npwp?: string;
+  nik?: string;
   category: string;
   status: string;
   createdAt?: string;
@@ -21,6 +24,8 @@ export interface CreateSupplierInput {
   email: string;
   phone: string;
   address: string;
+  npwp?: string;
+  nik?: string;
   category: string;
   status?: string;
 }

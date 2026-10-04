@@ -9,6 +9,8 @@ export interface AccountItem {
   type: string;
   parentId?: string | null;
   isActive: boolean;
+  /** Report category of a revenue/expense account: marketing | admin_general | non_operating | cogs. */
+  category?: string;
   balance: number;
   currency: string;
   status: string;
@@ -21,6 +23,7 @@ export interface CreateAccountInput {
   type: string;
   parentId?: string | null;
   isActive?: boolean;
+  category?: string;
 }
 
 // Journal entries
@@ -262,6 +265,110 @@ export interface FinancialInsight {
   refs?: string[];
 }
 
+// Cash / bank vouchers
+
+export interface CashVoucherLineInput {
+  accountCode: string;
+  description?: string;
+  amount: number;
+}
+
+export interface CashVoucherLine extends CashVoucherLineInput {
+  id: string;
+}
+
+export interface CashVoucherItem {
+  id: string;
+  number: string;
+  type: "receipt" | "payment";
+  date: string;
+  cashAccountCode: string;
+  counterparty: string;
+  description: string;
+  total: number;
+  posted: boolean;
+  lines: CashVoucherLine[];
+}
+
+export interface CreateCashVoucherInput {
+  type: "receipt" | "payment";
+  date?: string;
+  cashAccountCode?: string;
+  counterparty?: string;
+  description?: string;
+  lines: CashVoucherLineInput[];
+}
+
+// General ledger, cash book, expense breakdowns
+
+export interface LedgerLine {
+  date: string;
+  entryNumber: string;
+  memo: string;
+  description: string;
+  sourceDoc: string;
+  debit: number;
+  credit: number;
+  balance: number;
+}
+
+export interface LedgerAccount {
+  accountId: string;
+  code: string;
+  name: string;
+  type: string;
+  openingBalance: number;
+  lines: LedgerLine[];
+  totalDebit: number;
+  totalCredit: number;
+  closingBalance: number;
+}
+
+export interface CashBookDay {
+  date: string;
+  opening: number;
+  in: number;
+  out: number;
+  closing: number;
+}
+
+export interface GeneralLedgerReport {
+  from: string;
+  to: string;
+  accounts: LedgerAccount[];
+  days?: CashBookDay[];
+}
+
+export interface AmountLine {
+  accountCode: string;
+  accountName: string;
+  amount: number;
+}
+
+export interface ExpenseGroup {
+  category: string;
+  label: string;
+  lines: AmountLine[];
+  total: number;
+}
+
+export interface ExpenseBreakdownReport {
+  from: string;
+  to: string;
+  groups: ExpenseGroup[];
+  total: number;
+}
+
+export interface NonOperatingReport {
+  from: string;
+  to: string;
+  income: AmountLine[];
+  expenses: AmountLine[];
+  totalIncome: number;
+  totalExpenses: number;
+  net: number;
+}
+
 export const financeApi = {
   insights: async (from?: string): Promise<ApiResponse<FinancialInsight[]>> =>
     apiClient<FinancialInsight[]>("/finance/reports/insights", { params: { from } }),
@@ -381,4 +488,20 @@ export const financeApi = {
     data: { category: string; amount: number; date?: string; description?: string; paymentAccountCode?: string }
   ): Promise<ApiResponse<OtherIncomeItem>> =>
     apiClient<OtherIncomeItem>("/finance/other-income", { method: "POST", body: JSON.stringify(data) }),
+
+  // Cash / bank vouchers
+  listCashVouchers: async (params?: { type?: string; from?: string; to?: string }): Promise<ApiResponse<CashVoucherItem[]>> =>
+    apiClient<CashVoucherItem[]>("/finance/cash-vouchers", { params }),
+  createCashVoucher: async (data: CreateCashVoucherInput): Promise<ApiResponse<CashVoucherItem>> =>
+    apiClient<CashVoucherItem>("/finance/cash-vouchers", { method: "POST", body: JSON.stringify(data) }),
+
+  // Statutory reports
+  generalLedger: async (params?: { accountId?: string; from?: string; to?: string }): Promise<ApiResponse<GeneralLedgerReport>> =>
+    apiClient<GeneralLedgerReport>("/finance/reports/general-ledger", { params }),
+  cashBook: async (params?: { accountCode?: string; from?: string; to?: string }): Promise<ApiResponse<GeneralLedgerReport>> =>
+    apiClient<GeneralLedgerReport>("/finance/reports/cash-book", { params }),
+  expenseBreakdown: async (from?: string, to?: string): Promise<ApiResponse<ExpenseBreakdownReport>> =>
+    apiClient<ExpenseBreakdownReport>("/finance/reports/expense-breakdown", { params: { from, to } }),
+  nonOperating: async (from?: string, to?: string): Promise<ApiResponse<NonOperatingReport>> =>
+    apiClient<NonOperatingReport>("/finance/reports/non-operating", { params: { from, to } }),
 };

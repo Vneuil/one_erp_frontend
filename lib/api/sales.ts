@@ -100,6 +100,10 @@ export interface InvoiceItem {
   discountAmount?: number;
   additionalCost?: number;
   roundingAmount?: number;
+  /** DPP and PPN; zero for invoices without PPN. */
+  taxBase?: number;
+  vatRate?: number;
+  vatAmount?: number;
   paidAmount: number;
   outstanding: number;
   status: string;
@@ -135,6 +139,9 @@ export interface CreateInvoiceInput {
   discountAmount?: number;
   additionalCost?: number;
   roundTo?: number;
+  applyVat?: boolean;
+  vatRate?: number;
+  vatOtherValueBase?: boolean;
   dueDate?: string;
   salesOrderId?: string;
 }

@@ -122,6 +122,11 @@ export interface PurchaseInvoiceItem {
   discountAmount?: number;
   additionalCost?: number;
   roundingAmount?: number;
+  /** DPP and PPN Masukan; zero for invoices without PPN. */
+  taxBase?: number;
+  vatRate?: number;
+  vatAmount?: number;
+  vatCreditable?: boolean;
   paidAmount: number;
   outstanding: number;
   status: string;
@@ -141,6 +146,10 @@ export interface CreatePurchaseInvoiceInput {
   discountAmount?: number;
   additionalCost?: number;
   roundTo?: number;
+  applyVat?: boolean;
+  vatRate?: number;
+  vatOtherValueBase?: boolean;
+  vatCreditable?: boolean;
 }
 
 // Purchase down payments

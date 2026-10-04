@@ -129,7 +129,23 @@ const extraTitles: Record<string, string> = {
   "Activity Log": "Log Aktivitas",
   "Approval Workflows": "Alur Persetujuan",
   "Currencies": "Mata Uang",
-  "API & Webhooks": "API & Webhook"
+  "API & Webhooks": "API & Webhook",
+  "Cash & Bank Vouchers": "Voucher Kas & Bank",
+  "General Ledger": "Buku Besar",
+  "Daily Cash & Bank Report": "Laporan Kas/Bank Harian",
+  "Expense & Non-Operating Reports": "Laporan Biaya & Luar Usaha",
+  "Asset Depreciation": "Penyusutan Aktiva",
+  "Tax Invoices (Faktur Pajak)": "Faktur Pajak",
+  "Tax Reports": "Laporan Pajak",
+  "Tax Settings": "Pengaturan Pajak",
+  "Sales Reports": "Laporan Penjualan",
+  "Purchase Reports": "Laporan Pembelian",
+  "Stock Reports": "Laporan Stock",
+  "Stock Transactions": "Transaksi Stock",
+  "Production Reports": "Laporan Produksi",
+  "Letters & Mutations": "Surat & Mutasi Karyawan",
+  "Receivable Card & Balances": "Kartu & Saldo Piutang",
+  "Payable Card & Balances": "Kartu & Saldo Hutang"
 };
 export function translatedNavTitle(title: string, t: typeof translations.id | typeof translations.en, isIndonesian: boolean): string {
   const key = navTitleMap[title];

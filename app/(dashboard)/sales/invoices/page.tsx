@@ -156,6 +156,13 @@ export default function InvoicesPage() {
       render: (inv) => <MoneyDisplay amount={inv.totalAmount} highlight className="text-xs font-bold" />,
     },
     {
+      key: "vatAmount",
+      header: "PPN",
+      align: "right",
+      render: (inv) =>
+        inv.vatAmount ? <MoneyDisplay amount={inv.vatAmount} className="text-xs" /> : <span className="text-xs text-muted-foreground">-</span>,
+    },
+    {
       key: "outstanding",
       header: "Outstanding",
       align: "right",

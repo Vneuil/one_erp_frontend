@@ -16,6 +16,8 @@ interface Supplier {
   email: string;
   phone: string;
   city: string;
+  npwp: string;
+  nik: string;
   paymentTerms: string;
   status: string;
 }
@@ -39,6 +41,8 @@ export default function SuppliersPage() {
     phone: "",
     category: "Raw Materials",
     city: "Cikarang",
+    npwp: "",
+    nik: "",
   });
 
   const [isEditOpen, setIsEditOpen] = React.useState(false);
@@ -51,6 +55,8 @@ export default function SuppliersPage() {
     phone: "",
     category: "",
     city: "",
+    npwp: "",
+    nik: "",
   });
 
   const fetchSuppliers = () => {
@@ -67,6 +73,8 @@ export default function SuppliersPage() {
             category: s.category || "-",
             paymentTerms: "-",
             city: s.address || "-",
+            npwp: s.npwp || "",
+            nik: s.nik || "",
             status: s.status?.toLowerCase() === "active" ? "active" : "inactive",
           }));
           setSuppliers(mapped);
@@ -92,6 +100,8 @@ export default function SuppliersPage() {
         email: formData.email,
         phone: formData.phone,
         address: formData.city,
+        npwp: formData.npwp,
+        nik: formData.nik,
         category: formData.category,
       });
       setIsAddOpen(false);
@@ -111,6 +121,8 @@ export default function SuppliersPage() {
       phone: s.phone,
       category: s.category,
       city: s.city,
+      npwp: s.npwp,
+      nik: s.nik,
     });
     setIsEditOpen(true);
   };
@@ -126,6 +138,8 @@ export default function SuppliersPage() {
         email: editFormData.email,
         phone: editFormData.phone,
         address: editFormData.city,
+        npwp: editFormData.npwp,
+        nik: editFormData.nik,
         category: editFormData.category,
       });
       const updated = res.data;
@@ -141,6 +155,8 @@ export default function SuppliersPage() {
                 phone: updated?.phone ?? editFormData.phone,
                 category: updated?.category ?? editFormData.category,
                 city: updated?.address ?? editFormData.city,
+                npwp: updated?.npwp ?? editFormData.npwp,
+                nik: updated?.nik ?? editFormData.nik,
               }
             : s
         )
@@ -350,6 +366,26 @@ export default function SuppliersPage() {
                 placeholder="Cilegon"
               />
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="font-semibold text-foreground">NPWP</label>
+                <Input
+                  value={formData.npwp}
+                  onChange={(e) => setFormData({ ...formData, npwp: e.target.value })}
+                  placeholder="15 atau 16 digit"
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="font-semibold text-foreground">NIK</label>
+                <Input
+                  value={formData.nik}
+                  onChange={(e) => setFormData({ ...formData, nik: e.target.value })}
+                  placeholder="16 digit (jika tanpa NPWP)"
+                  inputMode="numeric"
+                />
+              </div>
+            </div>
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" size="sm" onClick={() => setIsAddOpen(false)}>
                 Batal
@@ -423,6 +459,26 @@ export default function SuppliersPage() {
                 value={editFormData.city}
                 onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
               />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="font-semibold text-foreground">NPWP</label>
+                <Input
+                  value={editFormData.npwp}
+                  onChange={(e) => setEditFormData({ ...editFormData, npwp: e.target.value })}
+                  placeholder="15 atau 16 digit"
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="font-semibold text-foreground">NIK</label>
+                <Input
+                  value={editFormData.nik}
+                  onChange={(e) => setEditFormData({ ...editFormData, nik: e.target.value })}
+                  placeholder="16 digit (jika tanpa NPWP)"
+                  inputMode="numeric"
+                />
+              </div>
             </div>
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" size="sm" onClick={() => setIsEditOpen(false)}>
