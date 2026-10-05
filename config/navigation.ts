@@ -144,6 +144,7 @@ export const navigationConfig: NavGroup[] = [
           { title: "Purchase Requests", href: "/procurement/purchase-requests" },
           { title: "Purchase Orders", href: "/procurement/purchase-orders" },
           { title: "Goods Receipts", href: "/procurement/receipts" },
+          { title: "Invoice Receipts", href: "/procurement/invoice-receipts" },
           { title: "Down Payments", href: "/procurement/down-payments" },
           { title: "Vendor Invoices", href: "/procurement/purchase-invoices" },
           { title: "Purchase Returns", href: "/procurement/purchase-returns" },

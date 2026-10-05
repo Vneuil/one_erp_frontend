@@ -145,7 +145,8 @@ const extraTitles: Record<string, string> = {
   "Production Reports": "Laporan Produksi",
   "Letters & Mutations": "Surat & Mutasi Karyawan",
   "Receivable Card & Balances": "Kartu & Saldo Piutang",
-  "Payable Card & Balances": "Kartu & Saldo Hutang"
+  "Payable Card & Balances": "Kartu & Saldo Hutang",
+  "Invoice Receipts": "Tanda Terima Nota"
 };
 export function translatedNavTitle(title: string, t: typeof translations.id | typeof translations.en, isIndonesian: boolean): string {
   const key = navTitleMap[title];

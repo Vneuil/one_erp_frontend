@@ -9,13 +9,14 @@ import { MoneyDisplay } from "@/components/shared/money-display";
 import { financeApi, FinancialInsight, ProfitLossReport, BalanceSheetReport, CashFlowReport, TrialBalanceReport } from "@/lib/api/finance";
 import { downloadCsv } from "@/lib/utils/csv";
 
-type ReportKey = "pnl" | "balanceSheet" | "cashFlow" | "trialBalance";
+type ReportKey = "pnl" | "balanceSheet" | "cashFlow" | "trialBalance" | "memorialJournals";
 
 export default function FinancialReportsPage() {
   const [pnl, setPnl] = React.useState<ProfitLossReport | null>(null);
   const [balanceSheet, setBalanceSheet] = React.useState<BalanceSheetReport | null>(null);
   const [cashFlow, setCashFlow] = React.useState<CashFlowReport | null>(null);
   const [trialBalance, setTrialBalance] = React.useState<TrialBalanceReport | null>(null);
+  const [memorialJournals, setMemorialJournals] = React.useState<any[] | null>(null);
 
   const [insights, setInsights] = React.useState<FinancialInsight[] | null>(null);
   const [insightsError, setInsightsError] = React.useState<string | null>(null);
@@ -29,6 +30,7 @@ export default function FinancialReportsPage() {
     financeApi.balanceSheet().then((res) => setBalanceSheet(res.data)).catch((err) => console.warn("Balance sheet unavailable", err));
     financeApi.cashFlow().then((res) => setCashFlow(res.data)).catch((err) => console.warn("Cash flow unavailable", err));
     financeApi.trialBalance().then((res) => setTrialBalance(res.data)).catch((err) => console.warn("Trial balance unavailable", err));
+    financeApi.memorialJournals().then((res) => setMemorialJournals(res.data)).catch((err) => console.warn("Memorial journals unavailable", err));
   }, []);
 
   const handleExportExcel = (key: ReportKey) => {
@@ -72,6 +74,18 @@ export default function FinancialReportsPage() {
         ["Account Code", "Account Name", "Debit", "Credit"],
         trialBalance.lines.map((l) => [l.accountCode, l.accountName, l.debit, l.credit])
       );
+    } else if (key === "memorialJournals" && memorialJournals) {
+      const rows: any[] = [];
+      memorialJournals.forEach(j => {
+        j.lines.forEach((l: any) => {
+          rows.push([j.entryNumber, j.date, j.memo, l.accountCode, l.accountName, l.debit, l.credit, l.description || ""]);
+        });
+      });
+      downloadCsv(
+        "memorial-journals.csv",
+        ["Entry Number", "Date", "Memo", "Account Code", "Account Name", "Debit", "Credit", "Description"],
+        rows
+      );
     } else {
       window.alert("No posted journal entries yet to export.");
     }
@@ -85,9 +99,16 @@ export default function FinancialReportsPage() {
       frequency: "Monthly / Quarterly / Annual",
       icon: TrendingUp,
       summary: pnl ? (
-        <span>
-          Net Profit: <MoneyDisplay amount={pnl.netProfit} highlight />
-        </span>
+        <div className="space-y-1">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground font-normal">Gross Profit:</span>
+            <MoneyDisplay amount={pnl.grossProfit} highlight />
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground font-normal">Net Profit:</span>
+            <MoneyDisplay amount={pnl.netProfit} highlight />
+          </div>
+        </div>
       ) : (
         "No posted journal entries yet"
       ),
@@ -133,6 +154,18 @@ export default function FinancialReportsPage() {
         </span>
       ) : (
         "No posted journal entries yet"
+      ),
+    },
+    {
+      key: "memorialJournals",
+      title: "Memorial Journals Report",
+      description: "Laporan khusus jurnal manual (adjustment/memorial) tanpa jurnal otomatis.",
+      frequency: "As Needed",
+      icon: FileSpreadsheet,
+      summary: memorialJournals ? (
+        <span>{memorialJournals.length} memorial entries found</span>
+      ) : (
+        "No memorial journals yet"
       ),
     },
   ];

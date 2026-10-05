@@ -215,6 +215,39 @@ export interface CreatePurchaseReturnInput {
   lines: PurchaseReturnLineInput[];
 }
 
+// Invoice receipts
+
+export interface InvoiceReceiptLineInput {
+  purchaseInvoiceId?: string | null;
+  invoiceNo: string;
+  amount: number;
+  remarks?: string;
+}
+
+export interface InvoiceReceiptLineItem extends InvoiceReceiptLineInput {
+  id: string;
+}
+
+export interface InvoiceReceiptItem {
+  id: string;
+  receiptNo: string;
+  date: string;
+  supplierId: string;
+  supplierName: string;
+  notes?: string;
+  status: string;
+  lines: InvoiceReceiptLineItem[];
+  createdAt?: string;
+}
+
+export interface CreateInvoiceReceiptInput {
+  date?: string;
+  supplierId: string;
+  supplierName?: string;
+  notes?: string;
+  lines: InvoiceReceiptLineInput[];
+}
+
 export const procurementApi = {
   // Purchase requests
   listPurchaseRequests: async (params?: { page?: number; perPage?: number; search?: string }): Promise<ApiResponse<PurchaseRequestItem[]>> => {
@@ -283,5 +316,13 @@ export const procurementApi = {
   },
   createPurchaseReturn: async (data: CreatePurchaseReturnInput): Promise<ApiResponse<PurchaseReturnItem>> => {
     return apiClient<PurchaseReturnItem>("/procurement/returns", { method: "POST", body: JSON.stringify(data) });
+  },
+
+  // Invoice receipts
+  listInvoiceReceipts: async (params?: { page?: number; perPage?: number; search?: string }): Promise<ApiResponse<InvoiceReceiptItem[]>> => {
+    return apiClient<InvoiceReceiptItem[]>("/procurement/invoice-receipts", { params });
+  },
+  createInvoiceReceipt: async (data: CreateInvoiceReceiptInput): Promise<ApiResponse<InvoiceReceiptItem>> => {
+    return apiClient<InvoiceReceiptItem>("/procurement/invoice-receipts", { method: "POST", body: JSON.stringify(data) });
   },
 };

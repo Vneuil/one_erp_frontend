@@ -473,6 +473,9 @@ export const financeApi = {
   cashFlow: async (from?: string, to?: string): Promise<ApiResponse<CashFlowReport>> => {
     return apiClient<CashFlowReport>("/finance/reports/cash-flow", { params: { from, to } });
   },
+  memorialJournals: async (from?: string, to?: string): Promise<ApiResponse<JournalEntryItem[]>> => {
+    return apiClient<JournalEntryItem[]>("/finance/reports/memorial-journals", { params: { from, to } });
+  },
 
   // Owner capital & other income
   listCapital: async (params?: { type?: string; period?: string }): Promise<ApiResponse<CapitalTransactionItem[]>> =>
