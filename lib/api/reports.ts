@@ -328,6 +328,7 @@ export interface StockAging {
     category: string;
     warehouse: string;
     buckets: number[];
+    estimated?: number;
     untracked: number;
     total: number;
     value: number;
@@ -336,6 +337,7 @@ export interface StockAging {
   }[];
   bucketTotals: number[];
   bucketValues: number[];
+  estimatedQty?: number;
   untrackedQty: number;
   untrackedValue: number;
   totalQuantity: number;

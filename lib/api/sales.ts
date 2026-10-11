@@ -228,6 +228,8 @@ export interface SalesReturnItem {
   reason: string;
   status: string;
   totalAmount: number;
+  creditedAmount: number;
+  vatAmount: number;
   lines: SalesReturnLineItem[];
   createdAt?: string;
 }

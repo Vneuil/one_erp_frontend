@@ -20,7 +20,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DataTable, Column } from "@/components/data-table/data-table";
 import { downloadCsv } from "@/lib/utils/csv";
 import { MoneyDisplay } from "@/components/shared/money-display";
-import { assetsApi, AssetItem as ApiAssetItem } from "@/lib/api/assets";
+import { assetsApi, AssetItem as ApiAssetItem, AssetFundingSource } from "@/lib/api/assets";
 import {
   Dialog,
   DialogContent,
@@ -41,7 +41,16 @@ interface AssetRecord {
   accumulatedDepreciation: number;
   currentBookValue: number;
   status: "In Use" | "Maintenance" | "Disposed";
+  acquisitionPosted: boolean;
+  disposedAt?: string;
+  disposalGainLoss: number;
 }
+
+const FUNDING_LABELS: Record<AssetFundingSource, string> = {
+  cash: "Kas / Bank (dibayar tunai)",
+  payable: "Hutang Usaha (belum dibayar)",
+  equity: "Modal Pemilik (saldo awal)",
+};
 
 const mapAsset = (a: ApiAssetItem): AssetRecord => ({
   id: a.id,
@@ -55,6 +64,9 @@ const mapAsset = (a: ApiAssetItem): AssetRecord => ({
   accumulatedDepreciation: a.accumulatedDepreciation,
   currentBookValue: a.currentBookValue,
   status: a.status as AssetRecord["status"],
+  acquisitionPosted: Boolean(a.acquisitionPosted),
+  disposedAt: a.disposedAt,
+  disposalGainLoss: a.disposalGainLoss ?? 0,
 });
 
 export default function AssetsPage() {
@@ -74,6 +86,51 @@ export default function AssetsPage() {
   const [location, setLocation] = React.useState("");
   const [price, setPrice] = React.useState(0);
   const [life, setLife] = React.useState(5);
+  const [funding, setFunding] = React.useState<AssetFundingSource | "">("cash");
+
+  // Acquisition / disposal journal dialog
+  const [journalAction, setJournalAction] = React.useState<{ kind: "acquire" | "dispose"; asset: AssetRecord } | null>(null);
+  const [actionFunding, setActionFunding] = React.useState<AssetFundingSource>("equity");
+  const [actionDate, setActionDate] = React.useState("");
+  const [actionProceeds, setActionProceeds] = React.useState(0);
+  const [actionNotes, setActionNotes] = React.useState("");
+  const [onCredit, setOnCredit] = React.useState(false);
+  const [buyerName, setBuyerName] = React.useState("");
+  const [dueDate, setDueDate] = React.useState("");
+  const [actionError, setActionError] = React.useState<string | null>(null);
+  const [actionBusy, setActionBusy] = React.useState(false);
+
+  const openJournalAction = (kind: "acquire" | "dispose", asset: AssetRecord) => {
+    setJournalAction({ kind, asset });
+    setActionFunding("equity");
+    setActionDate("");
+    setActionProceeds(0);
+    setActionNotes("");
+    setOnCredit(false);
+    setBuyerName("");
+    setDueDate("");
+    setActionError(null);
+  };
+
+  const submitJournalAction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!journalAction) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      const { kind, asset } = journalAction;
+      const res =
+        kind === "acquire"
+          ? await assetsApi.postAcquisition(asset.id, actionFunding, actionDate || undefined)
+          : await assetsApi.disposeAsset(asset.id, { date: actionDate || undefined, proceeds: Number(actionProceeds) || 0, notes: actionNotes || undefined, receivedIn: onCredit ? "receivable" : "cash", buyerName: onCredit ? buyerName : undefined, dueDate: onCredit && dueDate ? dueDate : undefined });
+      setAssets((prev) => prev.map((a) => (a.id === asset.id ? mapAsset(res.data) : a)));
+      setJournalAction(null);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Gagal memproses jurnal aset.");
+    } finally {
+      setActionBusy(false);
+    }
+  };
 
   React.useEffect(() => {
     assetsApi
@@ -131,6 +188,7 @@ export default function AssetsPage() {
         location,
         purchasePrice: Number(price) || 0,
         usefulLifeYears: Number(life) || 5,
+        fundingSource: funding || undefined,
       });
       if (res.data) {
         setAssets((prev) => [mapAsset(res.data), ...prev]);
@@ -210,6 +268,7 @@ export default function AssetsPage() {
         return (
           <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${styles[row.status]}`}>
             {row.status}
+            {row.status === "Disposed" && row.disposedAt ? ` · ${row.disposedAt}` : ""}
           </span>
         );
       },
@@ -230,6 +289,25 @@ export default function AssetsPage() {
           </Button>
           {row.status !== "Disposed" && (
             <>
+              {row.acquisitionPosted ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openJournalAction("dispose", row)}
+                  className="h-7 px-2 text-[11px] gap-1 border-rose-200 text-rose-700 hover:bg-rose-50"
+                >
+                  <span>Jual / Lepas</span>
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openJournalAction("acquire", row)}
+                  className="h-7 px-2 text-[11px] gap-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                >
+                  <span>Jurnal Perolehan</span>
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="outline"
@@ -486,6 +564,21 @@ export default function AssetsPage() {
               </div>
             </div>
 
+            <div className="space-y-1">
+              <label className="font-bold text-foreground">Pembayaran / Jurnal Perolehan</label>
+              <select
+                value={funding}
+                onChange={(e) => setFunding(e.target.value as AssetFundingSource | "")}
+                className="w-full h-9 px-2 rounded-lg border border-border bg-white text-xs"
+              >
+                {(Object.keys(FUNDING_LABELS) as AssetFundingSource[]).map((k) => (
+                  <option key={k} value={k}>{FUNDING_LABELS[k]}</option>
+                ))}
+                <option value="">Jangan dijurnal dulu</option>
+              </select>
+              <p className="text-[10px] text-muted-foreground">Dijurnal: Debit Aktiva Tetap, Kredit sesuai pilihan. Aset tanpa jurnal perolehan tidak bisa dijual/dilepas.</p>
+            </div>
+
             <DialogFooter className="pt-2">
               <Button
                 type="button"
@@ -501,6 +594,76 @@ export default function AssetsPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Jurnal Perolehan / Penjualan Aset */}
+      <Dialog open={Boolean(journalAction)} onOpenChange={(o) => !o && setJournalAction(null)}>
+        <DialogContent className="max-w-md">
+          {journalAction && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-base font-bold">
+                  {journalAction.kind === "acquire" ? "Jurnal Perolehan Aset" : "Penjualan / Pelepasan Aset"}
+                </DialogTitle>
+              </DialogHeader>
+              <form onSubmit={submitJournalAction} className="space-y-3.5 text-xs text-left">
+                {actionError && (
+                  <div role="alert" className="px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">
+                    {actionError}
+                  </div>
+                )}
+                <p className="text-muted-foreground">
+                  <span className="font-mono font-bold text-brand-dark">{journalAction.asset.assetCode}</span> {journalAction.asset.name} · Perolehan{" "}
+                  <MoneyDisplay amount={journalAction.asset.purchasePrice} />
+                </p>
+                {journalAction.kind === "acquire" ? (
+                  <div className="space-y-1">
+                    <label className="font-bold text-foreground">Sumber Dana</label>
+                    <select
+                      value={actionFunding}
+                      onChange={(e) => setActionFunding(e.target.value as AssetFundingSource)}
+                      className="w-full h-9 px-2 rounded-lg border border-border bg-white text-xs"
+                    >
+                      {(Object.keys(FUNDING_LABELS) as AssetFundingSource[]).map((k) => (
+                        <option key={k} value={k}>{FUNDING_LABELS[k]}</option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-muted-foreground">Untuk aset lama yang sudah dimiliki, pilih Modal Pemilik (saldo awal).</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-1">
+                      <label className="font-bold text-foreground">Hasil Penjualan (IDR)</label>
+                      <Input type="number" min={0} value={actionProceeds} onChange={(e) => setActionProceeds(Number(e.target.value))} className="h-9 text-xs" />
+                      <p className="text-[10px] text-muted-foreground">Isi 0 untuk penghapusan tanpa hasil. Selisih terhadap nilai buku dijurnal sebagai laba/rugi pelepasan.</p>
+                    </div>
+                    <label className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={onCredit} onChange={(e) => setOnCredit(e.target.checked)} /> Dijual kredit (dicatat sebagai piutang)</label>
+                    {onCredit && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div className="space-y-1"><label className="font-bold text-foreground">Nama pembeli *</label><Input value={buyerName} onChange={(e) => setBuyerName(e.target.value)} className="h-9 text-xs" /></div>
+                        <div className="space-y-1"><label className="font-bold text-foreground">Jatuh tempo (kosong = 30 hari)</label><Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="h-9 text-xs" /></div>
+                      </div>
+                    )}
+                    <div className="space-y-1">
+                      <label className="font-bold text-foreground">Keterangan</label>
+                      <Input value={actionNotes} onChange={(e) => setActionNotes(e.target.value)} className="h-9 text-xs" />
+                    </div>
+                  </>
+                )}
+                <div className="space-y-1">
+                  <label className="font-bold text-foreground">Tanggal (kosong = {journalAction.kind === "acquire" ? "tanggal beli" : "hari ini"})</label>
+                  <Input type="date" value={actionDate} onChange={(e) => setActionDate(e.target.value)} className="h-9 text-xs" />
+                </div>
+                <DialogFooter className="pt-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setJournalAction(null)} className="h-9 text-xs">Batal</Button>
+                  <Button type="submit" variant="gradient" size="sm" disabled={actionBusy} className="h-9 text-xs font-bold">
+                    {actionBusy ? "Memproses..." : journalAction.kind === "acquire" ? "Posting Jurnal" : "Jual / Lepas Aset"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>

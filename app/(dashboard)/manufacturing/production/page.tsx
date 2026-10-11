@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { errText } from "@/components/reports/report-ui";
-import { manufacturingApi, ProductionOrderItem } from "@/lib/api/manufacturing";
+import { manufacturingApi, ProductionOrderItem, ProductionStepLogItem } from "@/lib/api/manufacturing";
 
 type Notice = { kind: "success" | "error"; text: string } | null;
 
@@ -25,6 +25,37 @@ export default function ProductionRunPage() {
   const [notice, setNotice] = React.useState<Notice>(null);
   const [busyId, setBusyId] = React.useState<string | null>(null);
   const [drafts, setDrafts] = React.useState<Record<string, string>>({});
+  const [logsOpen, setLogsOpen] = React.useState<string | null>(null);
+  const [logs, setLogs] = React.useState<ProductionStepLogItem[]>([]);
+
+  const toggleLogs = async (order: ProductionOrderItem) => {
+    if (logsOpen === order.id) {
+      setLogsOpen(null);
+      return;
+    }
+    try {
+      const res = await manufacturingApi.listStepLogs(order.id);
+      setLogs(res.data || []);
+      setLogsOpen(order.id);
+    } catch (err) {
+      setNotice({ kind: "error", text: errText(err, "Gagal memuat riwayat log.") });
+    }
+  };
+
+  const voidLog = async (order: ProductionOrderItem, log: ProductionStepLogItem, stepName: string) => {
+    const reason = window.prompt(`Alasan membatalkan log ${stepName} ${log.quantity} unit (${log.date})? Jumlah di proses itu akan dikurangi dan biaya tenaga kerja/overhead-nya dibalik.`, "");
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setNotice({ kind: "error", text: "Alasan pembatalan wajib diisi." });
+      return;
+    }
+    await run(`${order.id}:void:${log.id}`, () => manufacturingApi.voidStepLog(order.id, log.id, reason.trim()), `Log ${stepName} dibatalkan.`, order);
+    try {
+      setLogs((await manufacturingApi.listStepLogs(order.id)).data || []);
+    } catch {
+      /* the list refreshes the next time it is opened */
+    }
+  };
 
   React.useEffect(() => {
     manufacturingApi
@@ -139,6 +170,26 @@ export default function ProductionRunPage() {
                     <CheckCircle2 className="h-3.5 w-3.5" /> Selesaikan unit
                   </Button>
                 </div>
+                {o.steps?.length > 0 && (
+                  <div className="space-y-1.5">
+                    <button type="button" className="text-[11px] font-semibold text-brand-indigo underline cursor-pointer" onClick={() => toggleLogs(o)}>{logsOpen === o.id ? "Sembunyikan riwayat log" : "Riwayat log proses"}</button>
+                    {logsOpen === o.id && (
+                      logs.length === 0 ? <p className="text-[11px] text-muted-foreground">Belum ada log.</p> : (
+                        <table className="w-full text-[11px]"><tbody>
+                          {logs.map((l) => {
+                            const stepName = o.steps.find((s) => s.id === l.stepId)?.name ?? "Proses";
+                            return (
+                              <tr key={l.id} className={`border-t border-border ${l.voided ? "text-muted-foreground line-through" : ""}`}>
+                                <td className="py-1">{l.date}</td><td>{stepName}</td><td className="text-right tabular-nums">{l.quantity} unit</td>
+                                <td className="pl-2 no-underline">{l.voided ? <span title={l.voidReason}>batal</span> : <Button size="sm" variant="outline" className="h-6 px-2 text-[10px] text-rose-700" disabled={busyId !== null} onClick={() => voidLog(o, l, stepName)}>Batalkan</Button>}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody></table>
+                      )
+                    )}
+                  </div>
+                )}
                 {ready === 0 && o.steps?.length > 0 && !paused && <p className="text-[11px] text-muted-foreground text-right">Belum ada unit yang melewati seluruh proses.</p>}
               </CardContent>
             </Card>

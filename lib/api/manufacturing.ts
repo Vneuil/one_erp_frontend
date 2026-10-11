@@ -11,6 +11,9 @@ export interface BOMLineInput {
 export interface BOMProcessInput {
   name: string;
   standardMinutes?: number;
+  /** Direct labour and factory overhead per standard hour, charged to Work in Process as units pass the step. */
+  laborRatePerHour?: number;
+  overheadRatePerHour?: number;
   notes?: string;
 }
 
@@ -19,6 +22,8 @@ export interface BOMProcessItem {
   sequence: number;
   name: string;
   standardMinutes: number;
+  laborRatePerHour?: number;
+  overheadRatePerHour?: number;
   notes?: string;
 }
 
@@ -184,15 +189,56 @@ export interface WIPReport {
     unitsInWip: number;
     materialCostPerUnit: number;
     issuedValue: number;
+    materialValue?: number;
+    laborValue?: number;
+    overheadValue?: number;
     wipValue: number;
   }[];
   totalUnitsInWip: number;
   totalWipValue: number;
+  totalMaterialValue?: number;
+  totalLaborValue?: number;
+  totalOverheadValue?: number;
   ledgerBalance?: number;
   note: string;
 }
 
+export interface ProductionStepLogItem {
+  id: string;
+  orderId: string;
+  stepId: string;
+  quantity: number;
+  date: string;
+  notes?: string;
+  createdBy?: string;
+  voided: boolean;
+  voidedAt?: string;
+  voidedBy?: string;
+  voidReason?: string;
+  createdAt?: string;
+}
+
+export interface ProductionBatchItem {
+  id: string;
+  productionOrderId: string;
+  quantityCompleted: number;
+  completionDate: string;
+  notes?: string;
+  voided: boolean;
+  voidedAt?: string;
+  voidedBy?: string;
+  voidReason?: string;
+}
+
 export const manufacturingApi = {
+  listBatches: async (orderId: string): Promise<ApiResponse<ProductionBatchItem[]>> =>
+    apiClient<ProductionBatchItem[]>(`/manufacturing/production-orders/${orderId}/batches`),
+  voidBatch: async (orderId: string, batchId: string, reason: string): Promise<ApiResponse<ProductionOrderItem>> =>
+    apiClient<ProductionOrderItem>(`/manufacturing/production-orders/${orderId}/batches/${batchId}/void`, { method: "POST", body: JSON.stringify({ reason }) }),
+  listStepLogs: async (orderId: string): Promise<ApiResponse<ProductionStepLogItem[]>> =>
+    apiClient<ProductionStepLogItem[]>(`/manufacturing/production-orders/${orderId}/step-logs`),
+  voidStepLog: async (orderId: string, logId: string, reason: string): Promise<ApiResponse<ProductionOrderItem>> =>
+    apiClient<ProductionOrderItem>(`/manufacturing/production-orders/${orderId}/step-logs/${logId}/void`, { method: "POST", body: JSON.stringify({ reason }) }),
   logStep: async (orderId: string, stepId: string, data: LogStepInput): Promise<ApiResponse<ProductionOrderItem>> =>
     apiClient<ProductionOrderItem>(`/manufacturing/production-orders/${orderId}/steps/${stepId}/log`, { method: "POST", body: JSON.stringify(data) }),
   dailyReport: async (p?: { from?: string; to?: string }): Promise<ApiResponse<DailyProductionReport>> =>

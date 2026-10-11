@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { MoneyDisplay } from "@/components/shared/money-display";
 import { salesApi, InvoiceItem } from "@/lib/api/sales";
 import { procurementApi, PurchaseInvoiceItem } from "@/lib/api/procurement";
-import { taxApi, TaxDirection, TaxInvoice, TaxStatus, UpdateTaxInvoiceInput } from "@/lib/api/tax";
+import { taxApi, PosCandidate, TaxDirection, TaxInvoice, TaxStatus, UpdateTaxInvoiceInput } from "@/lib/api/tax";
 import { downloadCsv } from "@/lib/utils/csv";
 
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
@@ -35,6 +35,10 @@ export default function TaxInvoicesPage() {
   const [notice, setNotice] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
+  const [sourceKind, setSourceKind] = React.useState<"invoice" | "pos">("invoice");
+  const [posSales, setPosSales] = React.useState<PosCandidate[]>([]);
+  const [buyerName, setBuyerName] = React.useState("");
+  const [buyerId, setBuyerId] = React.useState("");
   const [sourceId, setSourceId] = React.useState("");
   const [supplierFaktur, setSupplierFaktur] = React.useState("");
   const [supplierDate, setSupplierDate] = React.useState(today());
@@ -42,6 +46,12 @@ export default function TaxInvoicesPage() {
   const [edit, setEdit] = React.useState<{ id: string; form: UpdateTaxInvoiceInput } | null>(null);
   const [exportFrom, setExportFrom] = React.useState(today().slice(0, 8) + "01");
   const [exportTo, setExportTo] = React.useState(today());
+
+  const posFrom = React.useMemo(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 2, 1);
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(d);
+  }, []);
 
   const filterKey = `${direction}|${statusFilter}|${search}|${reload}`;
   const [loadedKey, setLoadedKey] = React.useState<string | null>(null);
@@ -54,8 +64,10 @@ export default function TaxInvoicesPage() {
       taxApi.listInvoices({}),
       salesApi.listInvoices({ perPage: 100 }),
       procurementApi.listPurchaseInvoices({ perPage: 100 }),
+      taxApi.posCandidates({ from: posFrom }),
     ])
-      .then(([list, all, sales, purchases]) => {
+      .then(([list, all, sales, purchases, pos]) => {
+        setPosSales(pos.data || []);
         if (!alive) return;
         setItems(list.data || []);
         setAllOpen((all.data || []).filter((t) => t.status === "draft" || t.status === "issued"));
@@ -95,7 +107,12 @@ export default function TaxInvoicesPage() {
 
   const create = () =>
     run(async () => {
-      if (direction === "output") await taxApi.createFromSalesInvoice({ salesInvoiceId: sourceId });
+      if (direction === "output" && sourceKind === "pos") {
+        const digits = buyerId.replace(/\D/g, "");
+        await taxApi.createFromPosTransaction({ transactionId: sourceId, buyerName: buyerName || undefined, buyerNpwp: digits.length === 15 ? digits : undefined, buyerNik: digits.length === 16 ? digits : undefined });
+        setBuyerName("");
+        setBuyerId("");
+      } else if (direction === "output") await taxApi.createFromSalesInvoice({ salesInvoiceId: sourceId });
       else await taxApi.createFromPurchaseInvoice({ purchaseInvoiceId: sourceId, taxNumber: supplierFaktur, date: supplierDate });
       setSourceId("");
       setSupplierFaktur("");
@@ -112,7 +129,7 @@ export default function TaxInvoicesPage() {
     run(() => taxApi.setTaxNumber(t.id, n.trim()), "Nomor Faktur Pajak disimpan.");
   };
 
-  const exportCoretax = async () => {
+  const exportCoretax = async (format: "xml" | "csv") => {
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -123,8 +140,17 @@ export default function TaxInvoicesPage() {
         setNotice("Tidak ada Faktur Pajak Keluaran yang terbit pada rentang tanggal ini.");
         return;
       }
-      downloadCsv(`coretax-faktur-keluaran-${exportFrom}-${exportTo}.csv`, ex.headers, ex.rows);
-      setNotice(`${ex.invoices} faktur (${ex.rows.length} baris) diekspor.${ex.warnings.length ? " Perhatian: " + ex.warnings.join("; ") : ""}`);
+      if (format === "xml" && ex.xml) {
+        const url = URL.createObjectURL(new Blob([ex.xml], { type: "application/xml" }));
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `coretax-faktur-keluaran-${exportFrom}-${exportTo}.xml`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        downloadCsv(`coretax-faktur-keluaran-${exportFrom}-${exportTo}.csv`, ex.headers, ex.rows);
+      }
+      setNotice(`${ex.invoices} faktur (${ex.rows.length} baris) diekspor.${format === "xml" ? " Format XML belum divalidasi ke Coretax; bandingkan dengan hasil converter DJP untuk satu faktur sebelum mengunggah." : ""}${ex.warnings.length ? " Perhatian: " + ex.warnings.join("; ") : ""}`);
     } catch (e) {
       setError(errText(e, "Gagal menyiapkan ekspor Coretax."));
     } finally {
@@ -139,30 +165,47 @@ export default function TaxInvoicesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Faktur Pajak" description="Faktur Pajak Keluaran dari invoice penjualan ber-PPN dan Faktur Pajak Masukan dari invoice pembelian ber-PPN." />
+      <PageHeader title="Faktur Pajak" description="Faktur Pajak Keluaran dari invoice penjualan atau transaksi kasir (POS) ber-PPN dan Faktur Pajak Masukan dari invoice pembelian ber-PPN." />
 
       {error && <div role="alert" className="px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">{error}</div>}
       {notice && <div role="status" className="px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-700">{notice}</div>}
 
       <div className="flex gap-1.5">
         {([["output", "Keluaran (Penjualan)"], ["input", "Masukan (Pembelian)"]] as const).map(([k, l]) => (
-          <button key={k} onClick={() => { setDirection(k); setSourceId(""); }} className={`px-3 py-1.5 rounded text-xs font-semibold cursor-pointer ${direction === k ? "bg-brand-primary text-white" : "bg-slate-100 text-muted-foreground hover:text-foreground"}`}>{l}</button>
+          <button key={k} onClick={() => { setDirection(k); setSourceId(""); setSourceKind("invoice"); }} className={`px-3 py-1.5 rounded text-xs font-semibold cursor-pointer ${direction === k ? "bg-brand-primary text-white" : "bg-slate-100 text-muted-foreground hover:text-foreground"}`}>{l}</button>
         ))}
       </div>
 
       <Card className="border-border shadow-2xs">
         <CardContent className="p-4 space-y-3">
-          <div className="text-sm font-bold">{direction === "output" ? "Buat Faktur Pajak Keluaran dari invoice" : "Catat Faktur Pajak Masukan dari invoice pembelian"}</div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-bold">{direction === "output" ? (sourceKind === "pos" ? "Buat Faktur Pajak Keluaran dari transaksi kasir (POS)" : "Buat Faktur Pajak Keluaran dari invoice") : "Catat Faktur Pajak Masukan dari invoice pembelian"}</div>
+            {direction === "output" && (
+              <div className="flex gap-1.5">
+                {([["invoice", "Invoice"], ["pos", "Kasir (POS)"]] as const).map(([k, l]) => (
+                  <button key={k} onClick={() => { setSourceKind(k); setSourceId(""); }} className={`px-2.5 py-1 rounded text-[11px] font-semibold cursor-pointer ${sourceKind === k ? "bg-brand-primary text-white" : "bg-slate-100 text-muted-foreground hover:text-foreground"}`}>{l}</button>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-6 gap-3 items-end">
             <label className="space-y-1 text-xs font-semibold sm:col-span-2">
-              Invoice
+              {direction === "output" && sourceKind === "pos" ? "Transaksi kasir" : "Invoice"}
               <select value={sourceId} onChange={(e) => setSourceId(e.target.value)} className={sel}>
-                <option value="">{(direction === "output" ? salesCandidates : purchaseCandidates).length === 0 ? "Tidak ada invoice ber-PPN yang belum difakturkan" : "Pilih invoice..."}</option>
-                {direction === "output"
+                <option value="">{direction === "output" && sourceKind === "pos" ? (posSales.length === 0 ? "Tidak ada transaksi POS ber-PPN yang belum difakturkan" : "Pilih transaksi...") : (direction === "output" ? salesCandidates : purchaseCandidates).length === 0 ? "Tidak ada invoice ber-PPN yang belum difakturkan" : "Pilih invoice..."}</option>
+                {direction === "output" && sourceKind === "pos"
+                  ? posSales.map((i) => <option key={i.id} value={i.id}>{i.number} - {i.date} - {i.customer} (PPN {i.vatAmount.toLocaleString("id-ID")})</option>)
+                  : direction === "output"
                   ? salesCandidates.map((i) => <option key={i.id} value={i.id}>{i.invoiceNumber} - {i.customerName} (PPN {i.vatAmount?.toLocaleString("id-ID")})</option>)
                   : purchaseCandidates.map((i) => <option key={i.id} value={i.id}>{i.invoiceNumber} - {i.supplierName} (PPN {i.vatAmount?.toLocaleString("id-ID")})</option>)}
               </select>
             </label>
+            {direction === "output" && sourceKind === "pos" && (
+              <>
+                <label className="space-y-1 text-xs font-semibold">Nama pembeli<Input value={buyerName} onChange={(e) => setBuyerName(e.target.value)} placeholder="Opsional" /></label>
+                <label className="space-y-1 text-xs font-semibold sm:col-span-2">NPWP / NIK pembeli<Input value={buyerId} onChange={(e) => setBuyerId(e.target.value)} placeholder="15/16 digit, opsional" /></label>
+              </>
+            )}
             {direction === "input" && (
               <>
                 <label className="space-y-1 text-xs font-semibold sm:col-span-2">No. Faktur Pajak supplier<Input value={supplierFaktur} onChange={(e) => setSupplierFaktur(e.target.value)} placeholder="010.000-26.12345678" /></label>
@@ -226,7 +269,8 @@ export default function TaxInvoicesPage() {
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
               <label className="space-y-1 text-xs font-semibold">Dari<Input type="date" value={exportFrom} max={exportTo} onChange={(e) => setExportFrom(e.target.value)} /></label>
               <label className="space-y-1 text-xs font-semibold">Sampai<Input type="date" value={exportTo} min={exportFrom} onChange={(e) => setExportTo(e.target.value)} /></label>
-              <Button size="sm" className="h-9 gap-1.5 text-xs font-bold" disabled={busy} onClick={exportCoretax}><Download className="h-3.5 w-3.5" /> Unduh CSV Coretax</Button>
+              <Button size="sm" className="h-9 gap-1.5 text-xs font-bold" disabled={busy} onClick={() => exportCoretax("xml")}><Download className="h-3.5 w-3.5" /> Unduh XML Coretax</Button>
+            <Button size="sm" className="h-9 gap-1.5 text-xs font-bold" disabled={busy} onClick={() => exportCoretax("csv")}><Download className="h-3.5 w-3.5" /> CSV (tinjau)</Button>
             </div>
           </CardContent>
         </Card>

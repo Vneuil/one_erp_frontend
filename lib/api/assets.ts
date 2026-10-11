@@ -14,9 +14,17 @@ export interface AssetItem {
   currentBookValue: number;
   status: string;
   createdAt?: string;
+  acquisitionPosted?: boolean;
+  disposedAt?: string;
+  disposalProceeds?: number;
+  disposalGainLoss?: number;
 }
 
+export type AssetFundingSource = "cash" | "payable" | "equity";
+
 export interface CreateAssetInput {
+  /** Posts the acquisition journal (Dr Aktiva Tetap) when set. */
+  fundingSource?: AssetFundingSource;
   assetCode?: string;
   name: string;
   category: string;
@@ -84,6 +92,12 @@ export const assetsApi = {
   },
   updateAssetStatus: async (id: string, status: string): Promise<ApiResponse<AssetItem>> => {
     return apiClient<AssetItem>(`/assets/${id}/status`, { method: "PUT", body: JSON.stringify({ status }) });
+  },
+  postAcquisition: async (id: string, fundingSource: AssetFundingSource, date?: string): Promise<ApiResponse<AssetItem>> => {
+    return apiClient<AssetItem>(`/assets/${id}/post-acquisition`, { method: "POST", body: JSON.stringify({ fundingSource, date }) });
+  },
+  disposeAsset: async (id: string, data: { date?: string; proceeds: number; notes?: string; receivedIn?: "cash" | "receivable"; buyerName?: string; dueDate?: string }): Promise<ApiResponse<AssetItem>> => {
+    return apiClient<AssetItem>(`/assets/${id}/dispose`, { method: "POST", body: JSON.stringify(data) });
   },
   recalculateDepreciation: async (id: string): Promise<ApiResponse<AssetItem>> => {
     return apiClient<AssetItem>(`/assets/${id}/recalculate-depreciation`, { method: "POST" });

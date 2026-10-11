@@ -204,6 +204,8 @@ export interface PurchaseReturnItem {
   reason: string;
   status: string;
   totalAmount: number;
+  creditedAmount: number;
+  vatAmount: number;
   lines: PurchaseReturnLineItem[];
   createdAt?: string;
 }

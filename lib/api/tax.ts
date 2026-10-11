@@ -107,10 +107,22 @@ export interface SalesBook {
   pendingFaktur: number;
 }
 
+export interface PosCandidate {
+  id: string;
+  number: string;
+  date: string;
+  customer: string;
+  taxBase: number;
+  vatAmount: number;
+  total: number;
+}
+
 export interface VATPeriod {
   period: string;
   outputVat: number;
   inputVat: number;
+  outputReturnVat: number;
+  inputReturnVat: number;
   net: number;
   outputWithoutFaktur: number;
   inputWithoutFaktur: number;
@@ -130,6 +142,8 @@ export interface CoretaxExport {
   rows: string[][];
   invoices: number;
   warnings: string[];
+  /** Coretax import file (TaxInvoiceBulk); not yet validated against a live Coretax. */
+  xml?: string;
 }
 
 export const taxApi = {
@@ -147,6 +161,10 @@ export const taxApi = {
     apiClient<TaxInvoice[]>("/tax/invoices", { params }),
   createFromSalesInvoice: async (data: { salesInvoiceId: string; transactionCode?: string; notes?: string }): Promise<ApiResponse<TaxInvoice>> =>
     apiClient<TaxInvoice>("/tax/invoices/from-sales-invoice", { method: "POST", body: JSON.stringify(data) }),
+  posCandidates: async (params?: { from?: string; to?: string }): Promise<ApiResponse<PosCandidate[]>> =>
+    apiClient<PosCandidate[]>("/tax/invoices/pos-candidates", { params }),
+  createFromPosTransaction: async (data: { transactionId: string; buyerName?: string; buyerNpwp?: string; buyerNik?: string; buyerAddress?: string; notes?: string }): Promise<ApiResponse<TaxInvoice>> =>
+    apiClient<TaxInvoice>("/tax/invoices/from-pos-transaction", { method: "POST", body: JSON.stringify(data) }),
   createFromPurchaseInvoice: async (data: { purchaseInvoiceId: string; taxNumber?: string; date?: string; period?: string; notes?: string }): Promise<ApiResponse<TaxInvoice>> =>
     apiClient<TaxInvoice>("/tax/invoices/from-purchase-invoice", { method: "POST", body: JSON.stringify(data) }),
   updateDraft: async (id: string, data: UpdateTaxInvoiceInput): Promise<ApiResponse<TaxInvoice>> =>

@@ -20,6 +20,8 @@ interface DraftComponent {
 interface DraftProcess {
   name: string;
   minutes: string;
+  labor: string;
+  overhead: string;
 }
 
 const select = "w-full h-9 px-2 rounded-lg border border-border bg-white text-xs";
@@ -66,7 +68,7 @@ export default function BOMPage() {
         name: `${outputProduct.name} Recipe`,
         version,
         lines: components.map((c) => ({ componentProductId: c.productId, quantityRequired: c.quantity, unit: known[c.productId]?.unit })),
-        processes: processes.map((p) => ({ name: p.name.trim(), standardMinutes: p.minutes === "" ? 0 : Number(p.minutes) })),
+        processes: processes.map((p) => ({ name: p.name.trim(), standardMinutes: p.minutes === "" ? 0 : Number(p.minutes), laborRatePerHour: p.labor === "" ? 0 : Number(p.labor), overheadRatePerHour: p.overhead === "" ? 0 : Number(p.overhead) })),
       });
       setIsNewOpen(false);
       setProductId("");
@@ -126,7 +128,7 @@ export default function BOMPage() {
                 <div className="font-bold mb-1">Rute proses</div>
                 {detail.processes?.length ? (
                   <table className="w-full"><tbody>
-                    {detail.processes.map((p) => <tr key={p.id} className="border-t border-border"><td className="py-1.5 w-8">{p.sequence}</td><td className="py-1.5">{p.name}</td><td className="py-1.5 text-right text-muted-foreground">{p.standardMinutes ? `${p.standardMinutes} menit/unit` : "-"}</td></tr>)}
+                    {detail.processes.map((p) => <tr key={p.id} className="border-t border-border"><td className="py-1.5 w-8">{p.sequence}</td><td className="py-1.5">{p.name}</td><td className="py-1.5 text-right text-muted-foreground">{p.standardMinutes ? `${p.standardMinutes} menit/unit` : "-"}{p.laborRatePerHour || p.overheadRatePerHour ? <div className="text-[10px]">TK {(p.laborRatePerHour ?? 0).toLocaleString("id-ID")} + OH {(p.overheadRatePerHour ?? 0).toLocaleString("id-ID")} /jam</div> : null}</td></tr>)}
                   </tbody></table>
                 ) : <p className="text-muted-foreground">BOM ini tidak punya rute proses, jadi produksinya dicatat langsung sebagai selesai.</p>}
               </div>
@@ -173,20 +175,22 @@ export default function BOMPage() {
 
             <div className="space-y-2">
               <div className="font-bold">Rute proses (opsional)</div>
-              <p className="text-[11px] text-muted-foreground">Urutan langkah yang dilalui setiap unit. Unit hanya bisa selesai di satu langkah setelah selesai di langkah sebelumnya. Kosongkan bila produksi dicatat langsung selesai.</p>
+              <p className="text-[11px] text-muted-foreground">Urutan langkah yang dilalui setiap unit. Unit hanya bisa selesai di satu langkah setelah selesai di langkah sebelumnya. Isi tarif tenaga kerja dan overhead per jam standar agar biayanya dibebankan ke Barang dalam Proses (menit/unit × tarif ÷ 60) dan masuk ke harga pokok barang jadi; kosongkan bila tidak dibebankan. Kosongkan rute bila produksi dicatat langsung selesai.</p>
               {processes.map((p, i) => (
                 <div key={i} className="grid grid-cols-12 gap-2 items-center">
                   <span className="col-span-1 text-center font-semibold">{i + 1}</span>
-                  <Input value={p.name} onChange={(e) => setProcess(i, { name: e.target.value })} placeholder="Nama proses, mis. Potong" className="col-span-5 h-9 text-xs" aria-label={`Nama proses ${i + 1}`} />
-                  <Input type="number" min={0} step="any" value={p.minutes} onChange={(e) => setProcess(i, { minutes: e.target.value })} placeholder="Menit/unit" className="col-span-3 h-9 text-xs" aria-label={`Menit proses ${i + 1}`} />
-                  <div className="col-span-3 flex gap-1">
+                  <Input value={p.name} onChange={(e) => setProcess(i, { name: e.target.value })} placeholder="Nama proses, mis. Potong" className="col-span-3 h-9 text-xs" aria-label={`Nama proses ${i + 1}`} />
+                  <Input type="number" min={0} step="any" value={p.minutes} onChange={(e) => setProcess(i, { minutes: e.target.value })} placeholder="Menit/unit" className="col-span-2 h-9 text-xs" aria-label={`Menit proses ${i + 1}`} />
+                  <Input type="number" min={0} step="any" value={p.labor} onChange={(e) => setProcess(i, { labor: e.target.value })} placeholder="Tenaga kerja Rp/jam" className="col-span-2 h-9 text-xs" aria-label={`Tarif tenaga kerja proses ${i + 1}`} />
+                  <Input type="number" min={0} step="any" value={p.overhead} onChange={(e) => setProcess(i, { overhead: e.target.value })} placeholder="Overhead Rp/jam" className="col-span-2 h-9 text-xs" aria-label={`Tarif overhead proses ${i + 1}`} />
+                  <div className="col-span-2 flex gap-1">
                     <Button type="button" variant="outline" size="sm" className="h-9 px-2" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Naikkan proses ${i + 1}`}><ArrowUp className="h-3.5 w-3.5" /></Button>
                     <Button type="button" variant="outline" size="sm" className="h-9 px-2" disabled={i === processes.length - 1} onClick={() => move(i, 1)} aria-label={`Turunkan proses ${i + 1}`}><ArrowDown className="h-3.5 w-3.5" /></Button>
                     <Button type="button" variant="outline" size="sm" className="h-9 px-2" onClick={() => setProcesses((prev) => prev.filter((_, idx) => idx !== i))} aria-label={`Hapus proses ${i + 1}`}><Trash2 className="h-3.5 w-3.5" /></Button>
                   </div>
                 </div>
               ))}
-              <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setProcesses((prev) => [...prev, { name: "", minutes: "" }])}><Plus className="h-3.5 w-3.5" /> Tambah proses</Button>
+              <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setProcesses((prev) => [...prev, { name: "", minutes: "", labor: "", overhead: "" }])}><Plus className="h-3.5 w-3.5" /> Tambah proses</Button>
             </div>
 
             <DialogFooter>

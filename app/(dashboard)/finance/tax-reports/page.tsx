@@ -49,8 +49,8 @@ export default function TaxReportsPage() {
         book.rows.map((r) => [r.date, r.invoiceNumber, r.customerName, r.customerNpwp, r.customerNik, r.gross, r.discount, r.taxBase, r.vatAmount, r.total, r.taxNumber || r.taxInvoiceNumber || "", r.taxInvoiceStatus ? STATUS_LABEL[r.taxInvoiceStatus] : ""]));
     } else if (vat) {
       downloadCsv(`ringkasan-ppn-${vat.from}-${vat.to}.csv`,
-        ["Masa", "PPN Keluaran", "PPN Masukan", "Kurang/(Lebih) Bayar", "Keluaran tanpa Faktur", "Masukan tanpa Faktur"],
-        [...vat.periods, vat.total].map((p) => [p.period, p.outputVat, p.inputVat, p.net, p.outputWithoutFaktur, p.inputWithoutFaktur]));
+        ["Masa", "PPN Keluaran", "Retur Penjualan", "PPN Masukan", "Retur Pembelian", "Kurang/(Lebih) Bayar", "Keluaran tanpa Faktur", "Masukan tanpa Faktur"],
+        [...vat.periods, vat.total].map((p) => [p.period, p.outputVat, p.outputReturnVat, p.inputVat, p.inputReturnVat, p.net, p.outputWithoutFaktur, p.inputWithoutFaktur]));
     }
   };
 
@@ -124,16 +124,18 @@ export default function TaxReportsPage() {
           )}
           <Card className="border-border shadow-2xs">
             <CardContent className="p-0 overflow-x-auto">
-              <div className="px-3 py-2 border-b border-border bg-slate-50 text-xs text-muted-foreground">Tahun berjalan: {vat.from} s.d. {vat.to}. Positif = kurang bayar, negatif = lebih bayar.</div>
+              <div className="px-3 py-2 border-b border-border bg-slate-50 text-xs text-muted-foreground">Tahun berjalan: {vat.from} s.d. {vat.to}. Positif = kurang bayar, negatif = lebih bayar. Retur (nota retur) mengurangi PPN pada masa retur.</div>
               <table className="w-full">
-                <thead><tr><th className={th}>Masa</th><th className={thr}>PPN Keluaran</th><th className={thr}>PPN Masukan</th><th className={thr}>Kurang / (Lebih) Bayar</th><th className={thr}>Keluaran tanpa Faktur</th><th className={thr}>Masukan tanpa Faktur</th></tr></thead>
+                <thead><tr><th className={th}>Masa</th><th className={thr}>PPN Keluaran</th><th className={thr}>Retur Penjualan (-)</th><th className={thr}>PPN Masukan</th><th className={thr}>Retur Pembelian (-)</th><th className={thr}>Kurang / (Lebih) Bayar</th><th className={thr}>Keluaran tanpa Faktur</th><th className={thr}>Masukan tanpa Faktur</th></tr></thead>
                 <tbody>
-                  {vat.periods.length === 0 && <tr><td className={td} colSpan={6}>Belum ada Faktur Pajak terbit pada periode ini.</td></tr>}
+                  {vat.periods.length === 0 && <tr><td className={td} colSpan={8}>Belum ada Faktur Pajak terbit pada periode ini.</td></tr>}
                   {[...vat.periods, ...(vat.periods.length ? [vat.total] : [])].map((p) => (
                     <tr key={p.period} className={`border-t border-border ${p.period === "total" ? "font-bold bg-slate-50 border-t-2" : ""}`}>
                       <td className={td}>{p.period === "total" ? "Total" : p.period}</td>
                       <td className={tdr}><MoneyDisplay amount={p.outputVat} /></td>
+                      <td className={tdr}>{p.outputReturnVat ? <MoneyDisplay amount={p.outputReturnVat} /> : "-"}</td>
                       <td className={tdr}><MoneyDisplay amount={p.inputVat} /></td>
+                      <td className={tdr}>{p.inputReturnVat ? <MoneyDisplay amount={p.inputReturnVat} /> : "-"}</td>
                       <td className={`${tdr} font-bold ${p.net > 0 ? "text-rose-700" : "text-emerald-700"}`}><MoneyDisplay amount={p.net} /></td>
                       <td className={tdr}>{p.outputWithoutFaktur ? <MoneyDisplay amount={p.outputWithoutFaktur} /> : "-"}</td>
                       <td className={tdr}>{p.inputWithoutFaktur ? <MoneyDisplay amount={p.inputWithoutFaktur} /> : "-"}</td>

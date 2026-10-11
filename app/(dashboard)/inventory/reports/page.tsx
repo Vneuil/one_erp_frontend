@@ -157,15 +157,16 @@ export default function StockReportsPage() {
 
       {tab === "aging" && aging.data && (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
             <Stat label="Total stock">{num(aging.data.totalQuantity)}</Stat>
             <Stat label="Nilai stock"><MoneyDisplay amount={aging.data.totalValue} /></Stat>
-            <Stat label="Tanpa batch (umur tidak diketahui)">{num(aging.data.untrackedQty)}</Stat>
+            <Stat label="Umur diestimasi (FIFO dari penerimaan)">{num(aging.data.estimatedQty ?? 0)}</Stat>
+            <Stat label="Umur tidak diketahui">{num(aging.data.untrackedQty)}</Stat>
             <Stat label={`Umur > 90 hari`}>{num(aging.data.bucketTotals[aging.data.bucketTotals.length - 1] ?? 0)}</Stat>
           </div>
           <Note>{aging.data.note}</Note>
           <Card className="border-border shadow-2xs"><CardContent className="p-0 overflow-x-auto">
-            <table className="w-full"><thead><tr><th className={th}>SKU</th><th className={th}>Produk</th><th className={th}>Gudang</th>{aging.data.bucketLabels.map((l) => <th key={l} className={thr}>{l} hari</th>)}<th className={thr}>Tanpa batch</th><th className={thr}>Total</th><th className={thr}>Nilai</th><th className={thr}>Tertua</th><th className={thr}>Kedaluwarsa</th></tr></thead>
+            <table className="w-full"><thead><tr><th className={th}>SKU</th><th className={th}>Produk</th><th className={th}>Gudang</th>{aging.data.bucketLabels.map((l) => <th key={l} className={thr}>{l} hari</th>)}<th className={thr}>Umur tak diketahui</th><th className={thr}>Total</th><th className={thr}>Nilai</th><th className={thr}>Tertua</th><th className={thr}>Kedaluwarsa</th></tr></thead>
               <tbody>
                 {aging.data.rows.length === 0 && <tr><td className={td} colSpan={9 + aging.data.bucketLabels.length}>Tidak ada stock.</td></tr>}
                 {aging.data.rows.map((r, i) => (

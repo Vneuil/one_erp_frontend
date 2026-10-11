@@ -108,6 +108,12 @@ export default function SalesReturnsPage() {
       render: (r) => <MoneyDisplay amount={r.totalAmount} className="text-xs font-bold text-rose-600" />,
     },
     {
+      key: "creditedAmount",
+      header: "Dikreditkan ke Invoice",
+      align: "right",
+      render: (r) => (r.creditedAmount ? <span className="text-xs"><MoneyDisplay amount={r.creditedAmount} />{r.vatAmount ? <span className="text-[10px] text-muted-foreground"> (PPN <MoneyDisplay amount={r.vatAmount} />)</span> : null}</span> : <span className="text-xs text-muted-foreground">-</span>),
+    },
+    {
       key: "status",
       header: "Status",
       render: (r) => <StatusBadge status={r.status} />,
@@ -198,7 +204,7 @@ export default function SalesReturnsPage() {
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-foreground">Harga Satuan</label>
-                <Input type="number" value={unitPrice} onChange={(e) => setUnitPrice(Number(e.target.value))} required min={0} />
+                <Input type="number" value={unitPrice} onChange={(e) => setUnitPrice(Number(e.target.value))} min={0} placeholder="Kosong = harga pesanan" />
               </div>
             </div>
             <div className="space-y-1">

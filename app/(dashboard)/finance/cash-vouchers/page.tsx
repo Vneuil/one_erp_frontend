@@ -80,6 +80,27 @@ export default function CashVouchersPage() {
     }
   };
 
+  const voidVoucher = async (v: CashVoucherItem) => {
+    const reason = window.prompt(`Alasan membatalkan ${v.number}? Jurnalnya akan dibalik dengan jurnal baru bertanggal hari ini (voucher tetap tercatat). Untuk mengoreksi, batalkan lalu catat voucher yang benar.`, "");
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setError("Alasan pembatalan wajib diisi.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await financeApi.voidCashVoucher(v.id, reason.trim());
+      setNotice(`${v.number} dibatalkan dan jurnalnya dibalik.`);
+    } catch (e) {
+      setError(errText(e, "Gagal membatalkan voucher."));
+    } finally {
+      setBusy(false);
+      loadVouchers().catch(() => {});
+    }
+  };
+
   const shown = vouchers.filter((v) => filter === "all" || v.type === filter);
   const th = "text-left text-[11px] font-bold text-muted-foreground px-3 py-2";
   const td = "px-3 py-2 text-xs";
@@ -151,20 +172,21 @@ export default function CashVouchersPage() {
       <Card className="border-border shadow-2xs">
         <CardContent className="p-0 overflow-x-auto">
           <table className="w-full">
-            <thead><tr>{["No. Voucher", "Tanggal", "Jenis", "Kas / Bank", "Pihak", "Rincian akun", "Jumlah", "Jurnal"].map((h) => <th key={h} className={th}>{h}</th>)}</tr></thead>
+            <thead><tr>{["No. Voucher", "Tanggal", "Jenis", "Kas / Bank", "Pihak", "Rincian akun", "Jumlah", "Jurnal", ""].map((h) => <th key={h} className={th}>{h}</th>)}</tr></thead>
             <tbody>
-              {loading && <tr><td className={td} colSpan={8}>Memuat data...</td></tr>}
-              {!loading && shown.length === 0 && <tr><td className={td} colSpan={8}>Belum ada voucher.</td></tr>}
+              {loading && <tr><td className={td} colSpan={9}>Memuat data...</td></tr>}
+              {!loading && shown.length === 0 && <tr><td className={td} colSpan={9}>Belum ada voucher.</td></tr>}
               {shown.map((v) => (
                 <tr key={v.id} className="border-t border-border align-top">
-                  <td className={`${td} font-mono font-bold`}>{v.number}</td>
+                  <td className={`${td} font-mono font-bold`}>{v.number}{v.voided && <span className="ml-1.5 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] font-bold">BATAL</span>}</td>
                   <td className={td}>{v.date}</td>
                   <td className={td}>{v.type === "receipt" ? "Penerimaan" : "Pengeluaran"}</td>
                   <td className={td}>{v.cashAccountCode} {accountName(v.cashAccountCode)}</td>
                   <td className={td}>{v.counterparty || v.description || "-"}</td>
                   <td className={td}>{v.lines.map((l) => <div key={l.id}>{l.accountCode} {accountName(l.accountCode)}{l.description ? ` - ${l.description}` : ""}</div>)}</td>
                   <td className={`${td} font-bold ${v.type === "receipt" ? "text-emerald-700" : "text-rose-700"}`}><MoneyDisplay amount={v.total} /></td>
-                  <td className={td}>{v.posted ? "Terposting" : <span className="text-rose-700 font-bold">Belum terposting</span>}</td>
+                  <td className={td}>{v.voided ? "Dibatalkan" : v.posted ? "Terposting" : <span className="text-rose-700 font-bold">Belum terposting</span>}</td>
+                  <td className={td}>{!v.voided && <Button size="sm" variant="outline" className="h-7 text-[11px] text-rose-700" disabled={busy} onClick={() => voidVoucher(v)}>Batalkan</Button>}</td>
                 </tr>
               ))}
             </tbody>

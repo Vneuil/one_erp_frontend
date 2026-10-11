@@ -44,8 +44,8 @@ export default function ProductionReportsPage() {
       downloadCsv(name("ringkasan-per-proses"), ["Proses", "Unit", "Order", "Hari aktif", "Rata-rata unit/hari", "Waktu standar (menit)", "Antrian saat ini"],
         process.data.rows.map((x) => [x.process, x.units, x.orders, x.activeDays, x.avgUnitsPerDay, x.standardMinutes, x.waitingUnits]));
     } else if (tab === "wip" && wip.data) {
-      downloadCsv("work-in-process.csv", ["No. Order", "Produk", "Status", "Mode material", "Rencana", "Selesai", "Unit WIP", "Material/unit", "Nilai diambil", "Nilai WIP"],
-        wip.data.orders.map((o) => [o.orderNumber, o.product, STATUS[o.status] ?? o.status, o.materialMode, o.quantityToProduce, o.quantityCompleted, o.unitsInWip, o.materialCostPerUnit, o.issuedValue, o.wipValue]));
+      downloadCsv("work-in-process.csv", ["No. Order", "Produk", "Status", "Mode material", "Rencana", "Selesai", "Unit WIP", "Material/unit", "Nilai diambil", "Material WIP", "Tenaga kerja WIP", "Overhead WIP", "Nilai WIP"],
+        wip.data.orders.map((o) => [o.orderNumber, o.product, STATUS[o.status] ?? o.status, o.materialMode, o.quantityToProduce, o.quantityCompleted, o.unitsInWip, o.materialCostPerUnit, o.issuedValue, o.materialValue ?? 0, o.laborValue ?? 0, o.overheadValue ?? 0, o.wipValue]));
     }
   };
 
@@ -123,20 +123,23 @@ export default function ProductionReportsPage() {
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             <Stat label="Unit dalam proses">{num(wip.data.totalUnitsInWip)}</Stat>
-            <Stat label="Nilai WIP (material)"><MoneyDisplay amount={wip.data.totalWipValue} /></Stat>
+            <Stat label="Nilai WIP (material + tenaga kerja + overhead)"><MoneyDisplay amount={wip.data.totalWipValue} /></Stat>
+            <Stat label="Material"><MoneyDisplay amount={wip.data.totalMaterialValue ?? 0} /></Stat>
+            <Stat label="Tenaga kerja"><MoneyDisplay amount={wip.data.totalLaborValue ?? 0} /></Stat>
+            <Stat label="Overhead"><MoneyDisplay amount={wip.data.totalOverheadValue ?? 0} /></Stat>
             {wip.data.ledgerBalance !== undefined && <Stat label="Saldo Barang dalam Proses (buku besar)"><MoneyDisplay amount={wip.data.ledgerBalance} /></Stat>}
           </div>
           <Note>{wip.data.note}</Note>
           <Card className="border-border shadow-2xs"><CardContent className="p-0 overflow-x-auto">
-            <table className="w-full"><thead><tr><th className={th}>No. Order</th><th className={th}>Produk</th><th className={th}>Status</th><th className={thr}>Selesai / rencana</th><th className={th}>Posisi unit (selesai / menunggu)</th><th className={thr}>Unit WIP</th><th className={thr}>Material diambil</th><th className={thr}>Nilai WIP</th></tr></thead>
+            <table className="w-full"><thead><tr><th className={th}>No. Order</th><th className={th}>Produk</th><th className={th}>Status</th><th className={thr}>Selesai / rencana</th><th className={th}>Posisi unit (selesai / menunggu)</th><th className={thr}>Unit WIP</th><th className={thr}>Material</th><th className={thr}>Tenaga kerja</th><th className={thr}>Overhead</th><th className={thr}>Nilai WIP</th></tr></thead>
               <tbody>
-                {wip.data.orders.length === 0 && <tr><td className={td} colSpan={8}>Tidak ada pekerjaan dalam proses.</td></tr>}
+                {wip.data.orders.length === 0 && <tr><td className={td} colSpan={10}>Tidak ada pekerjaan dalam proses.</td></tr>}
                 {wip.data.orders.map((o) => (
                   <tr key={o.orderId} className="border-t border-border align-top">
                     <td className={`${td} font-mono`}>{o.orderNumber}</td><td className={td}>{o.product}<div className="text-[10px] text-muted-foreground">{o.materialMode === "issued" ? "material diambil lebih dulu" : "material otomatis saat selesai"}</div></td><td className={td}>{STATUS[o.status] ?? o.status}</td>
                     <td className={tdr}>{num(o.quantityCompleted)} / {num(o.quantityToProduce)}</td>
                     <td className={td}>{o.steps.length === 0 ? "-" : o.steps.map((s) => <div key={s.name}>{s.name}: {s.done} / {s.waiting}</div>)}</td>
-                    <td className={tdr}>{num(o.unitsInWip)}</td><td className={tdr}>{o.materialMode === "issued" ? <MoneyDisplay amount={o.issuedValue} /> : "-"}</td><td className={`${tdr} font-bold`}><MoneyDisplay amount={o.wipValue} /></td>
+                    <td className={tdr}>{num(o.unitsInWip)}</td><td className={tdr}><MoneyDisplay amount={o.materialValue ?? 0} /></td><td className={tdr}>{o.laborValue ? <MoneyDisplay amount={o.laborValue} /> : "-"}</td><td className={tdr}>{o.overheadValue ? <MoneyDisplay amount={o.overheadValue} /> : "-"}</td><td className={`${tdr} font-bold`}><MoneyDisplay amount={o.wipValue} /></td>
                   </tr>
                 ))}
               </tbody></table>

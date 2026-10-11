@@ -11,7 +11,7 @@ import { DataTable, Column } from "@/components/data-table/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { errText, today, useReport } from "@/components/reports/report-ui";
 import { inventoryApi } from "@/lib/api/inventory";
-import { manufacturingApi, ProductionOrderItem } from "@/lib/api/manufacturing";
+import { manufacturingApi, ProductionBatchItem, ProductionOrderItem } from "@/lib/api/manufacturing";
 
 const select = "w-full h-9 px-2 rounded-lg border border-border bg-white text-xs";
 
@@ -33,6 +33,8 @@ export default function ProductionOrdersPage() {
   const [qty, setQty] = React.useState(0);
   const [plannedDate, setPlannedDate] = React.useState(today());
   const [mode, setMode] = React.useState<"backflush" | "issued">("backflush");
+  const [batchOrder, setBatchOrder] = React.useState<ProductionOrderItem | null>(null);
+  const [batches, setBatches] = React.useState<ProductionBatchItem[]>([]);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
 
@@ -57,6 +59,36 @@ export default function ProductionOrdersPage() {
   const handleCancel = (order: ProductionOrderItem) => {
     if (!confirm(`Batalkan ${order.orderNumber}? Tindakan ini tidak bisa dibatalkan.`)) return;
     return act(order, manufacturingApi.cancelProductionOrder, `${order.orderNumber} dibatalkan.`);
+  };
+
+  const openBatches = async (order: ProductionOrderItem) => {
+    try {
+      setBatches((await manufacturingApi.listBatches(order.id)).data || []);
+      setBatchOrder(order);
+    } catch (err) {
+      setNotice({ kind: "error", text: errText(err, "Gagal memuat riwayat batch.") });
+    }
+  };
+
+  const voidBatch = async (order: ProductionOrderItem, b: ProductionBatchItem) => {
+    const reason = window.prompt(`Alasan membatalkan batch ${b.quantityCompleted} unit (${b.completionDate}) pada ${order.orderNumber}? Barang jadi dikeluarkan dari stok, bahan yang dipakai otomatis dikembalikan, dan jurnalnya dibalik.`, "");
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setNotice({ kind: "error", text: "Alasan pembatalan wajib diisi." });
+      return;
+    }
+    setBusyId(order.id);
+    setNotice(null);
+    try {
+      await manufacturingApi.voidBatch(order.id, b.id, reason.trim());
+      setNotice({ kind: "success", text: `Batch ${order.orderNumber} dibatalkan.` });
+      setBatchOrder(null);
+      setReload((n) => n + 1);
+    } catch (err) {
+      setNotice({ kind: "error", text: errText(err, "Gagal membatalkan batch.") });
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const create = async (e: React.FormEvent) => {
@@ -100,10 +132,13 @@ export default function ProductionOrdersPage() {
       header: "Actions",
       align: "center",
       render: (m) =>
-        m.status === "completed" || m.status === "cancelled" ? (
+        m.status === "cancelled" || (m.status === "completed" && m.quantityCompleted === 0) ? (
           <span className="text-[11px] text-muted-foreground">—</span>
+        ) : m.status === "completed" ? (
+          <Button variant="outline" size="sm" className="h-7 px-2 text-[11px] font-semibold" disabled={busyId === m.id} onClick={() => openBatches(m)}>Batch</Button>
         ) : (
           <div className="flex items-center justify-center gap-1.5">
+            {m.quantityCompleted > 0 && <Button variant="outline" size="sm" className="h-7 px-2 text-[11px] font-semibold" disabled={busyId === m.id} onClick={() => openBatches(m)}>Batch</Button>}
             {mayApprove && m.status === "planned" && (
               <Button variant="gradient" size="sm" className="h-7 px-2 text-[11px] font-semibold" disabled={busyId === m.id} onClick={() => act(m, manufacturingApi.releaseProductionOrder, `${m.orderNumber} dirilis ke lantai produksi.`)}>Release</Button>
             )}
@@ -127,6 +162,27 @@ export default function ProductionOrdersPage() {
       )}
 
       {list.loading ? <div className="py-10 text-center text-xs text-muted-foreground">Memuat data...</div> : <DataTable columns={columns} data={list.data ?? []} searchKey="orderNumber" searchPlaceholder="Search MO or product..." />}
+
+      <Dialog open={batchOrder !== null} onOpenChange={(o) => !o && setBatchOrder(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Batch selesai {batchOrder?.orderNumber}</DialogTitle></DialogHeader>
+          {batchOrder && (
+            <div className="space-y-3 text-xs">
+              <table className="w-full"><thead><tr><th className="text-left text-[11px] font-bold text-muted-foreground py-1">Tanggal</th><th className="text-right text-[11px] font-bold text-muted-foreground py-1">Unit</th><th /></tr></thead>
+                <tbody>
+                  {batches.length === 0 && <tr><td colSpan={3} className="py-2 text-muted-foreground">Belum ada batch.</td></tr>}
+                  {batches.map((b) => (
+                    <tr key={b.id} className={`border-t border-border ${b.voided ? "text-muted-foreground line-through" : ""}`}>
+                      <td className="py-1.5">{b.completionDate}</td><td className="text-right tabular-nums">{b.quantityCompleted}</td>
+                      <td className="text-right no-underline">{b.voided ? <span title={b.voidReason}>batal</span> : <Button size="sm" variant="outline" className="h-7 px-2 text-[11px] text-rose-700" disabled={busyId !== null} onClick={() => voidBatch(batchOrder, b)}>Batalkan</Button>}</td>
+                    </tr>
+                  ))}
+                </tbody></table>
+              <p className="text-[11px] text-muted-foreground">Membatalkan batch mengeluarkan barang jadinya dari stok, mengembalikan bahan yang dipakai otomatis, membalik jurnal barang jadi, dan membuka kembali order yang sudah selesai. Ditolak bila barang jadinya sudah keluar dari gudang.</p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isNewOpen} onOpenChange={setIsNewOpen}>
         <DialogContent className="max-w-md">

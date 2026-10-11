@@ -130,6 +130,28 @@ export default function StockDocumentsPage() {
     }
   };
 
+  const voidDoc = async (d: StockDocument) => {
+    const reason = window.prompt(`Alasan membatalkan ${d.number}? Stok dan jurnalnya akan dibalik (dokumen tetap tercatat). Untuk mengoreksi, batalkan lalu buat dokumen yang benar.`, "");
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setError("Alasan pembatalan wajib diisi.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await inventoryApi.voidStockDocument(d.id, reason.trim());
+      setNotice(`${d.number} dibatalkan. Stok dan jurnal sudah dibalik.`);
+      setDetail(null);
+    } catch (e) {
+      setError(errText(e, "Gagal membatalkan dokumen."));
+    } finally {
+      setBusy(false);
+      setReload((n) => n + 1);
+    }
+  };
+
   const fmtUnit = (p: ProductItem) => `${p.sku} - ${p.name} (${p.unit})`;
 
   return (
@@ -220,9 +242,9 @@ export default function StockDocumentsPage() {
               {!history.loading && history.data?.length === 0 && <tr><td className={td} colSpan={9}>Belum ada dokumen.</td></tr>}
               {history.data?.map((d) => (
                 <tr key={d.id} className="border-t border-border">
-                  <td className={`${td} font-mono font-bold`}>{d.number}</td><td className={td}>{d.date}</td><td className={td}>{d.typeLabel}</td><td className={td}>{d.warehouseName}</td>
+                  <td className={`${td} font-mono font-bold`}>{d.number}{d.voided && <span className="ml-1.5 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] font-bold">BATAL</span>}</td><td className={td}>{d.date}</td><td className={td}>{d.typeLabel}</td><td className={td}>{d.warehouseName}</td>
                   <td className={td}>{d.reference || d.reason || "-"}</td><td className={tdr}>{d.lines.length}</td><td className={tdr}><MoneyDisplay amount={d.totalValue} /></td>
-                  <td className={td}>{d.posted ? "Terposting" : <span className="text-rose-700 font-bold">Belum terposting</span>}</td>
+                  <td className={td}>{d.voided ? "Dibatalkan" : d.posted ? "Terposting" : <span className="text-rose-700 font-bold">Belum terposting</span>}</td>
                   <td className={td}><Button variant="outline" size="sm" className="h-7 text-[11px]" onClick={() => setDetail(d)}>Detail</Button></td>
                 </tr>
               ))}
@@ -242,6 +264,7 @@ export default function StockDocumentsPage() {
                 <div><span className="text-muted-foreground">Dibuat oleh:</span> {detail.createdBy || "-"}</div>
                 {detail.reason && <div className="col-span-2"><span className="text-muted-foreground">Alasan:</span> {detail.reason}</div>}
                 {detail.notes && <div className="col-span-2"><span className="text-muted-foreground">Catatan:</span> {detail.notes}</div>}
+                {detail.voided && <div className="col-span-2 text-rose-700"><span className="font-bold">Dibatalkan</span> oleh {detail.voidedBy || "-"}: {detail.voidReason}</div>}
               </div>
               <table className="w-full"><thead><tr><th className={th}>Produk</th><th className={thr}>Qty</th><th className={thr}>Biaya/unit</th><th className={thr}>Nilai</th><th className={th}>Batch</th></tr></thead>
                 <tbody>
@@ -250,6 +273,7 @@ export default function StockDocumentsPage() {
                   ))}
                   <tr className="border-t-2 border-border font-bold"><td className={td} colSpan={3}>Total</td><td className={tdr}><MoneyDisplay amount={detail.totalValue} /></td><td className={td} /></tr>
                 </tbody></table>
+              {!detail.voided && <div className="flex justify-end"><Button variant="outline" size="sm" className="h-8 text-xs text-rose-700 border-rose-200" disabled={busy} onClick={() => voidDoc(detail)}>Batalkan dokumen</Button></div>}
             </div>
           )}
         </DialogContent>

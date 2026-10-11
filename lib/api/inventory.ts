@@ -195,6 +195,10 @@ export interface StockDocument {
   totalValue: number;
   /** False when the stock moved but the journal could not be posted. */
   posted: boolean;
+  voided?: boolean;
+  voidedAt?: string;
+  voidedBy?: string;
+  voidReason?: string;
   createdBy?: string;
   lines: StockDocumentLine[];
   createdAt?: string;
@@ -297,6 +301,8 @@ export const inventoryApi = {
   listStockDocuments: async (params?: { type?: StockDocumentType; from?: string; to?: string }): Promise<ApiResponse<StockDocument[]>> =>
     apiClient<StockDocument[]>("/inventory/documents", { params }),
   getStockDocument: async (id: string): Promise<ApiResponse<StockDocument>> => apiClient<StockDocument>(`/inventory/documents/${id}`),
+  voidStockDocument: async (id: string, reason: string): Promise<ApiResponse<StockDocument>> =>
+    apiClient<StockDocument>(`/inventory/documents/${id}/void`, { method: "POST", body: JSON.stringify({ reason }) }),
   createStockDocument: async (data: CreateStockDocumentInput): Promise<ApiResponse<StockDocument>> =>
     apiClient<StockDocument>("/inventory/documents", { method: "POST", body: JSON.stringify(data) }),
 };
