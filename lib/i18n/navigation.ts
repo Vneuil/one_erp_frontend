@@ -131,6 +131,7 @@ const extraTitles: Record<string, string> = {
   "Currencies": "Mata Uang",
   "API & Webhooks": "API & Webhook",
   "Cash & Bank Vouchers": "Voucher Kas & Bank",
+  "Kas Bon Sementara (KBS)": "Kas Bon Sementara (KBS)",
   "General Ledger": "Buku Besar",
   "Daily Cash & Bank Report": "Laporan Kas/Bank Harian",
   "Expense & Non-Operating Reports": "Laporan Biaya & Luar Usaha",
