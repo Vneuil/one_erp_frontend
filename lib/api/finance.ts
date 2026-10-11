@@ -344,6 +344,134 @@ export interface OutstandingTempAdvanceRow {
   overdue: boolean;
 }
 export interface OutstandingTempAdvances { asOf: string; rows: OutstandingTempAdvanceRow[]; total: number; overdueTotal: number }
+// Cash Advances (KBS)
+
+export interface CashAdvancePlanLine {
+  id?: string;
+  cashAdvanceId?: string;
+  description: string;
+  estimatedAmount: number;
+  targetAccountCode?: string;
+}
+
+export interface CashAdvanceSettlementLine {
+  id?: string;
+  cashAdvanceId?: string;
+  description: string;
+  accountCode: string;
+  amount: number;
+  receiptNo?: string;
+  receiptDate?: string;
+  attachmentUrl?: string;
+}
+
+export interface CashAdvanceItem {
+  id: string;
+  crNumber: string;
+  kbsNumber?: string;
+  employeeName: string;
+  department?: string;
+  purpose: string;
+  crAmount: number;
+  crDate: string;
+  crStatus: "pending" | "approved" | "rejected";
+  crRejectReason?: string;
+  kbsDate?: string;
+  kbsDueDate?: string;
+  kbsAmount: number;
+  kbsStatus: "draft" | "pending" | "approved" | "revision";
+  kbsRejectReason?: string;
+  disburseDate?: string;
+  disburseCashAccountCode?: string;
+  disbursePaymentMethod?: string;
+  disburseAmount: number;
+  disburseJournalId?: string;
+  disbursedByEmail?: string;
+  pjDate?: string;
+  pjTotalRealized: number;
+  pjBalanceAmount: number;
+  pjStatus: "none" | "pending" | "approved" | "revision" | "settled";
+  pjRejectReason?: string;
+  settlementAction?: "none" | "refund_to_company" | "reimburse_to_employee" | "exact";
+  settlementAccountCode?: string;
+  settlementJournalId?: string;
+  bkkNumber?: string;
+  createdByEmail?: string;
+  approvedCrByEmail?: string;
+  approvedKbsByEmail?: string;
+  approvedPjByEmail?: string;
+  planLines?: CashAdvancePlanLine[];
+  settlementLines?: CashAdvanceSettlementLine[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CashRequestInput {
+  employeeName: string;
+  department?: string;
+  purpose: string;
+  crAmount: number;
+  crDate?: string;
+}
+
+export interface CashAdvanceFormInput {
+  kbsDate?: string;
+  kbsDueDate: string;
+  kbsAmount: number;
+  lines: { description: string; estimatedAmount: number; targetAccountCode?: string }[];
+}
+
+export interface DisburseCashAdvanceInput {
+  date?: string;
+  cashAccountCode: string;
+  paymentMethod?: string;
+}
+
+export interface SubmitSettlementInput {
+  pjDate?: string;
+  settlementAccountCode?: string;
+  lines: {
+    description: string;
+    accountCode: string;
+    amount: number;
+    receiptNo?: string;
+    receiptDate?: string;
+    attachmentUrl?: string;
+  }[];
+}
+
+export interface CashAdvanceOutstandingReportItem {
+  id: string;
+  crNumber: string;
+  kbsNumber?: string;
+  employeeName: string;
+  department?: string;
+  purpose: string;
+  crDate: string;
+  disburseDate?: string;
+  kbsDueDate?: string;
+  kbsAmount: number;
+  agingDays: number;
+  status: string;
+  disburseCashAccountCode?: string;
+}
+
+export interface CashAdvanceDifferenceReportItem {
+  id: string;
+  kbsNumber: string;
+  crNumber: string;
+  employeeName: string;
+  department?: string;
+  purpose: string;
+  kbsAmount: number;
+  pjTotalRealized: number;
+  balanceAmount: number;
+  settlementAction: string;
+  settlementAccountCode: string;
+  pjStatus: string;
+  bkkNumber?: string;
+  settledDate?: string;
+}
 
 // General ledger, cash book, expense breakdowns
 
@@ -567,4 +695,34 @@ export const financeApi = {
     apiClient<ExpenseBreakdownReport>("/finance/reports/expense-breakdown", { params: { from, to } }),
   nonOperating: async (from?: string, to?: string): Promise<ApiResponse<NonOperatingReport>> =>
     apiClient<NonOperatingReport>("/finance/reports/non-operating", { params: { from, to } }),
+
+  // Cash advances (KBS)
+  listCashAdvances: async (params?: { status?: string; from?: string; to?: string }): Promise<ApiResponse<CashAdvanceItem[]>> =>
+    apiClient<CashAdvanceItem[]>("/finance/cash-advances", { params }),
+  getCashAdvance: async (id: string): Promise<ApiResponse<CashAdvanceItem>> =>
+    apiClient<CashAdvanceItem>(`/finance/cash-advances/${id}`),
+  createCashRequest: async (data: CashRequestInput): Promise<ApiResponse<CashAdvanceItem>> =>
+    apiClient<CashAdvanceItem>("/finance/cash-advances/cash-request", { method: "POST", body: JSON.stringify(data) }),
+  approveCashRequest: async (id: string): Promise<ApiResponse<CashAdvanceItem>> =>
+    apiClient<CashAdvanceItem>(`/finance/cash-advances/${id}/approve-cr`, { method: "POST" }),
+  rejectCashRequest: async (id: string, reason?: string): Promise<ApiResponse<CashAdvanceItem>> =>
+    apiClient<CashAdvanceItem>(`/finance/cash-advances/${id}/reject-cr`, { method: "POST", body: JSON.stringify({ reason }) }),
+  fillCashAdvanceForm: async (id: string, data: CashAdvanceFormInput): Promise<ApiResponse<CashAdvanceItem>> =>
+    apiClient<CashAdvanceItem>(`/finance/cash-advances/${id}/fill-form`, { method: "POST", body: JSON.stringify(data) }),
+  approveCashAdvanceForm: async (id: string): Promise<ApiResponse<CashAdvanceItem>> =>
+    apiClient<CashAdvanceItem>(`/finance/cash-advances/${id}/approve-form`, { method: "POST" }),
+  rejectCashAdvanceForm: async (id: string, reason?: string): Promise<ApiResponse<CashAdvanceItem>> =>
+    apiClient<CashAdvanceItem>(`/finance/cash-advances/${id}/reject-form`, { method: "POST", body: JSON.stringify({ reason }) }),
+  disburseCashAdvance: async (id: string, data: DisburseCashAdvanceInput): Promise<ApiResponse<CashAdvanceItem>> =>
+    apiClient<CashAdvanceItem>(`/finance/cash-advances/${id}/disburse`, { method: "POST", body: JSON.stringify(data) }),
+  submitSettlement: async (id: string, data: SubmitSettlementInput): Promise<ApiResponse<CashAdvanceItem>> =>
+    apiClient<CashAdvanceItem>(`/finance/cash-advances/${id}/submit-settlement`, { method: "POST", body: JSON.stringify(data) }),
+  approveSettlement: async (id: string): Promise<ApiResponse<CashAdvanceItem>> =>
+    apiClient<CashAdvanceItem>(`/finance/cash-advances/${id}/approve-settlement`, { method: "POST" }),
+  rejectSettlement: async (id: string, reason?: string): Promise<ApiResponse<CashAdvanceItem>> =>
+    apiClient<CashAdvanceItem>(`/finance/cash-advances/${id}/reject-settlement`, { method: "POST", body: JSON.stringify({ reason }) }),
+  getOutstandingCashAdvances: async (): Promise<ApiResponse<CashAdvanceOutstandingReportItem[]>> =>
+    apiClient<CashAdvanceOutstandingReportItem[]>("/finance/cash-advances/reports/outstanding"),
+  getCashAdvanceDifferences: async (params?: { from?: string; to?: string }): Promise<ApiResponse<CashAdvanceDifferenceReportItem[]>> =>
+    apiClient<CashAdvanceDifferenceReportItem[]>("/finance/cash-advances/reports/differences", { params }),
 };
