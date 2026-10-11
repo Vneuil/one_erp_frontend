@@ -10,12 +10,12 @@ export function PublicFooter() {
           <div className="flex items-center gap-2.5">
             <Image
               src="/logo.png"
-              alt="ONE ERP Logo"
-              width={28}
+              alt="manna ERP Logo"
+              width={75}
               height={28}
-              className="h-7 w-7 rounded-lg object-contain"
+              className="h-7 w-auto object-contain"
             />
-            <span className="font-bold text-foreground text-sm">ONE ERP</span>
+            <span className="font-bold text-foreground text-sm">manna ERP</span>
           </div>
           <div className="flex items-center gap-4">
             <Link href="/pricing" className="hover:text-brand-primary transition-colors font-semibold">

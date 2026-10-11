@@ -3,50 +3,51 @@
 @layer base {
   :root {
     --background: #ffffff;
-    --foreground: #1e1b2e;
+    --foreground: #142413;
 
     --card: #ffffff;
-    --card-foreground: #1e1b2e;
+    --card-foreground: #142413;
 
     --popover: #ffffff;
-    --popover-foreground: #1e1b2e;
+    --popover-foreground: #142413;
 
-    --primary: #9a20d6;
+    --primary: #50b747;
     --primary-foreground: #ffffff;
 
-    --secondary: #fcf2fa;
-    --secondary-foreground: #35135a;
+    --secondary: #f2f9ed;
+    --secondary-foreground: #1b4317;
 
-    --muted: #f8f6fc;
-    --muted-foreground: #6c6680;
+    --muted: #f5f9f3;
+    --muted-foreground: #5c7059;
 
-    --accent: #fcf2fa;
-    --accent-foreground: #5a16c9;
+    --accent: #f2f9ed;
+    --accent-foreground: #22681c;
 
     --destructive: #ef4444;
     --destructive-foreground: #ffffff;
 
-    --border: #ece7f3;
-    --input: #e2dbec;
-    --ring: #9a20d6;
+    --border: #e1eedd;
+    --input: #d4e7cf;
+    --ring: #50b747;
 
     --radius: 0.625rem;
 
-    /* Custom ONE ERP Brand Palette */
-    --brand-primary: #9a20d6;
-    --brand-dark: #35135a;
-    --brand-purple: #9814b5;
-    --brand-indigo: #5a16c9;
-    --brand-blue: #0f67f5;
-    --brand-tint: #fcf2fa;
+    /* Custom Manna Brand Palette */
+    --brand-primary: #50b747;
+    --brand-dark: #163b15;
+    --brand-purple: #3ea435;
+    --brand-indigo: #22681c;
+    --brand-blue: #15803d;
+    --brand-lime: #b1d235;
+    --brand-tint: #f2f9ed;
 
     --sidebar-background: #ffffff;
-    --sidebar-foreground: #2d2640;
-    --sidebar-primary: #9a20d6;
+    --sidebar-foreground: #193116;
+    --sidebar-primary: #50b747;
     --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #fcf2fa;
-    --sidebar-accent-foreground: #5a16c9;
-    --sidebar-border: #ece7f3;
+    --sidebar-accent: #f2f9ed;
+    --sidebar-accent-foreground: #22681c;
+    --sidebar-border: #e1eedd;
   }
 }
 
@@ -84,6 +85,7 @@
   --color-brand-purple: var(--brand-purple);
   --color-brand-indigo: var(--brand-indigo);
   --color-brand-blue: var(--brand-blue);
+  --color-brand-lime: var(--brand-lime);
   --color-brand-tint: var(--brand-tint);
 
   --color-sidebar: var(--sidebar-background);
@@ -114,11 +116,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #e2dbec;
+  background: #d4e7cf;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #cbbddf;
+  background: #b7d9b0;
 }
 
 /* Printing: drop the app chrome so reports and forms print on their own. */

@@ -7,8 +7,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "ONE ERP — AI-Powered All-in-One Business Super App",
-  description: "AI-Powered All-in-One Business Super App — Modern, Modular, Omnichannel Enterprise Operating System",
+  title: "manna ERP — Food For Life & Business Enterprise System",
+  description: "manna ERP — Modern, Modular, Omnichannel Enterprise Operating System",
   icons: {
     icon: [
       { url: "/icon.png", type: "image/png" },

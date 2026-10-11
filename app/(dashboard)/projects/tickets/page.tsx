@@ -236,7 +236,7 @@ export default function ServiceTicketsPage() {
         const styles: Record<string, string> = {
           Open: "bg-blue-50 text-blue-700 border-blue-200",
           "In Progress": "bg-amber-50 text-amber-700 border-amber-200",
-          "Pending Customer": "bg-purple-50 text-brand-indigo border-purple-200",
+          "Pending Customer": "bg-emerald-50 text-brand-indigo border-emerald-200",
           Resolved: "bg-emerald-50 text-emerald-700 border-emerald-200",
         };
         return (

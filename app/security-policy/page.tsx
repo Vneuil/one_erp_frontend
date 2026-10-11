@@ -16,13 +16,13 @@ export default function SecurityPolicyPage() {
           <Link href="/" className="flex items-center gap-2.5 group">
             <Image
               src="/logo.png"
-              alt="ONE ERP Logo"
-              width={34}
+              alt="manna ERP Logo"
+              width={90}
               height={34}
               priority
-              className="h-8 w-8 rounded-lg shadow-md shadow-purple-500/20 object-contain group-hover:scale-105 transition-transform"
+              className="h-8 w-auto object-contain group-hover:scale-105 transition-transform"
             />
-            <span className="font-black text-lg tracking-tight text-foreground">ONE ERP</span>
+            <span className="font-black text-lg tracking-tight text-foreground">manna ERP</span>
           </Link>
           <Button asChild variant="gradient" size="sm" className="h-9 px-4 text-xs font-bold">
             <Link href="/login">Masuk</Link>

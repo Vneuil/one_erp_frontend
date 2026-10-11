@@ -733,16 +733,16 @@ export default function SalesOrdersPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-border shadow-xs hover:border-purple-300 transition-all">
+        <Card className="border-border shadow-xs hover:border-emerald-300 transition-all">
           <CardContent className="p-4 flex items-center justify-between">
             <div className="space-y-1">
-              <p className="text-xs text-purple-700 font-medium">B2B Quotations & Direct</p>
-              <MoneyDisplay amount={metrics.b2bRev} className="text-lg font-bold text-purple-950" />
-              <p className="text-[11px] text-purple-600 font-medium">
+              <p className="text-xs text-emerald-700 font-medium">B2B Quotations & Direct</p>
+              <MoneyDisplay amount={metrics.b2bRev} className="text-lg font-bold text-emerald-950" />
+              <p className="text-[11px] text-emerald-600 font-medium">
                 {metrics.b2bCount} Commercial Contract Orders
               </p>
             </div>
-            <div className="h-10 w-10 rounded-xl bg-purple-50 text-brand-indigo flex items-center justify-center">
+            <div className="h-10 w-10 rounded-xl bg-emerald-50 text-brand-indigo flex items-center justify-center">
               <FileText className="h-5 w-5" />
             </div>
           </CardContent>

@@ -124,10 +124,10 @@ export default function SubscriptionBillingPage() {
               Lisensi Anda telah berakhir. Modul bisnis tidak dapat diakses sampai Anda memperpanjang langganan di bawah ini.
             </div>
           )}
-          <div className="bg-gradient-to-r from-brand-dark via-[#3d1369] to-brand-indigo rounded-2xl p-6 text-white shadow-md relative overflow-hidden text-left">
+          <div className="bg-gradient-to-r from-brand-dark via-[#1e4e1a] to-brand-indigo rounded-2xl p-6 text-white shadow-md relative overflow-hidden text-left">
             <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div className="space-y-2">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs font-bold text-purple-200">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs font-bold text-emerald-200">
                   <Sparkles className="h-3.5 w-3.5 text-amber-300" />
                   <span>
                     {subscription.planDurationMonths > 0
@@ -135,15 +135,15 @@ export default function SubscriptionBillingPage() {
                       : "Paket Trial"}
                   </span>
                 </div>
-                <h2 className="text-2xl font-black tracking-tight">ONE ERP</h2>
+                <h2 className="text-2xl font-black tracking-tight">manna ERP</h2>
                 {subscription.status === "trial" && trialDays !== null && (
-                  <p className="text-xs text-purple-200 flex items-center gap-1.5">
+                  <p className="text-xs text-emerald-200 flex items-center gap-1.5">
                     <Clock className="h-3.5 w-3.5" />
                     Sisa {trialDays} hari masa trial (berakhir {formatDate(subscription.trialEndsAt)})
                   </p>
                 )}
                 {subscription.status === "active" && (
-                  <p className="text-xs text-purple-200 flex items-center gap-1.5">
+                  <p className="text-xs text-emerald-200 flex items-center gap-1.5">
                     <CheckCircle2 className="h-3.5 w-3.5" />
                     Aktif hingga {formatDate(subscription.endsAt)}
                   </p>
@@ -151,7 +151,7 @@ export default function SubscriptionBillingPage() {
               </div>
 
               <div className="text-right shrink-0 space-y-1">
-                <div className="text-xs text-purple-200">Total Tagihan:</div>
+                <div className="text-xs text-emerald-200">Total Tagihan:</div>
                 <div className="text-lg font-black font-mono">{formatIDR(subscription.totalPrice)}</div>
                 <span className={`text-[11px] bg-white/10 px-2 py-0.5 rounded font-bold ${statusInfo?.color}`}>
                   ● {statusInfo?.label}

@@ -189,7 +189,7 @@ export default function SmartAttendancePage() {
         const styles: Record<string, string> = {
           "On Time": "bg-emerald-50 text-emerald-700 border-emerald-200",
           Late: "bg-rose-50 text-rose-700 border-rose-200",
-          Overtime: "bg-purple-50 text-brand-indigo border-purple-200",
+          Overtime: "bg-emerald-50 text-brand-indigo border-emerald-200",
           Leave: "bg-amber-50 text-amber-700 border-amber-200",
         };
         return (
@@ -262,7 +262,7 @@ export default function SmartAttendancePage() {
       )}
 
       {/* Clock In / Out Live Widget */}
-      <div className="bg-gradient-to-r from-brand-tint via-purple-50 to-white rounded-2xl border border-brand-indigo/30 p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-gradient-to-r from-brand-tint via-emerald-50 to-white rounded-2xl border border-brand-indigo/30 p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
           <span className="text-xs font-bold text-brand-dark flex items-center gap-1.5">
             <MapPin className="h-4 w-4 text-emerald-600" />
@@ -292,7 +292,7 @@ export default function SmartAttendancePage() {
             className={`h-11 px-6 text-xs font-bold gap-2 ${
               canClockOut
                 ? "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
-                : "shadow-md shadow-purple-500/20"
+                : "shadow-md shadow-emerald-500/20"
             }`}
           >
             <Smartphone className="h-4 w-4" />

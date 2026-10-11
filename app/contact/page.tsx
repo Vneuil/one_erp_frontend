@@ -67,13 +67,13 @@ export default function ContactPage() {
           <Link href="/" className="flex items-center gap-2.5 group">
             <Image
               src="/logo.png"
-              alt="ONE ERP Logo"
-              width={34}
+              alt="manna ERP Logo"
+              width={90}
               height={34}
               priority
-              className="h-8 w-8 rounded-lg shadow-md shadow-purple-500/20 object-contain group-hover:scale-105 transition-transform"
+              className="h-8 w-auto object-contain group-hover:scale-105 transition-transform"
             />
-            <span className="font-black text-lg tracking-tight text-foreground">ONE ERP</span>
+            <span className="font-black text-lg tracking-tight text-foreground">manna ERP</span>
           </Link>
 
           <div className="flex items-center gap-3">
@@ -107,7 +107,7 @@ export default function ContactPage() {
         </h1>
         <p className="text-sm text-muted-foreground max-w-xl mx-auto">
           Isi form di bawah ini untuk menjadwalkan sesi singkat bersama tim Divine. Setelah meeting,
-          akses free trial ONE ERP akan langsung diaktifkan untuk perusahaan Anda.
+          akses free trial manna ERP akan langsung diaktifkan untuk perusahaan Anda.
         </p>
       </section>
 
@@ -204,7 +204,7 @@ export default function ContactPage() {
                   <p className="text-xs font-semibold text-rose-600 text-center">{error}</p>
                 )}
 
-                <Button type="submit" variant="gradient" size="lg" className="w-full h-12 font-bold shadow-md shadow-purple-500/20" disabled={submitting}>
+                <Button type="submit" variant="gradient" size="lg" className="w-full h-12 font-bold shadow-md shadow-emerald-500/20" disabled={submitting}>
                   {submitting ? "Mengirim..." : "Ajukan Meeting & Klaim Free Trial"}
                 </Button>
                 <p className="text-[11px] text-muted-foreground text-center">

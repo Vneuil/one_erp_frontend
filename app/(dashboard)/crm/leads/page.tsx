@@ -276,7 +276,7 @@ export default function LeadsPage() {
         const styles: Record<string, string> = {
           New: "bg-slate-100 text-slate-700 border-slate-200",
           Contacted: "bg-blue-50 text-blue-700 border-blue-200",
-          Qualified: "bg-purple-50 text-brand-indigo border-purple-200",
+          Qualified: "bg-emerald-50 text-brand-indigo border-emerald-200",
           Proposal: "bg-amber-50 text-amber-700 border-amber-200",
           Won: "bg-emerald-50 text-emerald-700 border-emerald-200",
           Lost: "bg-rose-50 text-rose-700 border-rose-200",

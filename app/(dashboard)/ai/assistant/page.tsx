@@ -137,15 +137,15 @@ export default function AiAssistantPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-6.5rem)] rounded-2xl border border-border bg-white overflow-hidden shadow-xs">
       {/* Top Header */}
-      <div className="p-4 border-b border-border flex items-center justify-between bg-gradient-to-r from-brand-tint/60 via-purple-50/40 to-white">
+      <div className="p-4 border-b border-border flex items-center justify-between bg-gradient-to-r from-brand-tint/60 via-emerald-50/40 to-white">
         <div className="flex items-center gap-2.5 text-left">
-          <div className="h-9 w-9 rounded-xl bg-brand-primary text-white flex items-center justify-center font-bold shadow-md shadow-purple-500/20">
+          <div className="h-9 w-9 rounded-xl bg-brand-primary text-white flex items-center justify-center font-bold shadow-md shadow-emerald-500/20">
             <Sparkles className="h-5 w-5" />
           </div>
           <div>
             <h1 className="text-xs font-black text-foreground flex items-center gap-1.5">
               <span>Asisten Data ERP</span>
-              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-100 text-brand-indigo">
+              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-brand-indigo">
                 Data nyata
               </span>
             </h1>

@@ -143,7 +143,7 @@ export const translations = {
     // Landing Page
     landing: {
       announcementTag: "Update Sistem",
-      announcementText: "ONE ERP 1.0 — AI-Powered All-in-One Business Super App",
+      announcementText: "manna ERP 1.0 — Food For Life Enterprise Super App",
       announcementAction: "Coba Sekarang",
       superAppTag: "SUPER APP",
       subTag: "Sistem Operasi Bisnis Terpadu",
@@ -209,7 +209,7 @@ export const translations = {
       pricingCustomStart: "mulai dari",
       pricingTrialNote: "Free trial 14 hari setelah meeting",
       faqTitle: "Pertanyaan yang Sering Diajukan",
-      faqSubtitle: "Hal-hal penting seputar penggunaan ONE ERP di perusahaan Anda.",
+      faqSubtitle: "Hal-hal penting seputar penggunaan manna ERP di perusahaan Anda.",
       faq1Q: "Apakah sistem ini bisa langsung menarik pesanan dari marketplace?",
       faq1A: "Ya, sistem terhubung via API resmi sehingga setiap pesanan baru, status pembayaran, dan pengiriman tersinkron otomatis ke modul Sales Order.",
       faq2Q: "Apakah cocok untuk perusahaan manufaktur atau pabrik?",
@@ -220,7 +220,7 @@ export const translations = {
       faq4A: "Bisa. Tersedia pengaturan peran (RBAC) seperti Kasir, Admin Gudang, Supervisor Produksi, dan Finance Manager dengan izin menu yang dapat disesuaikan.",
       bannerTitle: "Mulai Otomasi Operasional Bisnis Anda Hari Ini",
       bannerDesc:
-        "Masuk ke konsol ONE ERP dan rasakan kemudahan mengelola penjualan, stok, dan keuangan dalam satu sistem.",
+        "Masuk ke konsol manna ERP dan rasakan kemudahan mengelola penjualan, stok, dan keuangan dalam satu sistem.",
       footerCopy: "— AI-Powered All-in-One Business Super App. Hak cipta dilindungi undang-undang.",
     },
 
@@ -242,8 +242,8 @@ export const translations = {
       signInButton: "Masuk ke Konsol",
       signingIn: "Memverifikasi...",
       errorAuth: "Autentikasi gagal. Periksa kembali email dan kata sandi Anda.",
-      securityNotice: "Dilindungi enkripsi enterprise TLS 256-bit • ONE ERP 1.0",
-      footerText: "ONE ERP • Sistem Operasi Bisnis Terpadu",
+      securityNotice: "Dilindungi enkripsi enterprise TLS 256-bit • manna ERP 1.0",
+      footerText: "manna ERP • Food For Life Sistem Operasi Bisnis",
       signOut: "Keluar Akun",
       backToHome: "Kembali ke Beranda",
       showcaseTitle: "Semua Operasional Bisnis Terkelola Rapi",
@@ -400,7 +400,7 @@ export const translations = {
     // Landing Page
     landing: {
       announcementTag: "System Update",
-      announcementText: "ONE ERP 1.0 — AI-Powered All-in-One Business Super App",
+      announcementText: "manna ERP 1.0 — Food For Life Enterprise Super App",
       announcementAction: "Try Demo",
       superAppTag: "SUPER APP",
       subTag: "Unified Business Operating System",
@@ -466,7 +466,7 @@ export const translations = {
       pricingCustomStart: "starting from",
       pricingTrialNote: "14-day free trial after your meeting",
       faqTitle: "Frequently Asked Questions",
-      faqSubtitle: "Clear answers to key questions about adopting ONE ERP.",
+      faqSubtitle: "Clear answers to key questions about adopting manna ERP.",
       faq1Q: "Can this system sync directly with marketplaces?",
       faq1A: "Yes, via direct marketplace APIs, incoming orders, customer details, and shipping airwaybills sync straight into your Sales Orders.",
       faq2Q: "Is this suitable for manufacturing and assembly operations?",
@@ -477,7 +477,7 @@ export const translations = {
       faq4A: "Yes. Flexible RBAC roles (Cashier, Warehouse Clerk, Production Supervisor, Finance Manager) allow precise menu and action permissions.",
       bannerTitle: "Ready to Automate Your Business Operations?",
       bannerDesc:
-        "Enter the ONE ERP console and experience how easy it is to manage sales, inventory, and finance together.",
+        "Enter the manna ERP console and experience how easy it is to manage sales, inventory, and finance together.",
       footerCopy: "— AI-Powered All-in-One Business Super App. All rights reserved.",
     },
 
@@ -499,8 +499,8 @@ export const translations = {
       signInButton: "Sign In to Console",
       signingIn: "Authenticating...",
       errorAuth: "Authentication failed. Please verify your email and password.",
-      securityNotice: "Protected by enterprise TLS 256-bit encryption • ONE ERP 1.0",
-      footerText: "ONE ERP • Unified Business Operating System",
+      securityNotice: "Protected by enterprise TLS 256-bit encryption • manna ERP 1.0",
+      footerText: "manna ERP • Food For Life Business Operating System",
       signOut: "Sign Out",
       backToHome: "Back to Home",
       showcaseTitle: "Complete Business Operations, Unified",

@@ -92,17 +92,17 @@ export default function LoginPage() {
 
       {/* Center: Main Form Card */}
       <div className="max-w-md w-full mx-auto my-auto py-8">
-        <div className="bg-white rounded-2xl border border-border p-6 sm:p-8 shadow-xl shadow-purple-900/5 space-y-6">
+        <div className="bg-white rounded-2xl border border-border p-6 sm:p-8 shadow-xl shadow-emerald-900/5 space-y-6">
           {/* Brand header */}
           <div className="text-center space-y-3">
             <Link href="/" className="inline-flex items-center justify-center group">
               <Image
                 src="/logo.png"
-                alt="ONE ERP Logo"
-                width={52}
-                height={52}
+                alt="manna Logo"
+                width={140}
+                height={56}
                 priority
-                className="h-12 w-12 rounded-xl shadow-md shadow-purple-500/20 object-contain group-hover:scale-105 transition-transform"
+                className="h-12 w-auto object-contain group-hover:scale-105 transition-transform"
               />
             </Link>
 
@@ -188,7 +188,7 @@ export default function LoginPage() {
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
-                className="h-4 w-4 rounded border-border text-brand-primary focus:ring-brand-primary/20 accent-[#9A20D6] cursor-pointer"
+                className="h-4 w-4 rounded border-border text-brand-primary focus:ring-brand-primary/20 accent-[#50b747] cursor-pointer"
               />
               <label htmlFor="rememberMe" className="text-xs text-muted-foreground font-medium cursor-pointer select-none">
                 {t.auth.rememberMe}
@@ -199,7 +199,7 @@ export default function LoginPage() {
             <Button
               type="submit"
               variant="gradient"
-              className="w-full h-11 text-sm font-bold shadow-md shadow-purple-500/20 hover:shadow-lg transition-all"
+              className="w-full h-11 text-sm font-bold shadow-md shadow-emerald-500/20 hover:shadow-lg transition-all"
               disabled={isLoading}
             >
               {isLoading ? (

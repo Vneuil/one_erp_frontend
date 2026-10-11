@@ -39,7 +39,7 @@ export function ChannelBadge({
 
   if (source === "quotation") {
     label = "Quotation";
-    badgeStyle = "bg-purple-50 text-brand-indigo border-purple-200";
+    badgeStyle = "bg-emerald-50 text-brand-indigo border-emerald-200";
     iconColor = "text-brand-indigo";
     Icon = FileText;
   } else if (source === "pos") {

@@ -22,35 +22,29 @@ export function Sidebar() {
 
   const getTranslatedTitle = React.useCallback((title: string) => translatedNavTitle(title, t, isIndonesian), [t, isIndonesian]);
 
-  // Keep track of expanded parent menus
-  const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>(() => {
-    // Auto-open groups where a child is active
-    const initial: Record<string, boolean> = {};
+  // Keep track of manually toggled parent menus (user clicks)
+  const [manualOpenGroups, setManualOpenGroups] = React.useState<Record<string, boolean>>({});
+
+  // Compute which groups should be open:
+  // - Always open the group whose child matches the current pathname
+  // - Merge with manually toggled groups
+  const openGroups = React.useMemo<Record<string, boolean>>(() => {
+    const auto: Record<string, boolean> = {};
     for (const group of navigationConfig) {
       for (const item of group.items) {
-        if (item.items?.some((sub) => pathname.startsWith(sub.href))) {
-          initial[item.title] = true;
+        if (item.items?.some((sub) => pathname === sub.href || pathname.startsWith(sub.href + "/"))) {
+          auto[item.title] = true;
         }
       }
     }
-    return initial;
-  });
-
-  React.useEffect(() => {
-    setOpenGroups((prev) => {
-      const next = { ...prev };
-      for (const group of navigationConfig) for (const item of group.items) {
-        if (item.items?.some((sub) => pathname === sub.href || pathname.startsWith(sub.href + "/"))) next[item.title] = true;
-      }
-      return next;
-    });
-  }, [pathname, navigationConfig]);
+    return { ...auto, ...manualOpenGroups };
+  }, [pathname, navigationConfig, manualOpenGroups]);
 
   const toggleGroup = (title: string) => {
-    if (isCollapsed) { setCollapsed(false); setOpenGroups((prev) => ({ ...prev, [title]: true })); return; }
-    setOpenGroups((prev) => ({
+    if (isCollapsed) { setCollapsed(false); setManualOpenGroups((prev) => ({ ...prev, [title]: true })); return; }
+    setManualOpenGroups((prev) => ({
       ...prev,
-      [title]: !prev[title],
+      [title]: !openGroups[title],
     }));
   };
 
@@ -89,20 +83,23 @@ export function Sidebar() {
       .filter((navGroup) => navGroup.items.length > 0);
   }, [normalizedQuery, matchesQuery, navigationConfig]);
 
-  // While filtering, auto-expand every group with matching children so
-  // results are visible without the user having to click each one open.
-  React.useEffect(() => {
-    if (!normalizedQuery) return;
-    setOpenGroups((prev) => {
-      const next = { ...prev };
-      for (const navGroup of filteredNavigationConfig) {
-        for (const item of navGroup.items) {
-          if (item.items && item.items.length > 0) next[item.title] = true;
-        }
+  // While filtering, compute which groups should auto-expand to show results.
+  // This is derived state (no side effects needed).
+  const filterExpandedGroups = React.useMemo<Record<string, boolean>>(() => {
+    if (!normalizedQuery) return {};
+    const expanded: Record<string, boolean> = {};
+    for (const navGroup of filteredNavigationConfig) {
+      for (const item of navGroup.items) {
+        if (item.items && item.items.length > 0) expanded[item.title] = true;
       }
-      return next;
-    });
+    }
+    return expanded;
   }, [normalizedQuery, filteredNavigationConfig]);
+
+  // Merge filter-expanded groups with the regular open groups
+  const effectiveOpenGroups = normalizedQuery
+    ? { ...openGroups, ...filterExpandedGroups }
+    : openGroups;
 
   return (
     <>
@@ -124,21 +121,24 @@ export function Sidebar() {
       >
         {/* Brand Header */}
         <div className={cn("min-h-16 flex items-center border-b border-border transition-all", isCollapsed ? "justify-center relative px-2" : "justify-between px-4")}>
-          <Link href="/dashboard" className="flex items-center gap-3 overflow-hidden" title="ONE ERP">
+          <Link href="/dashboard" className="flex items-center gap-2.5 overflow-hidden" title="Manna ERP">
             <Image
               src="/logo.png"
-              alt="ONE ERP Logo"
-              width={36}
+              alt="Manna Logo"
+              width={90}
               height={36}
               priority
-              className="h-9 w-9 shrink-0 rounded-xl object-contain shadow-md shadow-purple-500/20"
+              className={cn(
+                "shrink-0 object-contain transition-all",
+                isCollapsed ? "h-8 w-8" : "h-8 w-auto max-w-[110px]"
+              )}
             />
             {!isCollapsed && (
               <div className="flex flex-col min-w-0">
-                <span className="font-bold text-base tracking-tight text-foreground flex items-center gap-1.5">
-                  ONE <span className="text-xs px-1.5 py-0.5 rounded-md bg-brand-tint text-brand-indigo font-bold">ERP</span>
+                <span className="font-extrabold text-base tracking-tight text-foreground flex items-center gap-1">
+                  manna <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-brand-tint text-brand-indigo font-bold border border-brand-indigo/20">ERP</span>
                 </span>
-                <span className="text-[11px] text-muted-foreground truncate max-w-[140px]">
+                <span className="text-[10px] text-muted-foreground truncate max-w-[130px]">
                   {currentCompany.name}
                 </span>
               </div>
@@ -205,7 +205,7 @@ export function Sidebar() {
                 const isItemActive = item.href
                   ? pathname === item.href
                   : item.items?.some((sub) => pathname === sub.href || pathname.startsWith(sub.href + "/"));
-                const isOpen = openGroups[item.title];
+                const isOpen = effectiveOpenGroups[item.title];
 
                 if (!hasChildren && item.href) {
                   return (

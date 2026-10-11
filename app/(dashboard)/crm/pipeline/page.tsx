@@ -57,7 +57,7 @@ interface StageView {
 
 const OPEN_STYLES = [
   { color: "border-blue-300 bg-blue-50/40", badgeStyle: "bg-blue-100 text-blue-800" },
-  { color: "border-purple-300 bg-purple-50/40", badgeStyle: "bg-purple-100 text-purple-800" },
+  { color: "border-lime-300 bg-lime-50/40", badgeStyle: "bg-lime-100 text-lime-800" },
   { color: "border-amber-300 bg-amber-50/40", badgeStyle: "bg-amber-100 text-amber-800" },
   { color: "border-sky-300 bg-sky-50/40", badgeStyle: "bg-sky-100 text-sky-800" },
   { color: "border-indigo-300 bg-indigo-50/40", badgeStyle: "bg-indigo-100 text-indigo-800" },

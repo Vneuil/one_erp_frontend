@@ -368,7 +368,7 @@ export default function DashboardPage() {
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 {copy.text13}
               </span>
-              <div className="h-9 w-9 rounded-lg bg-purple-50 text-brand-indigo flex items-center justify-center shadow-xs">
+              <div className="h-9 w-9 rounded-lg bg-emerald-50 text-brand-indigo flex items-center justify-center shadow-xs">
                 <Receipt className="h-5 w-5" />
               </div>
             </div>
@@ -427,13 +427,13 @@ export default function DashboardPage() {
                       contentStyle={{
                         backgroundColor: "#FFFFFF",
                         borderRadius: "0.75rem",
-                        border: "1px solid #ECE7F3",
+                        border: "1px solid #E1EEDD",
                         boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.08)",
                         fontSize: "12px",
                       }}
                       formatter={(val) => [new Intl.NumberFormat(isIndonesian ? "id-ID" : "en-US", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(Number(val)), isIndonesian ? "Nilai Pesanan" : "Order Value"]}
                     />
-                    <Bar dataKey="revenue" fill="#9A20D6" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="revenue" fill="#50B747" radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -471,7 +471,7 @@ export default function DashboardPage() {
               className="flex items-center justify-between p-3 rounded-xl border border-border hover:border-brand-primary/40 hover:bg-brand-tint/50 transition-all group cursor-pointer"
             >
               <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-lg bg-purple-50 text-brand-indigo flex items-center justify-center">
+                <div className="h-9 w-9 rounded-lg bg-emerald-50 text-brand-indigo flex items-center justify-center">
                   <Receipt className="h-4 w-4" />
                 </div>
                 <div>

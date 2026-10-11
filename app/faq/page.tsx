@@ -75,15 +75,15 @@ export default function FaqPage() {
           <Link href="/" className="flex items-center gap-2 sm:gap-3 group min-w-0 shrink-0">
             <Image
               src="/logo.png"
-              alt="ONE ERP Logo"
-              width={42}
-              height={42}
+              alt="manna ERP Logo"
+              width={100}
+              height={40}
               priority
-              className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl shadow-md shadow-purple-500/20 object-contain group-hover:scale-105 transition-transform shrink-0"
+              className="h-8 sm:h-9 w-auto object-contain group-hover:scale-105 transition-transform shrink-0"
             />
             <div className="flex flex-col min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-black text-lg sm:text-xl tracking-tight text-foreground">ONE</span>
+                <span className="font-black text-lg sm:text-xl tracking-tight text-foreground">manna</span>
                 <span className="hidden sm:inline-block text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-brand-tint text-brand-indigo border border-brand-indigo/20">
                   {t.landing.superAppTag}
                 </span>
@@ -116,7 +116,7 @@ export default function FaqPage() {
           {/* Right Action Buttons */}
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             <LanguageSwitcher variant="pill" />
-            <Button asChild variant="gradient" size="sm" className="h-9 sm:h-10 px-2.5 sm:px-4 gap-1.5 sm:gap-2 text-[11px] sm:text-xs font-bold shadow-md shadow-purple-500/20 shrink-0">
+            <Button asChild variant="gradient" size="sm" className="h-9 sm:h-10 px-2.5 sm:px-4 gap-1.5 sm:gap-2 text-[11px] sm:text-xs font-bold shadow-md shadow-emerald-500/20 shrink-0">
               <Link href="/login">
                 <span className="whitespace-nowrap">{t.landing.signIn}</span>
                 <ArrowRight className="h-3.5 w-3.5 shrink-0" />
@@ -136,7 +136,7 @@ export default function FaqPage() {
           Pertanyaan yang Sering Diajukan
         </h1>
         <p className="text-sm text-muted-foreground max-w-xl mx-auto">
-          Temukan jawaban seputar penggunaan ONE ERP, langganan, integrasi marketplace, dan lainnya.
+          Temukan jawaban seputar penggunaan manna ERP, langganan, integrasi marketplace, dan lainnya.
         </p>
       </section>
 
@@ -149,7 +149,7 @@ export default function FaqPage() {
             className={cn(
               "px-3.5 py-1.5 rounded-full text-xs font-bold border transition-colors",
               activeCategory === cat
-                ? "bg-brand-primary text-white border-brand-primary shadow-sm shadow-purple-500/20"
+                ? "bg-brand-primary text-white border-brand-primary shadow-sm shadow-emerald-500/20"
                 : "bg-white text-muted-foreground border-border hover:border-brand-primary/40 hover:text-brand-primary"
             )}
           >
@@ -194,12 +194,12 @@ export default function FaqPage() {
       {/* CTA */}
       <section className="pb-16">
         <div className="max-w-3xl mx-auto px-4 sm:px-6">
-          <div className="rounded-2xl bg-gradient-to-br from-brand-dark via-[#421670] to-brand-indigo p-8 text-white text-center space-y-4 shadow-xl">
+          <div className="rounded-2xl bg-gradient-to-br from-brand-dark via-[#1e4e1a] to-brand-indigo p-8 text-white text-center space-y-4 shadow-xl">
             <h3 className="text-xl sm:text-2xl font-extrabold tracking-tight">
               Masih ada pertanyaan lain?
             </h3>
-            <p className="text-sm text-purple-200 max-w-md mx-auto">
-              Tim kami siap membantu Anda memulai dengan ONE ERP.
+            <p className="text-sm text-emerald-200 max-w-md mx-auto">
+              Tim kami siap membantu Anda memulai dengan manna ERP.
             </p>
             <Button asChild size="lg" className="h-11 px-8 text-sm font-bold bg-white text-brand-dark hover:bg-slate-100 shadow-lg">
               <Link href="/login">Masuk ke Konsol</Link>

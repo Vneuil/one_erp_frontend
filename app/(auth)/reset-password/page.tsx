@@ -70,17 +70,17 @@ function ResetPasswordForm() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-[#faf7fd] to-[#fcf2fa] flex items-center justify-center p-4 sm:p-6">
+    <div className="min-h-screen bg-gradient-to-br from-white via-[#f6faf4] to-[#edf7e8] flex items-center justify-center p-4 sm:p-6">
       <div className="w-full max-w-md space-y-6">
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center mb-1">
             <Image
               src="/logo.png"
-              alt="ONE ERP Logo"
-              width={64}
+              alt="manna Logo"
+              width={160}
               height={64}
               priority
-              className="h-16 w-16 rounded-2xl shadow-xl shadow-purple-500/25 object-contain"
+              className="h-14 w-auto object-contain"
             />
           </div>
           <h1 className="text-2xl font-extrabold tracking-tight text-foreground">
@@ -91,7 +91,7 @@ function ResetPasswordForm() {
           </p>
         </div>
 
-        <Card className="border-border shadow-xl shadow-purple-900/5 bg-white/90">
+        <Card className="border-border shadow-xl shadow-emerald-900/5 bg-white/90">
           <CardContent className="pt-6">
             {success ? (
               <div className="space-y-4 text-center py-4">

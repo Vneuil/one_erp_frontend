@@ -249,7 +249,7 @@ export default function TimesheetPage() {
       {isLoading && <div className="py-6 text-center text-xs text-muted-foreground">Memuat data...</div>}
 
       {/* Live Timer Interactive Box */}
-      <div className="bg-gradient-to-r from-brand-tint via-purple-50 to-white rounded-2xl border border-brand-indigo/30 p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+      <div className="bg-gradient-to-r from-brand-tint via-emerald-50 to-white rounded-2xl border border-brand-indigo/30 p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-5">
         <div className="space-y-2 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-brand-dark flex items-center gap-1.5">

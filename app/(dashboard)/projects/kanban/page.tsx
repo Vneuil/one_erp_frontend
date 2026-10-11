@@ -318,7 +318,7 @@ export default function KanbanBoardPage() {
                         type="checkbox"
                         checked={chk.done}
                         onChange={() => {}}
-                        className="h-3.5 w-3.5 accent-[#9A20D6] rounded"
+                        className="h-3.5 w-3.5 accent-[#50B747] rounded"
                       />
                       <span className={chk.done ? "line-through text-muted-foreground" : "text-foreground font-medium"}>
                         {chk.text}

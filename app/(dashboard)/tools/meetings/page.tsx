@@ -253,8 +253,8 @@ export default function MeetingsPage() {
                 </div>
               </div>
 
-              {/* ONE AI Meeting Summary Section */}
-              <div className="p-4 rounded-xl bg-gradient-to-br from-brand-tint/50 via-purple-50/40 to-white border border-brand-indigo/30 space-y-3">
+              {/* Manna AI Meeting Summary Section */}
+              <div className="p-4 rounded-xl bg-gradient-to-br from-brand-tint/50 via-emerald-50/40 to-white border border-brand-indigo/30 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <Sparkles className="h-4 w-4 text-brand-primary" />

@@ -93,15 +93,15 @@ export default function LandingPage() {
           <Link href="/" className="flex items-center gap-2 sm:gap-3 group min-w-0 shrink-0">
             <Image
               src="/logo.png"
-              alt="ONE ERP Logo"
-              width={42}
-              height={42}
+              alt="manna ERP Logo"
+              width={100}
+              height={40}
               priority
-              className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl shadow-md shadow-purple-500/20 object-contain group-hover:scale-105 transition-transform shrink-0"
+              className="h-8 sm:h-9 w-auto object-contain group-hover:scale-105 transition-transform shrink-0"
             />
             <div className="flex flex-col min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-black text-lg sm:text-xl tracking-tight text-foreground">ONE</span>
+                <span className="font-black text-lg sm:text-xl tracking-tight text-foreground">manna</span>
                 <span className="hidden sm:inline-block text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-brand-tint text-brand-indigo border border-brand-indigo/20">
                   {t.landing.superAppTag}
                 </span>
@@ -134,7 +134,7 @@ export default function LandingPage() {
           {/* Right Action Buttons */}
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             <LanguageSwitcher variant="pill" />
-            <Button asChild variant="gradient" size="sm" className="h-9 sm:h-10 px-2.5 sm:px-4 gap-1.5 sm:gap-2 text-[11px] sm:text-xs font-bold shadow-md shadow-purple-500/20 shrink-0">
+            <Button asChild variant="gradient" size="sm" className="h-9 sm:h-10 px-2.5 sm:px-4 gap-1.5 sm:gap-2 text-[11px] sm:text-xs font-bold shadow-md shadow-emerald-500/20 shrink-0">
               <Link href="/login">
                 <span className="whitespace-nowrap">{t.landing.signIn}</span>
                 <ArrowRight className="h-3.5 w-3.5 shrink-0" />
@@ -152,7 +152,7 @@ export default function LandingPage() {
           style={{ backgroundImage: "url('/hero-bg.svg')" }}
         />
         {/* Subtle background gradient glow */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[850px] h-[480px] bg-gradient-to-b from-brand-tint/60 via-purple-50/40 to-transparent blur-3xl -z-10 pointer-events-none" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[850px] h-[480px] bg-gradient-to-b from-brand-tint/60 via-emerald-50/40 to-transparent blur-3xl -z-10 pointer-events-none" />
 
         <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 text-center space-y-7">
           {/* Main Hero Headline (3 Distinct Lines) */}
@@ -175,7 +175,7 @@ export default function LandingPage() {
 
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-            <Button asChild variant="gradient" size="lg" className="h-12 px-7 text-sm font-bold shadow-lg shadow-purple-500/25">
+            <Button asChild variant="gradient" size="lg" className="h-12 px-7 text-sm font-bold shadow-lg shadow-emerald-500/25">
               <Link href="/login" className="gap-2">
                 <span>{t.landing.ctaPrimary}</span>
                 <ArrowRight className="h-4 w-4" />
@@ -204,7 +204,7 @@ export default function LandingPage() {
 
           {/* Interactive Live ERP System Preview Mockup */}
           <div className="pt-8 max-w-5xl mx-auto">
-            <div className="rounded-2xl border border-border/90 bg-white p-2 sm:p-3 shadow-2xl shadow-purple-900/10 text-left">
+            <div className="rounded-2xl border border-border/90 bg-white p-2 sm:p-3 shadow-2xl shadow-emerald-900/10 text-left">
               {/* Mockup Top Window Bar */}
               <div className="rounded-xl border border-border bg-slate-50 p-3 sm:p-4 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border">
@@ -388,7 +388,7 @@ export default function LandingPage() {
                     </div>
 
                     <div className="space-y-2 pt-1 text-xs">
-                      <div className="p-3 rounded-lg bg-purple-50/60 border border-purple-200/70 flex items-start gap-3">
+                      <div className="p-3 rounded-lg bg-emerald-50/60 border border-emerald-200/70 flex items-start gap-3">
                         <CheckCircle2 className="h-4 w-4 text-brand-primary shrink-0 mt-0.5" />
                         <div>
                           <span className="font-bold text-brand-dark">Pencocokan Faktur 3-Arah Berhasil</span>
@@ -464,7 +464,7 @@ export default function LandingPage() {
 
           <Card className="border-border hover:border-brand-primary/40 transition-all shadow-xs">
             <CardContent className="p-6 space-y-3">
-              <div className="h-10 w-10 rounded-xl bg-purple-50 text-brand-primary flex items-center justify-center font-bold text-sm">
+              <div className="h-10 w-10 rounded-xl bg-emerald-50 text-brand-primary flex items-center justify-center font-bold text-sm">
                 2
               </div>
               <h3 className="text-base font-bold text-foreground">{t.landing.step2Title}</h3>
@@ -544,7 +544,7 @@ export default function LandingPage() {
           </div>
 
           <div className="text-center">
-            <Button asChild variant="gradient" size="lg" className="h-12 px-8 text-sm font-bold shadow-lg shadow-purple-500/25">
+            <Button asChild variant="gradient" size="lg" className="h-12 px-8 text-sm font-bold shadow-lg shadow-emerald-500/25">
               <Link href="/pricing" className="gap-2">
                 <span>{t.landing.navPricing}</span>
                 <ArrowRight className="h-4 w-4" />
@@ -560,7 +560,7 @@ export default function LandingPage() {
             <>
               <div className="p-6 sm:p-8 border-b border-border bg-gradient-to-br from-brand-tint/70 to-white">
                 <DialogHeader>
-                  <div className="h-11 w-11 rounded-xl bg-brand-primary text-white flex items-center justify-center mb-3 shadow-md shadow-purple-500/20">
+                  <div className="h-11 w-11 rounded-xl bg-brand-primary text-white flex items-center justify-center mb-3 shadow-md shadow-emerald-500/20">
                     <selectedModule.icon className="h-5 w-5" />
                   </div>
                   <DialogTitle className="text-2xl font-extrabold tracking-tight">
@@ -609,15 +609,15 @@ export default function LandingPage() {
 
       {/* Bottom CTA Banner */}
       <section className="py-16 max-w-6xl mx-auto px-4 sm:px-6">
-        <div className="rounded-3xl bg-gradient-to-br from-brand-dark via-[#421670] to-brand-indigo p-8 sm:p-12 text-white flex flex-col md:flex-row items-center justify-between gap-8 shadow-xl">
+        <div className="rounded-3xl bg-gradient-to-br from-brand-dark via-[#1e4e1a] to-brand-indigo p-8 sm:p-12 text-white flex flex-col md:flex-row items-center justify-between gap-8 shadow-xl">
           <div className="space-y-3 max-w-xl text-center md:text-left">
             <span className="text-[11px] uppercase font-bold tracking-widest bg-white/20 px-2.5 py-1 rounded-full text-white">
-              ONE ERP Console
+              manna ERP Console
             </span>
             <h3 className="text-2xl sm:text-4xl font-extrabold tracking-tight">
               {t.landing.bannerTitle}
             </h3>
-            <p className="text-sm text-purple-200">
+            <p className="text-sm text-emerald-200">
               {t.landing.bannerDesc}
             </p>
           </div>
