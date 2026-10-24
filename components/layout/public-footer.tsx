@@ -1,5 +1,4 @@
 import Image from "next/image";
-import Link from "next/link";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
 
 export function PublicFooter() {
@@ -18,12 +17,6 @@ export function PublicFooter() {
             <span className="font-bold text-foreground text-sm">manna ERP</span>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/pricing" className="hover:text-brand-primary transition-colors font-semibold">
-              Harga
-            </Link>
-            <Link href="/faq" className="hover:text-brand-primary transition-colors font-semibold">
-              FAQ
-            </Link>
             <LanguageSwitcher variant="pill" />
           </div>
         </div>

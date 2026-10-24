@@ -13,7 +13,6 @@ import {
   EyeOff,
   Loader2,
   ShieldCheck,
-  ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,15 +78,9 @@ export default function LoginPage() {
     <div className="min-h-screen bg-slate-50/60 flex flex-col justify-between p-4 sm:p-6 lg:p-8 text-foreground selection:bg-brand-tint selection:text-brand-indigo font-sans">
       {/* Top Header Bar */}
       <div className="max-w-5xl w-full mx-auto flex items-center justify-between">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors group"
-        >
-          <ArrowLeft className="h-3.5 w-3.5 group-hover:-translate-x-0.5 transition-transform" />
-          <span>{t.auth.backToHome}</span>
-        </Link>
+        <span />
 
-        <LanguageSwitcher variant="pill" />
+<LanguageSwitcher variant="pill" />
       </div>
 
       {/* Center: Main Form Card */}
@@ -95,7 +88,7 @@ export default function LoginPage() {
         <div className="bg-white rounded-2xl border border-border p-6 sm:p-8 shadow-xl shadow-emerald-900/5 space-y-6">
           {/* Brand header */}
           <div className="text-center space-y-3">
-            <Link href="/" className="inline-flex items-center justify-center group">
+            <div className="inline-flex items-center justify-center group">
               <Image
                 src="/logo.png"
                 alt="manna Logo"
@@ -104,7 +97,7 @@ export default function LoginPage() {
                 priority
                 className="h-12 w-auto object-contain group-hover:scale-105 transition-transform"
               />
-            </Link>
+            </div>
 
             <div className="space-y-1">
               <h1 className="text-2xl font-black tracking-tight text-foreground">
@@ -225,11 +218,6 @@ export default function LoginPage() {
           <span>{t.auth.securityNotice}</span>
         </p>
         <p>© 2026 PT Digital Ventura Integrasi</p>
-        <p>
-          <Link href="/faq" className="hover:text-brand-primary transition-colors font-semibold">
-            FAQ
-          </Link>
-        </p>
       </div>
     </div>
   );
