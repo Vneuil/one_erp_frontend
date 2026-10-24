@@ -22,7 +22,7 @@ export default function CheckoutFailedPage() {
               lagi kapan saja.
             </p>
             <Button asChild variant="gradient" size="lg" className="w-full h-11 font-bold">
-              <Link href="/pricing">Kembali ke Paket Harga</Link>
+              <Link href="/login">Kembali ke Login</Link>
             </Button>
           </CardContent>
         </Card>

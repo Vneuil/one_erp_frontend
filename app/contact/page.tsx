@@ -88,11 +88,11 @@ export default function ContactPage() {
       {/* Back link */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6">
         <Link
-          href="/pricing"
+          href="/login"
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors group"
         >
           <ArrowLeft className="h-3.5 w-3.5 group-hover:-translate-x-0.5 transition-transform" />
-          <span>Kembali ke Paket Harga</span>
+          <span>Kembali ke Login</span>
         </Link>
       </div>
 
