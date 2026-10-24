@@ -132,7 +132,6 @@ const extraTitles: Record<string, string> = {
   "API & Webhooks": "API & Webhook",
   "Cash & Bank Vouchers": "Voucher Kas & Bank",
   "Fingerprint Machines": "Mesin Fingerprint",
-  "Temporary Cash Advances": "Kas Bon Sementara (KBS)",
   "Kas Bon Sementara (KBS)": "Kas Bon Sementara (KBS)",
   "General Ledger": "Buku Besar",
   "Daily Cash & Bank Report": "Laporan Kas/Bank Harian",

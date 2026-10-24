@@ -265,6 +265,7 @@ export const navigationConfig: NavGroup[] = [
           { title: "Chart of Accounts", href: "/finance/accounts" },
           { title: "Journal Entries", href: "/finance/journal-entries" },
           { title: "Cash & Bank Vouchers", href: "/finance/cash-vouchers" },
+          { title: "Kas Bon Sementara (KBS)", href: "/finance/cash-advances" },
           { title: "General Ledger", href: "/finance/general-ledger" },
           { title: "Daily Cash & Bank Report", href: "/finance/cash-book" },
           { title: "Receivables (AR)", href: "/finance/receivables" },

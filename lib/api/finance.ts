@@ -303,47 +303,6 @@ export interface CreateCashVoucherInput {
   lines: CashVoucherLineInput[];
 }
 
-// Kas Bon Sementara (KBS)
-
-export interface TempAdvanceLine { id: string; accountCode: string; description: string; amount: number }
-export interface TempAdvanceItem {
-  id: string;
-  number: string;
-  date: string;
-  dueDate?: string;
-  recipientName: string;
-  purpose: string;
-  amount: number;
-  cashAccountCode: string;
-  status: "open" | "settled" | "cancelled";
-  posted: boolean;
-  settledDate?: string;
-  spentTotal: number;
-  returnedAmount: number;
-  extraPaid: number;
-  settlementPosted: boolean;
-  lines?: TempAdvanceLine[];
-}
-export interface IssueTempAdvanceInput {
-  date?: string;
-  dueDate?: string;
-  recipientName: string;
-  purpose?: string;
-  amount: number;
-  cashAccountCode?: string;
-}
-export interface OutstandingTempAdvanceRow {
-  id: string;
-  number: string;
-  date: string;
-  dueDate?: string;
-  recipientName: string;
-  purpose: string;
-  amount: number;
-  ageDays: number;
-  overdue: boolean;
-}
-export interface OutstandingTempAdvances { asOf: string; rows: OutstandingTempAdvanceRow[]; total: number; overdueTotal: number }
 // Cash Advances (KBS)
 
 export interface CashAdvancePlanLine {
@@ -666,17 +625,6 @@ export const financeApi = {
   ): Promise<ApiResponse<OtherIncomeItem>> =>
     apiClient<OtherIncomeItem>("/finance/other-income", { method: "POST", body: JSON.stringify(data) }),
 
-  // Kas Bon Sementara (KBS)
-  listTempAdvances: async (params?: { status?: string; from?: string; to?: string }): Promise<ApiResponse<TempAdvanceItem[]>> =>
-    apiClient<TempAdvanceItem[]>("/finance/temp-advances", { params }),
-  issueTempAdvance: async (data: IssueTempAdvanceInput): Promise<ApiResponse<TempAdvanceItem>> =>
-    apiClient<TempAdvanceItem>("/finance/temp-advances", { method: "POST", body: JSON.stringify(data) }),
-  settleTempAdvance: async (id: string, data: { date?: string; lines: CashVoucherLineInput[] }): Promise<ApiResponse<TempAdvanceItem>> =>
-    apiClient<TempAdvanceItem>(`/finance/temp-advances/${id}/settle`, { method: "POST", body: JSON.stringify(data) }),
-  cancelTempAdvance: async (id: string): Promise<ApiResponse<TempAdvanceItem>> =>
-    apiClient<TempAdvanceItem>(`/finance/temp-advances/${id}/cancel`, { method: "POST" }),
-  outstandingTempAdvances: async (asOf?: string): Promise<ApiResponse<OutstandingTempAdvances>> =>
-    apiClient<OutstandingTempAdvances>("/finance/temp-advances/outstanding", { params: { asOf } }),
 
   // Cash / bank vouchers
   listCashVouchers: async (params?: { type?: string; from?: string; to?: string }): Promise<ApiResponse<CashVoucherItem[]>> =>
