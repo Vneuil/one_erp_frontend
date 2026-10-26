@@ -97,19 +97,18 @@ export default function AssetsPage() {
       <PageHeader
         title="Daftar Aktiva Tetap"
         description="Kelola aset tetap, nilai buku, dan inventaris aktiva perusahaan"
-        actions={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleRecalculateAll} disabled={loading}>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Hitung Depresiasi
-            </Button>
-            <Button variant="gradient" size="sm" onClick={() => setIsCreateOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Tambah Aktiva
-            </Button>
-          </div>
-        }
-      />
+      >
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleRecalculateAll} disabled={loading}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Hitung Depresiasi
+          </Button>
+          <Button variant="gradient" size="sm" onClick={() => setIsCreateOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Tambah Aktiva
+          </Button>
+        </div>
+      </PageHeader>
 
       {error && (
         <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-600 flex items-center gap-2">

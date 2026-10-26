@@ -131,15 +131,14 @@ export default function AssetPurchasePage() {
       <PageHeader
         title="Pembelian & Penjualan Aktiva"
         description="Pencatatan perolehan aset baru dan pelepasan atau penjualan aktiva tetap"
-        actions={
-          <div className="flex items-center gap-2">
-            <Button variant="gradient" size="sm" onClick={() => setIsBuyOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Beli / Catat Aktiva Baru
-            </Button>
-          </div>
-        }
-      />
+      >
+        <div className="flex items-center gap-2">
+          <Button variant="gradient" size="sm" onClick={() => setIsBuyOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Beli / Catat Aktiva Baru
+          </Button>
+        </div>
+      </PageHeader>
 
       {error && (
         <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-600 flex items-center gap-2">
