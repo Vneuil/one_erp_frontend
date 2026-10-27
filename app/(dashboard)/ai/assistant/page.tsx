@@ -119,6 +119,8 @@ export default function AiAssistantPage() {
   }, []);
 
   const llmReady = !!aiSettings?.hasApiKey;
+
+  const llmGreeting = `Halo ${currentUser.name || ""}! Tanyakan apa saja tentang **stok**, **penjualan**, **piutang**, **hutang**, atau **pembelian**. Saya mengambil datanya langsung dari ERP.`;
   const llmName = aiSettings?.providers.find((p) => p.id === aiSettings.provider)?.name;
 
   const handleSend = async (textToSend?: string) => {
@@ -133,17 +135,16 @@ export default function AiAssistantPage() {
 
     let reply: { content: string; actions?: typeof QUICK_ACTIONS };
     try {
-      const erp = await answerFromErp(query);
       if (llmReady) {
-        // Real ERP figures go to the LLM as context; it must not invent numbers.
+        // The model calls the ERP report tools itself (same tools as the MCP server).
         const history = [
           ...messages.filter((m) => m.id !== "ai-1").map((m) => ({ role: m.role, content: m.content })),
           { role: "user" as const, content: query },
         ];
-        const res = await aiApi.chat(history, erp.actions ? "" : erp.content);
+        const res = await aiApi.chat(history, "");
         reply = { content: res.data?.reply ?? "Tidak ada jawaban dari model AI." };
       } else {
-        reply = erp;
+        reply = await answerFromErp(query);
       }
     } catch (err) {
       reply = { content: `Data tidak bisa diambil saat ini: ${err instanceof Error ? err.message : "kesalahan server"}.` };
@@ -171,7 +172,7 @@ export default function AiAssistantPage() {
               </span>
             </h1>
             <p className="text-[11px] text-muted-foreground">
-              {llmReady ? `Didukung ${llmName} (${aiSettings?.model}) dengan data ERP nyata.` : "Ringkasan stok, penjualan, dan piutang dari data ERP. Admin dapat mengaktifkan model AI di Pengaturan > Setting AI."}
+              {llmReady ? `Didukung ${llmName} (${aiSettings?.model}); data diambil langsung lewat tool laporan ERP.` : "Ringkasan stok, penjualan, dan piutang dari data ERP. Admin dapat mengaktifkan model AI di Pengaturan > Setting AI."}
             </p>
           </div>
         </div>
@@ -207,7 +208,7 @@ export default function AiAssistantPage() {
                     : "bg-slate-50 border border-border text-foreground rounded-tl-xs"
                 }`}
               >
-                <ChatText text={msg.content} />
+                <ChatText text={msg.id === "ai-1" && llmReady ? llmGreeting : msg.content} />
               </div>
 
               {msg.quickActions && msg.quickActions.length > 0 && (
@@ -216,7 +217,7 @@ export default function AiAssistantPage() {
                     <button
                       key={i}
                       type="button"
-                      onClick={() => handleSend(qa.action)}
+                      onClick={() => handleSend(qa.label)}
                       className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white border border-brand-indigo/30 text-brand-indigo hover:bg-brand-tint transition-all cursor-pointer shadow-2xs"
                     >
                       {qa.label}
