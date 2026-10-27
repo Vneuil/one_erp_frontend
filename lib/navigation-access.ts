@@ -15,7 +15,7 @@ const routeModules: Record<string, string[]> = {
   "/settings/approval-workflows": ["approval"], "/settings/currencies": ["currencies"],
   "/settings/integration": ["integration"], "/approvals": ["approval"],
 };
-const exempt = ["/dashboard", "/profile", "/billing/subscription", "/settings/roles", "/settings/permissions", "/settings/tenants", "/settings/company", "/ai/assistant"];
+const exempt = ["/dashboard", "/profile", "/billing/subscription", "/settings/roles", "/settings/permissions", "/settings/tenants", "/settings/company", "/ai/assistant", "/settings/ai"];
 export function canViewRoute(href: string, permissions: PermissionItem[] | null): boolean {
   if (permissions === null || exempt.includes(href)) return true;
   const modules = routeModules[href] ?? [href.split("/")[1]];

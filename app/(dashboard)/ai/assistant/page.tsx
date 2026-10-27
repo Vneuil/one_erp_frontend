@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { reportsApi } from "@/lib/api/reports";
 import { financeApi } from "@/lib/api/finance";
+import { aiApi, AiSettings } from "@/lib/api/ai";
 import { useAppStore } from "@/stores/app-store";
 
 interface AiChatMessage {
@@ -110,6 +111,14 @@ export default function AiAssistantPage() {
   const [inputQuery, setInputQuery] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
   const [msgCounter, setMsgCounter] = React.useState(10);
+  const [aiSettings, setAiSettings] = React.useState<AiSettings | null>(null);
+
+  React.useEffect(() => {
+    aiApi.getSettings().then((res) => setAiSettings(res.data ?? null)).catch(() => setAiSettings(null));
+  }, []);
+
+  const llmReady = !!aiSettings?.hasApiKey;
+  const llmName = aiSettings?.providers.find((p) => p.id === aiSettings.provider)?.name;
 
   const handleSend = async (textToSend?: string) => {
     const query = textToSend || inputQuery;
@@ -123,7 +132,18 @@ export default function AiAssistantPage() {
 
     let reply: { content: string; actions?: typeof QUICK_ACTIONS };
     try {
-      reply = await answerFromErp(query);
+      const erp = await answerFromErp(query);
+      if (llmReady) {
+        // Real ERP figures go to the LLM as context; it must not invent numbers.
+        const history = [
+          ...messages.filter((m) => m.id !== "ai-1").map((m) => ({ role: m.role, content: m.content })),
+          { role: "user" as const, content: query },
+        ];
+        const res = await aiApi.chat(history, erp.actions ? "" : erp.content);
+        reply = { content: res.data?.reply ?? "Tidak ada jawaban dari model AI." };
+      } else {
+        reply = erp;
+      }
     } catch (err) {
       reply = { content: `Data tidak bisa diambil saat ini: ${err instanceof Error ? err.message : "kesalahan server"}.` };
     }
@@ -150,7 +170,7 @@ export default function AiAssistantPage() {
               </span>
             </h1>
             <p className="text-[11px] text-muted-foreground">
-              Ringkasan stok, penjualan, dan piutang langsung dari data ERP. Belum berbasis model AI.
+              {llmReady ? `Didukung ${llmName} (${aiSettings?.model}) dengan data ERP nyata.` : "Ringkasan stok, penjualan, dan piutang dari data ERP. Admin dapat mengaktifkan model AI di Pengaturan > Setting AI."}
             </p>
           </div>
         </div>

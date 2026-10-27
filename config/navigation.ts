@@ -9,6 +9,7 @@ import {
   Settings,
   UserCheck,
   Building2,
+  Sparkles,
   LucideIcon,
 } from "lucide-react";
 
@@ -42,6 +43,11 @@ export const navigationConfig: NavGroup[] = [
         title: "Dashboard",
         href: "/dashboard",
         icon: LayoutDashboard,
+      },
+      {
+        title: "AI Assistant",
+        href: "/ai/assistant",
+        icon: Sparkles,
       },
     ],
   },
@@ -192,6 +198,7 @@ export const navigationConfig: NavGroup[] = [
           { title: "Permissions", href: "/settings/permissions" },
           { title: "Log Aktivitas", href: "/settings/activity-log" },
           { title: "System Logs", href: "/settings/system-logs" },
+          { title: "Setting AI", href: "/settings/ai" },
         ],
       },
     ],
