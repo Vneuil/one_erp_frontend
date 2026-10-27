@@ -6,13 +6,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
-import { aiApi, AiSettings, McpToken } from "@/lib/api/ai";
+import { aiApi, AiProviderInfo, AiSettings, McpToken } from "@/lib/api/ai";
 import { API_BASE_URL } from "@/lib/api/client";
+
+// Used until (or if) the server list loads, so the dropdown is never empty.
+const FALLBACK_PROVIDERS: AiProviderInfo[] = [
+  { id: "openai", name: "OpenAI (ChatGPT)", defaultModel: "gpt-6-luna" },
+  { id: "gemini", name: "Google Gemini", defaultModel: "gemini-3.8-flash" },
+  { id: "deepseek", name: "DeepSeek", defaultModel: "deepseek-flash" },
+  { id: "claude", name: "Anthropic Claude", defaultModel: "claude-sonnet-5-5" },
+];
 
 export default function AiSettingsPage() {
   const [settings, setSettings] = React.useState<AiSettings | null>(null);
-  const [provider, setProvider] = React.useState("");
-  const [model, setModel] = React.useState("");
+  const [provider, setProvider] = React.useState(FALLBACK_PROVIDERS[0].id);
+  const [model, setModel] = React.useState(FALLBACK_PROVIDERS[0].defaultModel);
   const [apiKey, setApiKey] = React.useState("");
   const [isSaving, setIsSaving] = React.useState(false);
   const [tokens, setTokens] = React.useState<McpToken[]>([]);
@@ -73,11 +81,12 @@ export default function AiSettingsPage() {
 
   const copy = (text: string) => navigator.clipboard?.writeText(text);
 
-  const selected = settings?.providers.find((p) => p.id === provider);
+  const providers = settings?.providers?.length ? settings.providers : FALLBACK_PROVIDERS;
+  const selected = providers.find((p) => p.id === provider);
 
   const handleProviderChange = (id: string) => {
     setProvider(id);
-    setModel(settings?.providers.find((p) => p.id === id)?.defaultModel ?? "");
+    setModel(providers.find((p) => p.id === id)?.defaultModel ?? "");
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -109,7 +118,7 @@ export default function AiSettingsPage() {
                 onChange={(e) => handleProviderChange(e.target.value)}
                 className="h-10 w-full rounded-md border border-border bg-white px-3 text-xs"
               >
-                {settings?.providers.map((p) => (
+                {providers.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
