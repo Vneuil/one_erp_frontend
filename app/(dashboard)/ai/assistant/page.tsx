@@ -20,6 +20,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { reportsApi } from "@/lib/api/reports";
 import { financeApi } from "@/lib/api/finance";
 import { aiApi, AiSettings } from "@/lib/api/ai";
+import { ChatText } from "@/components/shared/chat-text";
 import { useAppStore } from "@/stores/app-store";
 
 interface AiChatMessage {
@@ -200,13 +201,13 @@ export default function AiAssistantPage() {
 
             <div className={`space-y-2 max-w-xl text-left ${msg.role === "user" ? "items-end" : "items-start"}`}>
               <div
-                className={`p-4 rounded-2xl leading-relaxed whitespace-pre-line ${
+                className={`p-4 rounded-2xl leading-relaxed ${
                   msg.role === "user"
                     ? "bg-brand-primary text-white rounded-tr-xs shadow-xs"
                     : "bg-slate-50 border border-border text-foreground rounded-tl-xs"
                 }`}
               >
-                {msg.content}
+                <ChatText text={msg.content} />
               </div>
 
               {msg.quickActions && msg.quickActions.length > 0 && (
