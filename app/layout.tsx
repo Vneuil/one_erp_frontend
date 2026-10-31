@@ -10,12 +10,8 @@ export const metadata: Metadata = {
   title: "manna ERP — Food For Life & Business Enterprise System",
   description: "manna ERP — Modern, Modular, Omnichannel Enterprise Operating System",
   icons: {
-    icon: [
-      { url: "/icon.png", type: "image/png" },
-      { url: "/logo.png", type: "image/png" },
-    ],
-    shortcut: "/icon.png",
-    apple: "/apple-icon.png",
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
   },
 };
 
