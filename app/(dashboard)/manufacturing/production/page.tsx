@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { CheckCircle2, Pause, Play, Factory } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, Pause, Play, Factory, ShieldAlert, SlidersHorizontal, GitFork, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -12,10 +13,13 @@ import { manufacturingApi, ProductionOrderItem, ProductionStepLogItem } from "@/
 
 type Notice = { kind: "success" | "error"; text: string } | null;
 
-/** Units of this order that have passed every step and can be completed now. */
+/** Units of this order that have passed every active (non-skipped) step and can be completed now. */
 function completable(o: ProductionOrderItem): number {
   if (!o.steps?.length) return o.remainingQuantity;
-  return Math.max(0, Math.min(o.steps[o.steps.length - 1].quantityDone - o.quantityCompleted, o.remainingQuantity));
+  const activeSteps = o.steps.filter((s) => !s.isSkipped && s.status !== "skipped");
+  if (!activeSteps.length) return o.remainingQuantity;
+  const lastActive = activeSteps[activeSteps.length - 1];
+  return Math.max(0, Math.min(lastActive.quantityDone - o.quantityCompleted, o.remainingQuantity));
 }
 
 export default function ProductionRunPage() {
@@ -90,6 +94,30 @@ export default function ProductionRunPage() {
     return raw === undefined || raw === "" ? fallback : Math.floor(Number(raw));
   };
 
+  const handleEvaluateMoisture = async (order: ProductionOrderItem) => {
+    const input = window.prompt(
+      `Evaluasi Routing Kondisional (BRL-01 CV Manna):\n` +
+      `Order: ${order.orderNumber}\n\n` +
+      `Aturan BRL-01:\n` +
+      `- Kadar Air <= 2.0% -> Melewati Ayak 1, Oven, Pendinginan (Langsung Ayak 2)\n` +
+      `- Kadar Air > 2.0%  -> Rute Standar Lengkap (Wajib Ayak 1, Oven, Pendinginan)\n\n` +
+      `Masukkan hasil uji Kadar Air (%):`,
+      "1.8"
+    );
+    if (input === null) return;
+    const val = parseFloat(input);
+    if (isNaN(val) || val < 0) {
+      setNotice({ kind: "error", text: "Nilai kadar air tidak valid. Masukkan angka positif (contoh: 1.8)." });
+      return;
+    }
+    await run(
+      `${order.id}:evaluate`,
+      () => manufacturingApi.evaluateConditions(order.id, "moisture_content", val),
+      `Evaluasi kondisi berhasil! Kadar air: ${val}%. Routing proses telah diperbarui.`,
+      order
+    );
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader title="Live Production Floor Execution" description="Catat output tiap proses, selesaikan unit yang sudah melewati seluruh rute, dan jeda atau lanjutkan order." />
@@ -120,7 +148,34 @@ export default function ProductionRunPage() {
                   </div>
                   <StatusBadge status={paused ? "paused" : "processing"} />
                 </div>
-                <CardDescription className="font-mono text-xs text-brand-indigo font-bold pt-1">{o.orderNumber} · {o.warehouseName}</CardDescription>
+                <div className="flex items-center justify-between pt-1">
+                  <CardDescription className="font-mono text-xs text-brand-indigo font-bold">{o.orderNumber} · {o.warehouseName}</CardDescription>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[10px] px-2 gap-1 text-brand-primary border-brand-primary/30 hover:bg-brand-primary/5"
+                      onClick={() => handleEvaluateMoisture(o)}
+                      title="Evaluasi rute otomatis berdasarkan hasil uji kadar air (BRL-01)"
+                    >
+                      <SlidersHorizontal className="h-3 w-3" /> Uji Kadar Air
+                    </Button>
+                    <Link
+                      href="/qc/inspections"
+                      className="text-[10px] font-semibold text-muted-foreground hover:text-brand-primary flex items-center gap-0.5 border border-border px-1.5 py-0.5 rounded"
+                      title="Buka form input inspeksi QC"
+                    >
+                      <ShieldAlert className="h-3 w-3 text-amber-600" /> QC
+                    </Link>
+                    <Link
+                      href={`/manufacturing/traceability?batch=${encodeURIComponent(o.orderNumber)}`}
+                      className="text-[10px] font-semibold text-muted-foreground hover:text-brand-indigo flex items-center gap-0.5 border border-border px-1.5 py-0.5 rounded"
+                      title="Lihat ketertelusuran batch ini"
+                    >
+                      <GitFork className="h-3 w-3 text-brand-indigo" /> Silsilah
+                    </Link>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-1.5">
@@ -135,23 +190,77 @@ export default function ProductionRunPage() {
 
                 {o.steps?.length > 0 && (
                   <div className="space-y-1.5">
-                    <div className="text-xs font-bold">Proses</div>
+                    <div className="text-xs font-bold">Proses & Gerbang Mutu (QC Gate)</div>
                     {o.steps.map((s) => {
                       const key = `${o.id}:${s.id}`;
+                      const isSkipped = s.isSkipped || s.status === "skipped";
                       const pct = o.quantityToProduce > 0 ? Math.round((s.quantityDone / o.quantityToProduce) * 100) : 0;
                       return (
-                        <div key={s.id} className="grid grid-cols-12 gap-2 items-center text-xs">
-                          <span className="col-span-1 text-muted-foreground">{s.sequence}</span>
-                          <div className="col-span-5">
-                            <div className="font-semibold">{s.name}</div>
-                            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden"><div className="h-full bg-brand-primary/70" style={{ width: `${pct}%` }} /></div>
+                        <div
+                          key={s.id}
+                          className={`grid grid-cols-12 gap-2 items-center text-xs p-1.5 rounded-lg border transition-colors ${
+                            isSkipped
+                              ? "bg-amber-50/40 border-amber-200/50 opacity-80"
+                              : "bg-card border-border/60 hover:border-brand-primary/30"
+                          }`}
+                        >
+                          <span className="col-span-1 text-muted-foreground font-mono text-[11px]">{s.sequence}</span>
+                          <div className="col-span-5 space-y-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={`font-semibold ${isSkipped ? "line-through text-muted-foreground" : ""}`}>{s.name}</span>
+                              {isSkipped && (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-amber-100 text-amber-800" title={s.skipReason || "Dilewati otomatis"}>
+                                  Dilewati (Kadar Air &le; 2%)
+                                </span>
+                              )}
+                              {s.requiresQcPass && (
+                                s.qcPassed ? (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-semibold bg-emerald-100 text-emerald-800">
+                                    <CheckCircle2 className="h-2.5 w-2.5" /> Lulus QC
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-semibold bg-rose-100 text-rose-800 animate-pulse" title="Tahap ini wajib lulus QC sebelum penyelesaian batch">
+                                    <ShieldAlert className="h-2.5 w-2.5" /> Wajib QC Gate
+                                  </span>
+                                )
+                              )}
+                            </div>
+                            {!isSkipped && (
+                              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                                <div className="h-full bg-brand-primary/70 transition-all" style={{ width: `${pct}%` }} />
+                              </div>
+                            )}
                           </div>
-                          <span className="col-span-2 text-right tabular-nums">{s.quantityDone}/{o.quantityToProduce}</span>
-                          <Input type="number" min={1} max={s.waitingQuantity} value={drafts[key] ?? ""} placeholder={String(s.waitingQuantity)} disabled={paused || s.waitingQuantity === 0} onChange={(e) => setDrafts((d) => ({ ...d, [key]: e.target.value }))} className="col-span-2 h-8 text-xs" aria-label={`Output ${s.name}`} />
-                          <Button size="sm" variant="outline" className="col-span-2 h-8 px-1 text-[11px]" disabled={paused || s.waitingQuantity === 0 || busyId !== null}
-                            onClick={() => run(key, () => manufacturingApi.logStep(o.id, s.id, { quantity: qtyOf(key, s.waitingQuantity) }), `Output ${s.name} dicatat.`, o)}>
-                            <Play className="h-3 w-3" /> Catat
-                          </Button>
+
+                          {isSkipped ? (
+                            <div className="col-span-6 text-right">
+                              <span className="text-[11px] text-amber-700 italic font-medium">Bypass rute (BRL-01)</span>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="col-span-2 text-right tabular-nums font-mono">{s.quantityDone}/{o.quantityToProduce}</span>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={s.waitingQuantity}
+                                value={drafts[key] ?? ""}
+                                placeholder={String(s.waitingQuantity)}
+                                disabled={paused || s.waitingQuantity === 0}
+                                onChange={(e) => setDrafts((d) => ({ ...d, [key]: e.target.value }))}
+                                className="col-span-2 h-8 text-xs font-mono"
+                                aria-label={`Output ${s.name}`}
+                              />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="col-span-2 h-8 px-1 text-[11px]"
+                                disabled={paused || s.waitingQuantity === 0 || busyId !== null}
+                                onClick={() => run(key, () => manufacturingApi.logStep(o.id, s.id, { quantity: qtyOf(key, s.waitingQuantity) }), `Output ${s.name} dicatat.`, o)}
+                              >
+                                <Play className="h-3 w-3 mr-0.5" /> Catat
+                              </Button>
+                            </>
+                          )}
                         </div>
                       );
                     })}

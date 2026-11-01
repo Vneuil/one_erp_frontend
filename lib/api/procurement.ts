@@ -80,11 +80,18 @@ export interface CreatePurchaseOrderInput {
 export interface GoodsReceiptLineInput {
   productId: string;
   quantityReceived: number;
+  weightGross?: number;
+  weightTare?: number;
+  weightNet?: number;
 }
 
 export interface GoodsReceiptLineItem extends GoodsReceiptLineInput {
   id: string;
   quantityOrderedReference: number;
+  weightGross?: number;
+  weightTare?: number;
+  weightNet?: number;
+  weightDiffPo?: number;
 }
 
 export interface GoodsReceiptItem {

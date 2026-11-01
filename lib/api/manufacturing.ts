@@ -15,6 +15,13 @@ export interface BOMProcessInput {
   laborRatePerHour?: number;
   overheadRatePerHour?: number;
   notes?: string;
+  isConditional?: boolean;
+  conditionField?: string;
+  conditionOperator?: string;
+  conditionValue?: number;
+  actionOnCondition?: string;
+  requiresQcPass?: boolean;
+  qcProcessCode?: string;
 }
 
 export interface BOMProcessItem {
@@ -25,6 +32,13 @@ export interface BOMProcessItem {
   laborRatePerHour?: number;
   overheadRatePerHour?: number;
   notes?: string;
+  isConditional?: boolean;
+  conditionField?: string;
+  conditionOperator?: string;
+  conditionValue?: number;
+  actionOnCondition?: string;
+  requiresQcPass?: boolean;
+  qcProcessCode?: string;
 }
 
 export interface CreateBOMInput {
@@ -78,9 +92,15 @@ export interface ProductionStepItem {
   quantityDone: number;
   /** Units that reached this step but have not finished it. */
   waitingQuantity: number;
-  status: "pending" | "in_progress" | "done";
+  status: "pending" | "in_progress" | "done" | "skipped";
   startedDate?: string;
   completedDate?: string;
+  isSkipped?: boolean;
+  skipReason?: string;
+  requiresQcPass?: boolean;
+  qcProcessCode?: string;
+  qcPassed?: boolean;
+  qcInspectionId?: string;
 }
 
 export interface LogStepInput {
@@ -289,4 +309,32 @@ export const manufacturingApi = {
   completeBatch: async (id: string, data: CompleteBatchInput): Promise<ApiResponse<ProductionOrderItem>> => {
     return apiClient<ProductionOrderItem>(`/manufacturing/production-orders/${id}/complete-batch`, { method: "POST", body: JSON.stringify(data) });
   },
+
+  // Conditional Routing & QC Gate
+  evaluateConditions: async (orderId: string, conditionField: string, value: number): Promise<ApiResponse<ProductionOrderItem>> =>
+    apiClient<ProductionOrderItem>(`/manufacturing/production-orders/${orderId}/evaluate-conditions`, { method: "POST", body: JSON.stringify({ conditionField, value }) }),
+  setStepQCPass: async (orderId: string, stepId: string, qcInspectionId: string, isPassed: boolean): Promise<ApiResponse<ProductionOrderItem>> =>
+    apiClient<ProductionOrderItem>(`/manufacturing/production-orders/${orderId}/steps/${stepId}/qc-pass`, { method: "POST", body: JSON.stringify({ qcInspectionId, isPassed }) }),
+
+  // Batch Genealogy & Traceability (BR-62)
+  getBackwardTraceability: async (fgBatchNo: string): Promise<ApiResponse<BatchGenealogyItem[]>> =>
+    apiClient<BatchGenealogyItem[]>(`/manufacturing/traceability/backward/${encodeURIComponent(fgBatchNo)}`),
+  getForwardTraceability: async (materialBatchNo: string): Promise<ApiResponse<BatchGenealogyItem[]>> =>
+    apiClient<BatchGenealogyItem[]>(`/manufacturing/traceability/forward/${encodeURIComponent(materialBatchNo)}`),
 };
+
+export interface BatchGenealogyItem {
+  id: string;
+  parentBatchNo: string;
+  parentProductId: string;
+  parentProductName?: string;
+  childBatchNo: string;
+  childProductId: string;
+  childProductName?: string;
+  productionOrderId: string;
+  orderNumber?: string;
+  quantityUsed: number;
+  uom?: string;
+  recordedAt: string;
+}
+

@@ -10,6 +10,7 @@ import {
   UserCheck,
   Building2,
   Sparkles,
+  ShieldCheck,
   LucideIcon,
 } from "lucide-react";
 
@@ -111,7 +112,17 @@ export const navigationConfig: NavGroup[] = [
           { title: "Bill of Material", href: "/manufacturing/bom" },
           { title: "Order Produksi", href: "/manufacturing/production-orders" },
           { title: "Layar Produksi", href: "/manufacturing/production" },
+          { title: "Ketertelusuran Batch", href: "/manufacturing/traceability" },
           { title: "Laporan Produksi", href: "/manufacturing/reports" },
+        ],
+      },
+      {
+        title: "Kontrol Mutu (QC)",
+        icon: ShieldCheck,
+        items: [
+          { title: "Inspeksi Mutu", href: "/qc/inspections" },
+          { title: "Parameter Mutu", href: "/qc/parameters" },
+          { title: "Laporan Mutu (QC)", href: "/qc/reports" },
         ],
       },
     ],
