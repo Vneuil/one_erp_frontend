@@ -25,6 +25,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DataTable, Column } from "@/components/data-table/data-table";
 import { MoneyDisplay } from "@/components/shared/money-display";
 import { financeApi, AccountItem } from "@/lib/api/finance";
+import { useConfirm, usePrompt } from "@/components/shared/confirm-modal";
 
 interface BudgetItem {
   id: string;
@@ -39,6 +40,8 @@ interface BudgetItem {
 }
 
 export default function BudgetControlPage() {
+  const confirm = useConfirm();
+  const prompt = usePrompt();
   const [budgets, setBudgets] = React.useState<BudgetItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
@@ -126,7 +129,16 @@ export default function BudgetControlPage() {
   }, []);
 
   const handleEditAmount = async (row: BudgetItem) => {
-    const raw = window.prompt(`Pagu baru untuk ${row.department} — ${row.accountCategory} (Rp):`, String(row.allocatedBudget));
+    const raw = await prompt({
+      title: "Ubah Pagu Anggaran",
+      message: `Pagu baru untuk ${row.department} — ${row.accountCategory} (Rp):`,
+      defaultValue: String(row.allocatedBudget),
+      placeholder: "Contoh: 15000000",
+      confirmText: "Simpan Pagu",
+      cancelText: "Batal",
+      inputType: "text",
+      required: true,
+    });
     if (raw === null) return;
     const value = Number(raw.replace(/[^0-9.]/g, ""));
     if (!(value > 0)) {
@@ -143,7 +155,13 @@ export default function BudgetControlPage() {
   };
 
   const handleDelete = async (row: BudgetItem) => {
-    if (!window.confirm(`Hapus anggaran ${row.department} — ${row.accountCategory}?`)) return;
+    const ok = await confirm({
+      title: "Hapus Anggaran",
+      message: `Hapus anggaran ${row.department} — ${row.accountCategory}?`,
+      variant: "destructive",
+      confirmText: "Hapus",
+    });
+    if (!ok) return;
     setNotice(null);
     try {
       await financeApi.deleteBudget(row.id);

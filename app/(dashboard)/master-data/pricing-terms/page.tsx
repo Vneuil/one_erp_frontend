@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/shared/page-header";
+import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
 import {
   pricingApi,
   PaymentTermItem,
@@ -15,6 +16,8 @@ import {
 } from "@/lib/api/pricing";
 
 export default function PricingTermsPage() {
+  const confirm = useConfirm();
+  const alert = useAlert();
   const [paymentTerms, setPaymentTerms] = React.useState<PaymentTermItem[]>([]);
   const [customerTypes, setCustomerTypes] = React.useState<CustomerTypeItem[]>([]);
   const [taxRates, setTaxRates] = React.useState<TaxRateItem[]>([]);
@@ -78,7 +81,13 @@ export default function PricingTermsPage() {
   };
 
   const handleDeletePaymentTerm = async (id: string) => {
-    if (!window.confirm("Yakin ingin menghapus termin pembayaran ini?")) return;
+    const ok = await confirm({
+      title: "Hapus Termin Pembayaran",
+      message: "Yakin ingin menghapus termin pembayaran ini?",
+      variant: "destructive",
+      confirmText: "Hapus",
+    });
+    if (!ok) return;
     try {
       await pricingApi.deletePaymentTerm(id);
       setPaymentTerms((prev) => prev.filter((p) => p.id !== id));
@@ -125,7 +134,13 @@ export default function PricingTermsPage() {
   };
 
   const handleDeleteCustomerType = async (id: string) => {
-    if (!window.confirm("Yakin ingin menghapus jenis pelanggan ini?")) return;
+    const ok = await confirm({
+      title: "Hapus Jenis Pelanggan",
+      message: "Yakin ingin menghapus jenis pelanggan ini?",
+      variant: "destructive",
+      confirmText: "Hapus",
+    });
+    if (!ok) return;
     try {
       await pricingApi.deleteCustomerType(id);
       setCustomerTypes((prev) => prev.filter((c) => c.id !== id));
@@ -172,7 +187,13 @@ export default function PricingTermsPage() {
   };
 
   const handleDeleteTaxRate = async (id: string) => {
-    if (!window.confirm("Yakin ingin menghapus tarif pajak ini?")) return;
+    const ok = await confirm({
+      title: "Hapus Tarif Pajak",
+      message: "Yakin ingin menghapus tarif pajak ini?",
+      variant: "destructive",
+      confirmText: "Hapus",
+    });
+    if (!ok) return;
     try {
       await pricingApi.deleteTaxRate(id);
       setTaxRates((prev) => prev.filter((t) => t.id !== id));

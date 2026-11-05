@@ -12,6 +12,10 @@ export interface ProductItem {
   costPrice: number;
   sellingPrice: number;
   status: string;
+  grade?: string;
+  safetyStock?: number;
+  organicType?: string;
+  isBelowSafetyStock?: boolean;
   /** Base product id when this is a variant (e.g. "Merah / L"). */
   variantOf?: string | null;
   variantLabel?: string;
@@ -31,6 +35,9 @@ export interface CreateProductInput {
   costPrice: number;
   sellingPrice: number;
   status?: string;
+  grade?: string;
+  safetyStock?: number;
+  organicType?: string;
   /** Send the base product id to make a variant; the nil uuid (all zeros) detaches it. */
   variantOf?: string;
   variantLabel?: string;

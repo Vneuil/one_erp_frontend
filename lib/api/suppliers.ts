@@ -3,6 +3,7 @@ import { apiClient, ApiResponse } from "./client";
 export interface SupplierItem {
   id: string;
   code: string;
+  batchCode?: string;
   name: string;
   contactPerson: string;
   email: string;
@@ -19,6 +20,7 @@ export interface SupplierItem {
 
 export interface CreateSupplierInput {
   code: string;
+  batchCode?: string;
   name: string;
   contactPerson: string;
   email: string;

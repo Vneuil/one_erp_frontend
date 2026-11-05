@@ -10,6 +10,7 @@ import { useNavigationAccess } from "@/providers/navigation-access";
 import { useIsOwnDocument } from "@/lib/hooks/use-own-document";
 import { projectCostApi, WorkOrderItem, WorkOrderStatus } from "@/lib/api/projectcost";
 import { projectsApi } from "@/lib/api/projects";
+import { useConfirm, usePrompt } from "@/components/shared/confirm-modal";
 
 const errText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 const STATUS: Record<WorkOrderStatus, { label: string; style: string }> = {
@@ -21,6 +22,8 @@ const STATUS: Record<WorkOrderStatus, { label: string; style: string }> = {
 };
 
 export default function WorkOrdersPage() {
+  const confirm = useConfirm();
+  const prompt = usePrompt();
   const { canApprove } = useNavigationAccess();
   const mayIssue = canApprove("project");
   const isOwn = useIsOwnDocument();
@@ -79,9 +82,41 @@ export default function WorkOrdersPage() {
   const th = "text-left text-[11px] font-bold text-muted-foreground px-3 py-2";
   const td = "px-3 py-2 text-xs align-top";
 
+  const handleSetProgress = async (w: WorkOrderItem) => {
+    const v = await prompt({
+      title: "Update Progres Pekerjaan",
+      message: `Masukkan progres pekerjaan SPK "${w.number}" (0-99%):`,
+      defaultValue: String(w.progressPct),
+      placeholder: "Contoh: 50",
+      confirmText: "Simpan Progres",
+      cancelText: "Batal",
+      inputType: "text",
+      required: true,
+    });
+    if (v !== null && v.trim() !== "") {
+      const num = Number(v.trim());
+      if (isNaN(num) || num < 0 || num > 99) {
+        setError("Progres harus berupa angka 0-99.");
+        return;
+      }
+      run(() => projectCostApi.setWorkOrderProgress(w.id, num), "Progres diperbarui.");
+    }
+  };
+
   const actions = (w: WorkOrderItem) => {
     const btn = (label: string, action: "issue" | "start" | "complete" | "cancel", ok: string, danger = false) => (
-      <Button key={action} size="sm" variant="outline" disabled={busy} onClick={() => (action !== "cancel" && action !== "complete") || window.confirm(`${label} SPK ${w.number}?`) ? run(() => projectCostApi.advanceWorkOrder(w.id, action), ok) : undefined}
+      <Button key={action} size="sm" variant="outline" disabled={busy} onClick={async () => {
+        if (action === "cancel" || action === "complete") {
+          const okConfirm = await confirm({
+            title: `Konfirmasi SPK`,
+            message: `${label} SPK ${w.number}?`,
+            variant: action === "cancel" ? "destructive" : "info",
+            confirmText: label,
+          });
+          if (!okConfirm) return;
+        }
+        run(() => projectCostApi.advanceWorkOrder(w.id, action), ok);
+      }}
         className={`h-7 px-2 text-[11px] font-bold ${danger ? "text-rose-600 border-rose-200" : ""}`}>{label}</Button>
     );
     return (
@@ -90,7 +125,7 @@ export default function WorkOrdersPage() {
         {w.status === "issued" && btn("Mulai", "start", "SPK mulai dikerjakan.")}
         {w.status === "in_progress" && (
           <>
-            <Button size="sm" variant="outline" disabled={busy} onClick={() => { const v = window.prompt("Progres pekerjaan (0-99%):", String(w.progressPct)); if (v !== null && v.trim() !== "") run(() => projectCostApi.setWorkOrderProgress(w.id, Number(v)), "Progres diperbarui."); }} className="h-7 px-2 text-[11px] font-bold">Progres</Button>
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => handleSetProgress(w)} className="h-7 px-2 text-[11px] font-bold">Progres</Button>
             {btn("Selesai", "complete", "SPK selesai.")}
           </>
         )}

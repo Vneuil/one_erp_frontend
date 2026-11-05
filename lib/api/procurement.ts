@@ -19,6 +19,12 @@ export interface PurchaseRequestItem {
   department: string;
   neededByDate: string;
   status: string;
+  category?: string;
+  supervisorApprovedBy?: string;
+  supervisorApprovedAt?: string;
+  ownerApprovedBy?: string;
+  ownerApprovedAt?: string;
+  rejectionReason?: string;
   lines: PurchaseRequestLineItem[];
   createdAt?: string;
 }
@@ -28,6 +34,7 @@ export interface CreatePurchaseRequestInput {
   // server-side from the authenticated caller and ignores any client value.
   department?: string;
   neededByDate?: string;
+  category?: string;
   lines: PurchaseRequestLineInput[];
 }
 
@@ -54,10 +61,19 @@ export interface PurchaseOrderItem {
   orderDate: string;
   expectedDate: string;
   status: string;
+  category?: string;
+  supervisorApprovedBy?: string;
+  supervisorApprovedAt?: string;
+  ownerApprovedBy?: string;
+  ownerApprovedAt?: string;
+  rejectionReason?: string;
   totalAmount: number;
   currency?: string;
   baseAmount?: number;
   createdByEmail?: string;
+  freightScheme?: string;
+  freightCost?: number;
+  qualityNotes?: string;
   lines: PurchaseOrderLineItem[];
   createdAt?: string;
 }
@@ -65,6 +81,7 @@ export interface PurchaseOrderItem {
 export interface CreatePurchaseOrderInput {
   supplierId: string;
   supplierName?: string;
+  notes?: string;
   purchaseRequestId?: string | null;
   orderDate?: string;
   expectedDate?: string;
@@ -72,6 +89,9 @@ export interface CreatePurchaseOrderInput {
   // Currency is the code the order's line items are denominated in.
   // Empty/omitted (or "IDR", the base currency) skips conversion entirely.
   currency?: string;
+  freightScheme?: string;
+  freightCost?: number;
+  qualityNotes?: string;
   lines: PurchaseOrderLineInput[];
 }
 
@@ -80,21 +100,42 @@ export interface CreatePurchaseOrderInput {
 export interface GoodsReceiptLineInput {
   productId: string;
   quantityReceived: number;
+  weightGross?: number;
+  weightTare?: number;
+  weightNet?: number;
+  bagWeights?: string;
 }
 
 export interface GoodsReceiptLineItem extends GoodsReceiptLineInput {
   id: string;
   quantityOrderedReference: number;
+  weightGross?: number;
+  weightTare?: number;
+  weightNet?: number;
+  bagWeights?: string;
+  weightDiffPo?: number;
 }
 
 export interface GoodsReceiptItem {
   id: string;
   receiptNo: string;
+  documentCode?: string;
   purchaseOrderId: string;
   receivedDate: string;
   warehouseId?: string | null;
   receivedBy: string;
   status: string;
+  deliveryNoteNo?: string;
+  sugarCondition?: string;
+  packageCondition?: string;
+  plasticTare?: number;
+  notes?: string;
+  category?: string;
+  supervisorApprovedBy?: string;
+  supervisorApprovedAt?: string;
+  ownerApprovedBy?: string;
+  ownerApprovedAt?: string;
+  rejectionReason?: string;
   lines: GoodsReceiptLineItem[];
   createdAt?: string;
 }
@@ -103,6 +144,11 @@ export interface CreateGoodsReceiptInput {
   purchaseOrderId: string;
   receivedDate?: string;
   warehouseId?: string | null;
+  deliveryNoteNo?: string;
+  sugarCondition?: string;
+  packageCondition?: string;
+  plasticTare?: number;
+  notes?: string;
   lines: GoodsReceiptLineInput[];
 }
 
@@ -130,12 +176,19 @@ export interface PurchaseInvoiceItem {
   paidAmount: number;
   outstanding: number;
   status: string;
+  category?: string;
+  supervisorApprovedBy?: string;
+  supervisorApprovedAt?: string;
+  ownerApprovedBy?: string;
+  ownerApprovedAt?: string;
+  rejectionReason?: string;
   createdAt?: string;
 }
 
 export interface CreatePurchaseInvoiceInput {
   supplierId: string;
   supplierName?: string;
+  notes?: string;
   purchaseOrderId?: string | null;
   invoiceNumber?: string;
   invoiceDate?: string;
@@ -167,7 +220,12 @@ export interface PurchaseDownPaymentItem {
   paymentDate: string;
   paymentMethod: string;
   status: string;
-  notes?: string;
+  category?: string;
+  supervisorApprovedBy?: string;
+  supervisorApprovedAt?: string;
+  ownerApprovedBy?: string;
+  ownerApprovedAt?: string;
+  rejectionReason?: string;
   createdAt?: string;
 }
 
@@ -175,10 +233,10 @@ export interface CreateDownPaymentInput {
   purchaseOrderId: string;
   supplierId: string;
   supplierName?: string;
+  notes?: string;
   amount: number;
   paymentDate?: string;
   paymentMethod?: string;
-  notes?: string;
 }
 
 // Purchase returns
@@ -203,6 +261,12 @@ export interface PurchaseReturnItem {
   returnDate: string;
   reason: string;
   status: string;
+  category?: string;
+  supervisorApprovedBy?: string;
+  supervisorApprovedAt?: string;
+  ownerApprovedBy?: string;
+  ownerApprovedAt?: string;
+  rejectionReason?: string;
   totalAmount: number;
   creditedAmount: number;
   vatAmount: number;
@@ -236,8 +300,14 @@ export interface InvoiceReceiptItem {
   date: string;
   supplierId: string;
   supplierName: string;
-  notes?: string;
   status: string;
+  notes?: string;
+  category?: string;
+  supervisorApprovedBy?: string;
+  supervisorApprovedAt?: string;
+  ownerApprovedBy?: string;
+  ownerApprovedAt?: string;
+  rejectionReason?: string;
   lines: InvoiceReceiptLineItem[];
   createdAt?: string;
 }
@@ -255,25 +325,40 @@ export const procurementApi = {
   listPurchaseRequests: async (params?: { page?: number; perPage?: number; search?: string }): Promise<ApiResponse<PurchaseRequestItem[]>> => {
     return apiClient<PurchaseRequestItem[]>("/procurement/requests", { params });
   },
+  getPurchaseRequest: async (id: string): Promise<ApiResponse<PurchaseRequestItem>> => {
+    return apiClient<PurchaseRequestItem>(`/procurement/requests/${id}`);
+  },
   createPurchaseRequest: async (data: CreatePurchaseRequestInput): Promise<ApiResponse<PurchaseRequestItem>> => {
     return apiClient<PurchaseRequestItem>("/procurement/requests", { method: "POST", body: JSON.stringify(data) });
+  },
+  updatePurchaseRequest: async (id: string, data: Partial<CreatePurchaseRequestInput>): Promise<ApiResponse<PurchaseRequestItem>> => {
+    return apiClient<PurchaseRequestItem>(`/procurement/requests/${id}`, { method: "PUT", body: JSON.stringify(data) });
   },
   submitPurchaseRequest: async (id: string): Promise<ApiResponse<PurchaseRequestItem>> => {
     return apiClient<PurchaseRequestItem>(`/procurement/requests/${id}/submit`, { method: "POST" });
   },
-  approvePurchaseRequest: async (id: string): Promise<ApiResponse<PurchaseRequestItem>> => {
-    return apiClient<PurchaseRequestItem>(`/procurement/requests/${id}/approve`, { method: "POST" });
+  approvePurchaseRequest: async (id: string, comments?: string): Promise<ApiResponse<PurchaseRequestItem>> => {
+    return apiClient<PurchaseRequestItem>(`/procurement/requests/${id}/approve`, { method: "POST", body: JSON.stringify({ comments }) });
   },
-  rejectPurchaseRequest: async (id: string): Promise<ApiResponse<PurchaseRequestItem>> => {
-    return apiClient<PurchaseRequestItem>(`/procurement/requests/${id}/reject`, { method: "POST" });
+  rejectPurchaseRequest: async (id: string, comments?: string): Promise<ApiResponse<PurchaseRequestItem>> => {
+    return apiClient<PurchaseRequestItem>(`/procurement/requests/${id}/reject`, { method: "POST", body: JSON.stringify({ comments }) });
   },
 
   // Purchase orders
+  getLastPOPrice: async (supplierId: string, productId: string): Promise<ApiResponse<{ supplierId: string; productId: string; lastPrice: number }>> => {
+    return apiClient<{ supplierId: string; productId: string; lastPrice: number }>("/procurement/orders/last-price", { params: { supplierId, productId } });
+  },
   listPurchaseOrders: async (params?: { page?: number; perPage?: number; search?: string }): Promise<ApiResponse<PurchaseOrderItem[]>> => {
     return apiClient<PurchaseOrderItem[]>("/procurement/orders", { params });
   },
   createPurchaseOrder: async (data: CreatePurchaseOrderInput): Promise<ApiResponse<PurchaseOrderItem>> => {
     return apiClient<PurchaseOrderItem>("/procurement/orders", { method: "POST", body: JSON.stringify(data) });
+  },
+  updatePurchaseOrder: async (id: string, data: Partial<CreatePurchaseOrderInput>): Promise<ApiResponse<PurchaseOrderItem>> => {
+    return apiClient<PurchaseOrderItem>(`/procurement/orders/${id}`, { method: "PUT", body: JSON.stringify(data) });
+  },
+  submitPurchaseOrder: async (id: string): Promise<ApiResponse<PurchaseOrderItem>> => {
+    return apiClient<PurchaseOrderItem>(`/procurement/orders/${id}/submit`, { method: "POST" });
   },
   approvePurchaseOrder: async (id: string, comments?: string): Promise<ApiResponse<PurchaseOrderItem>> => {
     return apiClient<PurchaseOrderItem>(`/procurement/orders/${id}/approve`, { method: "POST", body: JSON.stringify({ comments }) });

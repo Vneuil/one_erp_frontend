@@ -7,11 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { crmPlusApi, PipelineStageItem, LeadFormItem } from "@/lib/api/crmplus";
 import { useAppStore } from "@/stores/app-store";
+import { useConfirm } from "@/components/shared/confirm-modal";
 
 const errText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 const KIND_LABEL = { open: "Berjalan", won: "Menang", lost: "Kalah" } as const;
 
 export default function CrmSettingsPage() {
+  const confirm = useConfirm();
   const isAdmin = useAppStore((s) => s.currentUser?.role?.toLowerCase() === "admin");
   const [tab, setTab] = React.useState<"stages" | "forms">("stages");
   const [stages, setStages] = React.useState<PipelineStageItem[]>([]);
@@ -128,7 +130,15 @@ export default function CrmSettingsPage() {
                             <Button size="sm" variant="outline" disabled={busy || i === 0} onClick={() => move(s, -1)} className="h-7 px-2 text-[11px]" aria-label="Naikkan">↑</Button>
                             <Button size="sm" variant="outline" disabled={busy || i === sortedStages.length - 1} onClick={() => move(s, 1)} className="h-7 px-2 text-[11px]" aria-label="Turunkan">↓</Button>
                             <Button size="sm" variant="outline" disabled={busy} onClick={() => run(() => crmPlusApi.updateStage(s.id, { isActive: !s.isActive }))} className="h-7 px-2 text-[11px]">{s.isActive ? "Nonaktifkan" : "Aktifkan"}</Button>
-                            <Button size="sm" variant="outline" disabled={busy} onClick={() => window.confirm(`Hapus tahap ${s.name}?`) && run(() => crmPlusApi.deleteStage(s.id), "Tahap dihapus.")} className="h-7 px-2 text-[11px] text-rose-600 border-rose-200">Hapus</Button>
+                            <Button size="sm" variant="outline" disabled={busy} onClick={async () => {
+                              const ok = await confirm({
+                                title: "Hapus Tahap",
+                                message: `Hapus tahap ${s.name}?`,
+                                variant: "destructive",
+                                confirmText: "Hapus",
+                              });
+                              if (ok) run(() => crmPlusApi.deleteStage(s.id), "Tahap dihapus.");
+                            }} className="h-7 px-2 text-[11px] text-rose-600 border-rose-200">Hapus</Button>
                           </div>
                         )}
                       </td>
@@ -163,7 +173,16 @@ export default function CrmSettingsPage() {
                   {isAdmin && (
                     <div className="flex gap-1.5">
                       <Button size="sm" variant="outline" disabled={busy} onClick={() => run(() => crmPlusApi.updateLeadForm(f.id, { isActive: !f.isActive }))} className="h-7 px-2 text-[11px]">{f.isActive ? "Nonaktifkan" : "Aktifkan"}</Button>
-                      <Button size="sm" variant="outline" disabled={busy} onClick={() => window.confirm(`Hapus formulir ${f.name}? Tautannya berhenti berfungsi.`) && run(() => crmPlusApi.deleteLeadForm(f.id), "Formulir dihapus.")} className="h-7 px-2 text-[11px] text-rose-600 border-rose-200">Hapus</Button>
+                      <Button size="sm" variant="outline" disabled={busy} onClick={async () => {
+                        const ok = await confirm({
+                          title: "Hapus Formulir",
+                          message: `Hapus formulir ${f.name}?`,
+                          description: "Tautannya akan langsung berhenti berfungsi bagi publik.",
+                          variant: "destructive",
+                          confirmText: "Hapus",
+                        });
+                        if (ok) run(() => crmPlusApi.deleteLeadForm(f.id), "Formulir dihapus.");
+                      }} className="h-7 px-2 text-[11px] text-rose-600 border-rose-200">Hapus</Button>
                     </div>
                   )}
                 </div>

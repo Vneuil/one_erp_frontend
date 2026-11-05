@@ -16,6 +16,7 @@ import { DataTable, Column } from "@/components/data-table/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { inventoryApi, WarehouseItem } from "@/lib/api/inventory";
 import { productsApi, ProductItem } from "@/lib/api/products";
+import { useConfirm } from "@/components/shared/confirm-modal";
 
 interface StockTransfer {
   id: string;
@@ -29,6 +30,7 @@ interface StockTransfer {
 }
 
 export default function TransfersPage() {
+  const confirm = useConfirm();
   const [transfers, setTransfers] = React.useState<StockTransfer[]>([]);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [warehouses, setWarehouses] = React.useState<WarehouseItem[]>([]);
@@ -96,7 +98,13 @@ export default function TransfersPage() {
   };
 
   const handleCancelTransfer = async (id: string) => {
-    if (!confirm("Batalkan transfer ini?")) return;
+    const ok = await confirm({
+      title: "Batalkan Transfer",
+      message: "Batalkan transfer ini?",
+      variant: "destructive",
+      confirmText: "Ya, Batalkan",
+    });
+    if (!ok) return;
     setActioningId(id);
     try {
       await inventoryApi.cancelTransfer(id);

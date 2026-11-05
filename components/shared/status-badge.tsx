@@ -27,6 +27,7 @@ export function StatusBadge({ status, label }: StatusBadgeProps) {
   const displayLabel = label || status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
   switch (norm) {
+    case "final":
     case "approved":
     case "completed":
     case "paid":

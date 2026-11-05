@@ -10,6 +10,7 @@ import { useEmployeeOptions } from "@/components/shared/use-employee-options";
 import { Tabs, errText, selectCls, td, th, today, useReport } from "@/components/reports/report-ui";
 import { useAppStore } from "@/stores/app-store";
 import { hrLettersApi, Letter, LetterData, LetterInput, LetterType } from "@/lib/api/hrletters";
+import { usePrompt } from "@/components/shared/confirm-modal";
 
 interface TypeConfig {
   label: string;
@@ -55,6 +56,7 @@ const emptyForm = (keep?: Partial<FormState>): FormState => ({
 const f = "space-y-1 text-xs font-semibold";
 
 export default function HRLettersPage() {
+  const prompt = usePrompt();
   const companyName = useAppStore((s) => s.currentCompany.name);
   const [type, setType] = React.useState<LetterType>("contract");
   const cfg = TYPES[type];
@@ -146,8 +148,21 @@ export default function HRLettersPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const askCancel = (l: Letter) => {
-    const reason = l.status === "issued" ? window.prompt(`Alasan membatalkan ${l.number}:`, "") : "";
+  const askCancel = async (l: Letter) => {
+    let reason = "";
+    if (l.status === "issued") {
+      const res = await prompt({
+        title: "Batalkan Surat Resmi",
+        message: `Alasan membatalkan ${l.number}:`,
+        placeholder: "Tuliskan alasan pembatalan...",
+        confirmText: "Batalkan Surat",
+        cancelText: "Batal",
+        variant: "destructive",
+        inputType: "textarea",
+      });
+      if (res === null) return;
+      reason = res;
+    }
     if (reason === null) return;
     run(() => hrLettersApi.cancel(l.id, reason), "Surat dibatalkan.");
   };

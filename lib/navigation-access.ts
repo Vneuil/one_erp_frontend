@@ -43,3 +43,20 @@ export function canApproveModule(
   if (account.roleId) return permissions?.some((p) => p.module === module && p.canApprove === true) ?? false;
   return role === "manager";
 }
+
+// Confidential Pricing check: hides pricing/cost fields from staff/operators
+export function canViewPricesModule(
+  module: string,
+  account: { role: string; roleId?: string | null },
+  permissions: PermissionItem[] | null,
+): boolean {
+  const role = account.role.toLowerCase();
+  if (role === "admin" || role === "owner" || role === "superadmin" || role === "finance") return true;
+  if (account.roleId && permissions) {
+    const perm = permissions.find((p) => p.module === module);
+    if (perm && perm.canViewPrices !== undefined) {
+      return perm.canViewPrices;
+    }
+  }
+  return role === "manager";
+}

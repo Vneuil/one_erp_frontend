@@ -9,8 +9,11 @@ import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, Column } from "@/components/data-table/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { salesmenApi, SalesmanItem } from "@/lib/api/salesmen";
+import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
 
 export default function SalesmenPage() {
+  const confirm = useConfirm();
+  const alert = useAlert();
   const [salesmen, setSalesmen] = React.useState<SalesmanItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
@@ -99,12 +102,22 @@ export default function SalesmenPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Yakin ingin menghapus salesman ini?")) return;
+    const ok = await confirm({
+      title: "Hapus Salesman",
+      message: "Yakin ingin menghapus salesman ini?",
+      variant: "destructive",
+      confirmText: "Hapus",
+    });
+    if (!ok) return;
     try {
       await salesmenApi.delete(id);
       setSalesmen((prev) => prev.filter((s) => s.id !== id));
     } catch (err) {
-      alert("Gagal menghapus salesman: " + (err instanceof Error ? err.message : "Kesalahan server"));
+      await alert({
+        title: "Gagal Menghapus Salesman",
+        message: err instanceof Error ? err.message : "Kesalahan server",
+        variant: "destructive",
+      });
     }
   };
 

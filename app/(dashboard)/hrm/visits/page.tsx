@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { hropsApi, VisitPlan } from "@/lib/api/hrops";
+import { usePrompt } from "@/components/shared/confirm-modal";
 
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
 const errText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
@@ -24,6 +25,7 @@ function currentPosition(): Promise<{ latitude: number; longitude: number }> {
 }
 
 export default function VisitPlanPage() {
+  const prompt = usePrompt();
   const [date, setDate] = React.useState(today());
   const [plan, setPlan] = React.useState<VisitPlan | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -65,6 +67,22 @@ export default function VisitPlanPage() {
       setError(errText(e, "Aksi gagal."));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleSkipVisit = async (stopId: string) => {
+    const r = await prompt({
+      title: "Lewati Kunjungan",
+      message: "Masukkan alasan melewati kunjungan ini:",
+      placeholder: "Contoh: Toko tutup / jadwal diundur...",
+      confirmText: "Lewati Kunjungan",
+      cancelText: "Batal",
+      variant: "warning",
+      inputType: "textarea",
+      required: true,
+    });
+    if (r && r.trim()) {
+      run(() => hropsApi.skipVisit(stopId, r.trim()), "Kunjungan dilewati.");
     }
   };
 
@@ -138,7 +156,7 @@ export default function VisitPlanPage() {
                     {s.status === "planned" && (
                       <div className="flex gap-1.5">
                         <Button size="sm" variant="gradient" disabled={busy || !isToday} title={isToday ? undefined : "Check-in hanya pada hari kunjungan"} onClick={() => run(async () => { const p = await currentPosition(); await hropsApi.checkInVisit(s.id, p); }, `Check-in di ${s.customerName} berhasil.`)} className="h-7 px-2 text-[11px] font-bold">Check-in</Button>
-                        <Button size="sm" variant="outline" disabled={busy} onClick={() => { const r = window.prompt("Alasan melewati kunjungan ini:"); if (r && r.trim()) run(() => hropsApi.skipVisit(s.id, r.trim()), "Kunjungan dilewati."); }} className="h-7 px-2 text-[11px]">Lewati</Button>
+                        <Button size="sm" variant="outline" disabled={busy} onClick={() => handleSkipVisit(s.id)} className="h-7 px-2 text-[11px]">Lewati</Button>
                       </div>
                     )}
                   </td>

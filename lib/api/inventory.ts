@@ -37,11 +37,13 @@ export interface StockLevelItem {
 }
 
 export interface AdjustStockInput {
+  type?: string;
   productId: string;
   warehouseId: string;
   quantity: number;
   reason?: string;
   reference?: string;
+  batchNo?: string;
   createdBy?: string;
 }
 
@@ -61,12 +63,13 @@ export interface MovementItem {
   productName: string;
   warehouseId: string;
   warehouseName: string;
-  type: "in" | "out" | "adjustment" | "transfer_in" | "transfer_out";
+  type: "in" | "out" | "adjustment" | "transfer_in" | "transfer_out" | "reject";
   quantity: number;
   balance: number;
   reference: string;
   reason: string;
   createdBy: string;
+  batchNo?: string;
   createdAt?: string;
 }
 
@@ -160,6 +163,7 @@ export interface CreateStockDocumentInput {
   date?: string;
   warehouseId: string;
   reference?: string;
+  batchNo?: string;
   reason?: string;
   notes?: string;
   /** Material issues only: the production order the materials are issued to. */

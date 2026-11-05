@@ -12,6 +12,7 @@ import { inventoryApi, StockDocument, StockDocumentType } from "@/lib/api/invent
 import { productsApi, ProductItem } from "@/lib/api/products";
 import { manufacturingApi } from "@/lib/api/manufacturing";
 import { Tabs, errText, selectCls, td, tdr, th, thr, today, useReport } from "@/components/reports/report-ui";
+import { usePrompt } from "@/components/shared/confirm-modal";
 
 interface TypeConfig {
   label: string;
@@ -40,6 +41,7 @@ interface DraftLine {
 const emptyLine = (): DraftLine => ({ productId: "", quantity: 0, unitCost: "", batchNo: "", expiryDate: "" });
 
 export default function StockDocumentsPage() {
+  const prompt = usePrompt();
   const [type, setType] = React.useState<StockDocumentType>("material_issue");
   const cfg = TYPES[type];
 
@@ -131,7 +133,16 @@ export default function StockDocumentsPage() {
   };
 
   const voidDoc = async (d: StockDocument) => {
-    const reason = window.prompt(`Alasan membatalkan ${d.number}? Stok dan jurnalnya akan dibalik (dokumen tetap tercatat). Untuk mengoreksi, batalkan lalu buat dokumen yang benar.`, "");
+    const reason = await prompt({
+      title: "Batalkan Dokumen Stok",
+      message: `Alasan membatalkan ${d.number}? Stok dan jurnalnya akan dibalik (dokumen tetap tercatat). Untuk mengoreksi, batalkan lalu buat dokumen yang benar.`,
+      placeholder: "Tuliskan alasan pembatalan...",
+      confirmText: "Batalkan Dokumen",
+      cancelText: "Kembali",
+      variant: "destructive",
+      inputType: "textarea",
+      required: true,
+    });
     if (reason === null) return;
     if (!reason.trim()) {
       setError("Alasan pembatalan wajib diisi.");

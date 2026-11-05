@@ -15,8 +15,11 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { rbacApi, RoleItem } from "@/lib/api/rbac";
+import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
 
 export default function RolesSettingsPage() {
+  const confirm = useConfirm();
+  const alert = useAlert();
   const [roles, setRoles] = React.useState<RoleItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
@@ -59,12 +62,23 @@ export default function RolesSettingsPage() {
 
   const handleDeleteRole = async (role: RoleItem) => {
     if (role.isSystem) return;
-    if (!confirm(`Hapus role "${role.name}"?`)) return;
+    const ok = await confirm({
+      title: "Hapus Role",
+      message: `Hapus role "${role.name}"?`,
+      description: "Pengguna dengan role ini akan kehilangan akses terkait.",
+      variant: "destructive",
+      confirmText: "Hapus",
+    });
+    if (!ok) return;
     try {
       await rbacApi.deleteRole(role.id);
       loadRoles();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Gagal menghapus role.");
+      await alert({
+        title: "Gagal Menghapus Role",
+        message: err instanceof Error ? err.message : "Gagal menghapus role.",
+        variant: "destructive",
+      });
     }
   };
 

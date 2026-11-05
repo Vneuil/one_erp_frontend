@@ -15,6 +15,13 @@ export interface BOMProcessInput {
   laborRatePerHour?: number;
   overheadRatePerHour?: number;
   notes?: string;
+  isConditional?: boolean;
+  conditionField?: string;
+  conditionOperator?: string;
+  conditionValue?: number;
+  actionOnCondition?: string;
+  requiresQcPass?: boolean;
+  qcProcessCode?: string;
 }
 
 export interface BOMProcessItem {
@@ -25,6 +32,13 @@ export interface BOMProcessItem {
   laborRatePerHour?: number;
   overheadRatePerHour?: number;
   notes?: string;
+  isConditional?: boolean;
+  conditionField?: string;
+  conditionOperator?: string;
+  conditionValue?: number;
+  actionOnCondition?: string;
+  requiresQcPass?: boolean;
+  qcProcessCode?: string;
 }
 
 export interface CreateBOMInput {
@@ -78,9 +92,15 @@ export interface ProductionStepItem {
   quantityDone: number;
   /** Units that reached this step but have not finished it. */
   waitingQuantity: number;
-  status: "pending" | "in_progress" | "done";
+  status: "pending" | "in_progress" | "done" | "skipped";
   startedDate?: string;
   completedDate?: string;
+  isSkipped?: boolean;
+  skipReason?: string;
+  requiresQcPass?: boolean;
+  qcProcessCode?: string;
+  qcPassed?: boolean;
+  qcInspectionId?: string;
 }
 
 export interface LogStepInput {
@@ -289,4 +309,157 @@ export const manufacturingApi = {
   completeBatch: async (id: string, data: CompleteBatchInput): Promise<ApiResponse<ProductionOrderItem>> => {
     return apiClient<ProductionOrderItem>(`/manufacturing/production-orders/${id}/complete-batch`, { method: "POST", body: JSON.stringify(data) });
   },
+
+  // Conditional Routing & QC Gate
+  evaluateConditions: async (orderId: string, conditionField: string, value: number): Promise<ApiResponse<ProductionOrderItem>> =>
+    apiClient<ProductionOrderItem>(`/manufacturing/production-orders/${orderId}/evaluate-conditions`, { method: "POST", body: JSON.stringify({ conditionField, value }) }),
+  setStepQCPass: async (orderId: string, stepId: string, qcInspectionId: string, isPassed: boolean): Promise<ApiResponse<ProductionOrderItem>> =>
+    apiClient<ProductionOrderItem>(`/manufacturing/production-orders/${orderId}/steps/${stepId}/qc-pass`, { method: "POST", body: JSON.stringify({ qcInspectionId, isPassed }) }),
+
+  // Batch Genealogy & Traceability (BR-62)
+  getBackwardTraceability: async (fgBatchNo: string): Promise<ApiResponse<BatchGenealogyItem[]>> =>
+    apiClient<BatchGenealogyItem[]>(`/manufacturing/traceability/backward/${encodeURIComponent(fgBatchNo)}`),
+  getForwardTraceability: async (materialBatchNo: string): Promise<ApiResponse<BatchGenealogyItem[]>> =>
+    apiClient<BatchGenealogyItem[]>(`/manufacturing/traceability/forward/${encodeURIComponent(materialBatchNo)}`),
+
+  // Material Requisitions (BPB, PBPK, LPC)
+  listRequisitions: async (params?: { type?: string; status?: string }): Promise<ApiResponse<MaterialRequisitionItem[]>> =>
+    apiClient<MaterialRequisitionItem[]>("/manufacturing/requisitions", { params }),
+  getRequisition: async (id: string): Promise<ApiResponse<MaterialRequisitionItem>> =>
+    apiClient<MaterialRequisitionItem>(`/manufacturing/requisitions/${id}`),
+  createRequisition: async (input: CreateRequisitionInput): Promise<ApiResponse<MaterialRequisitionItem>> =>
+    apiClient<MaterialRequisitionItem>("/manufacturing/requisitions", { method: "POST", body: JSON.stringify(input) }),
+  updateRequisitionStatus: async (id: string, input: UpdateRequisitionStatusInput): Promise<ApiResponse<void>> =>
+    apiClient<void>(`/manufacturing/requisitions/${id}/status`, { method: "PUT", body: JSON.stringify(input) }),
+
+  // Oven Logs (LHO)
+  listOvenLogs: async (params?: { date?: string; ovenNumber?: string }): Promise<ApiResponse<OvenProductionLogItem[]>> =>
+    apiClient<OvenProductionLogItem[]>("/manufacturing/oven-logs", { params }),
+  getOvenLog: async (id: string): Promise<ApiResponse<OvenProductionLogItem>> =>
+    apiClient<OvenProductionLogItem>(`/manufacturing/oven-logs/${id}`),
+  createOvenLog: async (input: CreateOvenLogInput): Promise<ApiResponse<OvenProductionLogItem>> =>
+    apiClient<OvenProductionLogItem>("/manufacturing/oven-logs", { method: "POST", body: JSON.stringify(input) }),
 };
+
+export interface BatchGenealogyItem {
+  id: string;
+  parentBatchNo: string;
+  parentProductId: string;
+  parentProductName?: string;
+  childBatchNo: string;
+  childProductId: string;
+  childProductName?: string;
+  productionOrderId: string;
+  orderNumber?: string;
+  quantityUsed: number;
+  uom?: string;
+  recordedAt: string;
+}
+
+export type RequisitionType = "raw_material" | "packaging" | "liquid_sugar";
+
+export interface MaterialRequisitionLineItem {
+  id?: string;
+  productId: string;
+  productName: string;
+  batchNo?: string;
+  quantityRequested: number;
+  quantityIssued: number;
+  quantityUsed: number;
+  quantityReject: number;
+  quantityReturned: number;
+  uom: string;
+  notes?: string;
+}
+
+export interface LiquidSugarDispensingItem {
+  id?: string;
+  jerryCanNo: number;
+  grossWeight: number;
+  tareWeight: number;
+  netWeight: number;
+  brix?: number;
+  aromaColor?: string;
+  notes?: string;
+}
+
+export interface MaterialRequisitionItem {
+  id: string;
+  requestNo: string;
+  requisitionType: RequisitionType;
+  productionOrderId?: string;
+  orderNumber?: string;
+  requestDate: string;
+  department: string;
+  requestedBy: string;
+  issuedBy?: string;
+  status: "draft" | "submitted" | "issued" | "completed" | "cancelled";
+  notes?: string;
+  lines?: MaterialRequisitionLineItem[];
+  dispensingItems?: LiquidSugarDispensingItem[];
+  createdAt: string;
+}
+
+export interface CreateRequisitionInput {
+  requisitionType: RequisitionType;
+  productionOrderId?: string;
+  orderNumber?: string;
+  requestDate: string;
+  department: string;
+  requestedBy?: string;
+  notes?: string;
+  lines?: MaterialRequisitionLineItem[];
+  dispensingItems?: LiquidSugarDispensingItem[];
+}
+
+export interface UpdateRequisitionStatusInput {
+  status: string;
+  issuedBy?: string;
+}
+
+export interface OvenCycleItem {
+  id?: string;
+  cycleNumber: number;
+  timeIn: string;
+  timeOut: string;
+  temperature: number;
+  trayWeight: number;
+  paperWeight: number;
+  grossInWeight: number;
+  grossOutWeight: number;
+  netWetWeight: number;
+  netDryWeight: number;
+  moistureLossPercent: number;
+  moistureContent?: number;
+  notes?: string;
+}
+
+export interface OvenProductionLogItem {
+  id: string;
+  logNo: string;
+  productionOrderId?: string;
+  orderNumber?: string;
+  date: string;
+  ovenNumber: string;
+  operatorName: string;
+  shift: string;
+  totalCycles: number;
+  totalWetWeight: number;
+  totalDryWeight: number;
+  avgMoistureLoss: number;
+  notes?: string;
+  cycles?: OvenCycleItem[];
+  createdAt: string;
+}
+
+export interface CreateOvenLogInput {
+  productionOrderId?: string;
+  orderNumber?: string;
+  date: string;
+  ovenNumber: string;
+  operatorName?: string;
+  shift: string;
+  notes?: string;
+  cycles: OvenCycleItem[];
+}
+

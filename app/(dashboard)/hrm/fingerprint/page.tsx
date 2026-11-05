@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { API_BASE_URL } from "@/lib/api/client";
+import { useConfirm } from "@/components/shared/confirm-modal";
 import {
   fingerprintApi,
   FingerprintDevice,
@@ -40,6 +41,7 @@ function parsePunchFile(text: string): { rows: { pin: string; time: string }[]; 
 }
 
 export default function FingerprintPage() {
+  const confirm = useConfirm();
   const [tab, setTab] = React.useState<Tab>("devices");
   const [devices, setDevices] = React.useState<FingerprintDevice[]>([]);
   const [maps, setMaps] = React.useState<FingerprintPinMap[]>([]);
@@ -108,8 +110,15 @@ export default function FingerprintPage() {
       return `Mesin ${res.data.device.serial} terdaftar.`;
     });
 
-  const rotate = (d: FingerprintDevice) => {
-    if (!window.confirm(`Buat token baru untuk ${d.serial}? Token lama langsung tidak berlaku.`)) return;
+  const rotate = async (d: FingerprintDevice) => {
+    const ok = await confirm({
+      title: "Rotate Token Mesin",
+      message: `Buat token baru untuk ${d.serial}?`,
+      description: "Token lama langsung tidak berlaku dan mesin harus dikonfigurasi ulang.",
+      variant: "warning",
+      confirmText: "Buat Token Baru",
+    });
+    if (!ok) return;
     run(async () => {
       const res = await fingerprintApi.rotateToken(d.serial);
       setSecret(res.data);
@@ -117,8 +126,15 @@ export default function FingerprintPage() {
     });
   };
 
-  const remove = (d: FingerprintDevice) => {
-    if (!window.confirm(`Hapus mesin ${d.serial}? Mesin tidak akan bisa mengirim data lagi. Log punch yang sudah masuk tetap tersimpan.`)) return;
+  const remove = async (d: FingerprintDevice) => {
+    const ok = await confirm({
+      title: "Hapus Mesin Fingerprint",
+      message: `Hapus mesin ${d.serial}?`,
+      description: "Mesin tidak akan bisa mengirim data lagi. Log punch yang sudah masuk tetap tersimpan.",
+      variant: "destructive",
+      confirmText: "Hapus Mesin",
+    });
+    if (!ok) return;
     run(async () => {
       await fingerprintApi.deleteDevice(d.serial);
       return `Mesin ${d.serial} dihapus.`;

@@ -27,6 +27,7 @@ import { downloadCsv } from "@/lib/utils/csv";
 import { payrollApi, PayrollEntry as ApiPayrollEntry, PayrollPolicy } from "@/lib/api/payroll";
 import { hrmApi, EmployeeItem } from "@/lib/api/hrm";
 import { useIsOwnDocument } from "@/lib/hooks/use-own-document";
+import { useConfirm } from "@/components/shared/confirm-modal";
 
 interface PayrollEntry {
   id: string;
@@ -100,6 +101,7 @@ const mapEntry = (e: ApiPayrollEntry): PayrollEntry => ({
 });
 
 export default function PayrollPage() {
+  const confirm = useConfirm();
   const { canApprove } = useNavigationAccess();
   const mayApprove = canApprove("hrm");
   const isOwn = useIsOwnDocument();
@@ -230,7 +232,14 @@ export default function PayrollPage() {
   const handleAdvance = async (row: PayrollEntry) => {
     const next = NEXT_STATUS[row.status];
     if (!next || busyId) return;
-    if (!window.confirm(`${next.confirm}\n\n${row.name} — ${periodLabel(period)}`)) return;
+    const ok = await confirm({
+      title: "Konfirmasi Payroll",
+      message: `${next.confirm}`,
+      description: `${row.name} — ${periodLabel(period)}`,
+      variant: "info",
+      confirmText: next.label,
+    });
+    if (!ok) return;
     setBusyId(row.id);
     setNotice(null);
     try {

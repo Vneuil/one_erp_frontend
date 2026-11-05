@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 interface Supplier {
   id: string;
   code: string;
+  batchCode?: string;
   name: string;
   category: string;
   contactPerson: string;
@@ -26,8 +27,11 @@ import { suppliersApi, SupplierItem } from "@/lib/api/suppliers";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { downloadCsv } from "@/lib/utils/csv";
+import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
 
 export default function SuppliersPage() {
+  const confirm = useConfirm();
+  const alert = useAlert();
   const [suppliers, setSuppliers] = React.useState<Supplier[]>([]);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
@@ -35,6 +39,7 @@ export default function SuppliersPage() {
   const [isAddOpen, setIsAddOpen] = React.useState(false);
   const [formData, setFormData] = React.useState({
     code: "",
+    batchCode: "",
     name: "",
     contactPerson: "",
     email: "",
@@ -49,6 +54,7 @@ export default function SuppliersPage() {
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editFormData, setEditFormData] = React.useState({
     code: "",
+    batchCode: "",
     name: "",
     contactPerson: "",
     email: "",
@@ -66,6 +72,7 @@ export default function SuppliersPage() {
                   const mapped: Supplier[] = (res.data || []).map((s: SupplierItem) => ({
             id: s.id,
             code: s.code,
+            batchCode: s.batchCode || "",
             name: s.name,
             contactPerson: s.contactPerson || "-",
             email: s.email || "-",
@@ -95,6 +102,7 @@ export default function SuppliersPage() {
     try {
       await suppliersApi.create({
         code: formData.code,
+        batchCode: formData.batchCode.trim().toUpperCase(),
         name: formData.name,
         contactPerson: formData.contactPerson,
         email: formData.email,
@@ -115,6 +123,7 @@ export default function SuppliersPage() {
     setEditingId(s.id);
     setEditFormData({
       code: s.code,
+      batchCode: s.batchCode || "",
       name: s.name,
       contactPerson: s.contactPerson,
       email: s.email,
@@ -133,6 +142,7 @@ export default function SuppliersPage() {
     try {
       const res = await suppliersApi.update(editingId, {
         code: editFormData.code,
+        batchCode: editFormData.batchCode.trim().toUpperCase(),
         name: editFormData.name,
         contactPerson: editFormData.contactPerson,
         email: editFormData.email,
@@ -149,6 +159,7 @@ export default function SuppliersPage() {
             ? {
                 ...s,
                 code: updated?.code ?? editFormData.code,
+                batchCode: updated?.batchCode ?? editFormData.batchCode,
                 name: updated?.name ?? editFormData.name,
                 contactPerson: updated?.contactPerson ?? editFormData.contactPerson,
                 email: updated?.email ?? editFormData.email,
@@ -169,12 +180,22 @@ export default function SuppliersPage() {
   };
 
   const handleDeleteSupplier = async (id: string) => {
-    if (!window.confirm("Yakin ingin menghapus supplier ini?")) return;
+    const ok = await confirm({
+      title: "Hapus Supplier",
+      message: "Yakin ingin menghapus supplier ini?",
+      variant: "destructive",
+      confirmText: "Hapus",
+    });
+    if (!ok) return;
     try {
       await suppliersApi.delete(id);
       setSuppliers((prev) => prev.filter((s) => s.id !== id));
     } catch (err) {
-      alert("Gagal menghapus supplier: " + (err instanceof Error ? err.message : "Kesalahan server"));
+      await alert({
+        title: "Gagal Menghapus Supplier",
+        message: err instanceof Error ? err.message : "Kesalahan server",
+        variant: "destructive",
+      });
     }
   };
 
@@ -191,7 +212,16 @@ export default function SuppliersPage() {
       key: "code",
       header: "Vendor Code",
       sortable: true,
-      render: (s) => <span className="font-mono text-xs font-bold text-brand-primary">{s.code}</span>,
+      render: (s) => (
+        <div>
+          <span className="font-mono text-xs font-bold text-brand-primary">{s.code}</span>
+          {s.batchCode && (
+            <span className="block mt-0.5 text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 w-fit">
+              Trace: {s.batchCode}
+            </span>
+          )}
+        </div>
+      ),
     },
     {
       key: "name",
@@ -313,6 +343,19 @@ export default function SuppliersPage() {
               />
             </div>
             <div className="space-y-1">
+              <label className="font-semibold text-foreground flex items-center justify-between">
+                <span>Kode Traceability Supplier</span>
+                <span className="text-[10px] text-brand-primary font-normal">2 Huruf (cth: PW)</span>
+              </label>
+              <Input
+                value={formData.batchCode}
+                onChange={(e) => setFormData({ ...formData, batchCode: e.target.value.toUpperCase() })}
+                maxLength={4}
+                placeholder="e.g. PW"
+                className="font-mono uppercase font-bold"
+              />
+            </div>
+            <div className="space-y-1">
               <label className="font-semibold text-foreground">Nama Vendor / Perusahaan *</label>
               <Input
                 value={formData.name}
@@ -409,6 +452,20 @@ export default function SuppliersPage() {
               <Input
                 value={editFormData.code}
                 onChange={(e) => setEditFormData({ ...editFormData, code: e.target.value })}
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="font-semibold text-foreground flex items-center justify-between">
+                <span>Kode Traceability Supplier</span>
+                <span className="text-[10px] text-brand-primary font-normal">2 Huruf (cth: PW)</span>
+              </label>
+              <Input
+                value={editFormData.batchCode}
+                onChange={(e) => setEditFormData({ ...editFormData, batchCode: e.target.value.toUpperCase() })}
+                maxLength={4}
+                placeholder="e.g. PW"
+                className="font-mono uppercase font-bold"
                 required
               />
             </div>

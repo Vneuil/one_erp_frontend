@@ -7,8 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { currencyApi, CurrencyItem, ExchangeRateItem } from "@/lib/api/currency";
+import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
 
 export default function CurrenciesPage() {
+  const confirm = useConfirm();
+  const alert = useAlert();
   const [currencies, setCurrencies] = React.useState<CurrencyItem[]>([]);
   const [rates, setRates] = React.useState<ExchangeRateItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -61,12 +64,22 @@ export default function CurrenciesPage() {
 
   const handleDeleteCurrency = async (c: CurrencyItem) => {
     if (c.isBase) return;
-    if (!confirm(`Hapus mata uang ${c.code}?`)) return;
+    const ok = await confirm({
+      title: "Hapus Mata Uang",
+      message: `Hapus mata uang ${c.code}?`,
+      variant: "destructive",
+      confirmText: "Hapus",
+    });
+    if (!ok) return;
     try {
       await currencyApi.remove(c.id);
       loadData();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Gagal menghapus mata uang.");
+      await alert({
+        title: "Gagal Menghapus Mata Uang",
+        message: err instanceof Error ? err.message : "Gagal menghapus mata uang.",
+        variant: "destructive",
+      });
     }
   };
 

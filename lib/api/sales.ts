@@ -29,12 +29,20 @@ export interface SalesOrderItem {
   marketplacePlatform?: string;
   marketplaceOrderId?: string;
   warehouseId?: string | null;
+  customerPoNumber?: string;
+  customerPoAttachment?: string;
+  dpPaid?: boolean;
+  dpAmount?: number;
   lines?: SalesOrderLine[];
   createdAt?: string;
 }
 
 export interface UpdateSalesOrderInput {
   customerName: string;
+  customerPoNumber?: string;
+  customerPoAttachment?: string;
+  dpPaid?: boolean;
+  dpAmount?: number;
   lines: SalesOrderLineInput[];
 }
 
@@ -46,6 +54,10 @@ export interface CreateSalesOrderInput {
   paymentStatus?: string;
   status?: string;
   warehouseId?: string;
+  customerPoNumber?: string;
+  customerPoAttachment?: string;
+  dpPaid?: boolean;
+  dpAmount?: number;
   lines?: SalesOrderLineInput[];
 }
 
@@ -267,6 +279,12 @@ export const salesApi = {
     return apiClient<SalesOrderItem>(`/sales/orders/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),
+    });
+  },
+
+  submitOrder: async (id: string): Promise<ApiResponse<SalesOrderItem>> => {
+    return apiClient<SalesOrderItem>(`/sales/orders/${id}/submit`, {
+      method: "POST",
     });
   },
 

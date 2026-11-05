@@ -19,6 +19,7 @@ import {
 import { inventoryApi, OpnameImportResult, OpnameItem, WarehouseItem } from "@/lib/api/inventory";
 import { downloadCsv } from "@/lib/utils/csv";
 import { parseCountSheet, RowError } from "@/lib/utils/opname-count-sheet";
+import { useConfirm } from "@/components/shared/confirm-modal";
 
 interface StockOpname {
   id: string;
@@ -31,6 +32,7 @@ interface StockOpname {
 }
 
 export default function StockOpnamePage() {
+  const confirm = useConfirm();
   const { canApprove } = useNavigationAccess();
   const mayApprove = canApprove("inventory");
   const [audits, setAudits] = React.useState<StockOpname[]>([]);
@@ -143,6 +145,7 @@ export default function StockOpnamePage() {
       if (rows.length === 0) {
         setImportReport({ applied: 0, errors: parseErrors.length ? parseErrors : [{ row: 0, sku: "", message: "Tidak ada baris dengan hasil hitung yang terisi." }] });
         return;
+  
       }
       const res = await inventoryApi.importOpnameCounts(activeOpname.id, rows);
       const result: OpnameImportResult = res.data;
@@ -164,8 +167,14 @@ export default function StockOpnamePage() {
   const handleFinalize = async () => {
     if (!activeOpname) return;
     const uncounted = activeOpname.lines.filter((l) => !l.counted).length;
-    if (uncounted > 0 && !confirm(`${uncounted} SKU belum dihitung. Tetap finalisasi audit ini?`)) {
-      return;
+    if (uncounted > 0) {
+      const ok = await confirm({
+        title: "Finalisasi Stock Opname",
+        message: `${uncounted} SKU belum dihitung. Tetap finalisasi audit ini?`,
+        variant: "warning",
+        confirmText: "Tetap Finalisasi",
+      });
+      if (!ok) return;
     }
     setIsFinalizing(true);
     setDetailError(null);

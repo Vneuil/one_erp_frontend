@@ -17,6 +17,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DataTable, Column } from "@/components/data-table/data-table";
 import { collaborationApi } from "@/lib/api/collaboration";
 import { useAppStore } from "@/stores/app-store";
+import { useConfirm } from "@/components/shared/confirm-modal";
 
 interface DriveFile {
   id: string;
@@ -45,6 +46,7 @@ const QUOTA_BYTES = 1024 * 1024 * 1024 * 1024;
 
 export default function CloudDrivePage() {
   const { currentUser } = useAppStore();
+  const confirm = useConfirm();
   const [files, setFiles] = React.useState<DriveFile[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
@@ -98,7 +100,15 @@ export default function CloudDrivePage() {
 
   const handleDeleteFolder = async () => {
     const id = folderIdByName[selectedFolder];
-    if (!id || !window.confirm(`Hapus folder "${selectedFolder}"? Folder harus kosong.`)) return;
+    if (!id) return;
+    const ok = await confirm({
+      title: "Hapus Folder",
+      message: `Hapus folder "${selectedFolder}"?`,
+      description: "Folder harus dalam keadaan kosong untuk dapat dihapus.",
+      variant: "destructive",
+      confirmText: "Hapus",
+    });
+    if (!ok) return;
     setNotice(null);
     try {
       await collaborationApi.deleteFolder(id);
@@ -114,7 +124,13 @@ export default function CloudDrivePage() {
   };
 
   const handleDeleteFile = async (row: DriveFile) => {
-    if (!window.confirm(`Hapus berkas "${row.name}"?`)) return;
+    const ok = await confirm({
+      title: "Hapus Berkas",
+      message: `Hapus berkas "${row.name}"?`,
+      variant: "destructive",
+      confirmText: "Hapus",
+    });
+    if (!ok) return;
     setNotice(null);
     try {
       await collaborationApi.deleteFile(row.id);
