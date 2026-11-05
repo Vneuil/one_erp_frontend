@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { aiApi, AiProviderInfo, AiSettings, McpToken } from "@/lib/api/ai";
 import { API_BASE_URL } from "@/lib/api/client";
+import { useConfirm } from "@/components/shared/confirm-modal";
 
 // Used until (or if) the server list loads, so the dropdown is never empty.
 const FALLBACK_PROVIDERS: AiProviderInfo[] = [
@@ -18,6 +19,7 @@ const FALLBACK_PROVIDERS: AiProviderInfo[] = [
 ];
 
 export default function AiSettingsPage() {
+  const confirm = useConfirm();
   const [settings, setSettings] = React.useState<AiSettings | null>(null);
   const [provider, setProvider] = React.useState(FALLBACK_PROVIDERS[0].id);
   const [model, setModel] = React.useState(FALLBACK_PROVIDERS[0].defaultModel);
@@ -70,7 +72,13 @@ export default function AiSettingsPage() {
   };
 
   const handleRevoke = async (t: McpToken) => {
-    if (!confirm(`Cabut token "${t.name}"? Aplikasi yang memakainya akan kehilangan akses.`)) return;
+    const ok = await confirm({
+      title: "Cabut Token AI",
+      message: `Cabut token "${t.name}"? Aplikasi yang memakainya akan kehilangan akses.`,
+      variant: "destructive",
+      confirmText: "Cabut Akses",
+    });
+    if (!ok) return;
     try {
       await aiApi.revokeMcpToken(t.id);
       loadTokens();

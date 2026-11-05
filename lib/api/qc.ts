@@ -118,6 +118,84 @@ export interface QCStats {
   passRate: number;
 }
 
+export interface PersonalHygieneCheckItem {
+  id: string;
+  checkDate: string;
+  shift: string;
+  line: string;
+  employeeName: string;
+  workWearClean: boolean;
+  hairNet: boolean;
+  nailsClean: boolean;
+  noJewelry: boolean;
+  workShoesClean: boolean;
+  handWashing: boolean;
+  healthFit: boolean;
+  isPassed: boolean;
+  actionTaken?: string;
+  inspectorName: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface CreateHygieneCheckInput {
+  checkDate: string;
+  shift: string;
+  line: string;
+  employeeName: string;
+  workWearClean: boolean;
+  hairNet: boolean;
+  nailsClean: boolean;
+  noJewelry: boolean;
+  workShoesClean: boolean;
+  handWashing: boolean;
+  healthFit: boolean;
+  isPassed?: boolean;
+  actionTaken?: string;
+  inspectorName?: string;
+  notes?: string;
+}
+
+export interface PreOpSanitationCheckItem {
+  id: string;
+  checkDate: string;
+  checkTime: string;
+  shift: string;
+  room: string;
+  floorClean: boolean;
+  wallCeilingClean: boolean;
+  equipmentSanitized: boolean;
+  trashBinClosed: boolean;
+  lightingProtected: boolean;
+  pestControlIntact: boolean;
+  gaussReading?: number;
+  metalTrapClean?: boolean;
+  status: "approved" | "hold" | "action_required";
+  notes?: string;
+  inspectorName: string;
+  supervisorName?: string;
+  createdAt: string;
+}
+
+export interface CreatePreOpCheckInput {
+  checkDate: string;
+  checkTime: string;
+  shift: string;
+  room: string;
+  floorClean: boolean;
+  wallCeilingClean: boolean;
+  equipmentSanitized: boolean;
+  trashBinClosed: boolean;
+  lightingProtected: boolean;
+  pestControlIntact: boolean;
+  gaussReading?: number;
+  metalTrapClean?: boolean;
+  status?: string;
+  notes?: string;
+  inspectorName?: string;
+  supervisorName?: string;
+}
+
 export const qcApi = {
   // Parameters
   listParameters: async (params?: { productId?: string; processCode?: string }): Promise<ApiResponse<QCParameterItem[]>> => {
@@ -170,5 +248,27 @@ export const qcApi = {
 
   getStats: async (): Promise<ApiResponse<QCStats>> => {
     return apiClient<QCStats>("/qc/stats");
+  },
+
+  // Personal Hygiene (CPH)
+  listHygieneChecks: async (params?: { date?: string; line?: string }): Promise<ApiResponse<PersonalHygieneCheckItem[]>> => {
+    return apiClient<PersonalHygieneCheckItem[]>("/qc/hygiene", { params });
+  },
+  createHygieneCheck: async (input: CreateHygieneCheckInput): Promise<ApiResponse<PersonalHygieneCheckItem>> => {
+    return apiClient<PersonalHygieneCheckItem>("/qc/hygiene", { method: "POST", body: JSON.stringify(input) });
+  },
+  deleteHygieneCheck: async (id: string): Promise<ApiResponse<{ id: string }>> => {
+    return apiClient<{ id: string }>(`/qc/hygiene/${id}`, { method: "DELETE" });
+  },
+
+  // Pre-Op Sanitation (SSO)
+  listPreOpChecks: async (params?: { date?: string; room?: string }): Promise<ApiResponse<PreOpSanitationCheckItem[]>> => {
+    return apiClient<PreOpSanitationCheckItem[]>("/qc/preop", { params });
+  },
+  createPreOpCheck: async (input: CreatePreOpCheckInput): Promise<ApiResponse<PreOpSanitationCheckItem>> => {
+    return apiClient<PreOpSanitationCheckItem>("/qc/preop", { method: "POST", body: JSON.stringify(input) });
+  },
+  deletePreOpCheck: async (id: string): Promise<ApiResponse<{ id: string }>> => {
+    return apiClient<{ id: string }>(`/qc/preop/${id}`, { method: "DELETE" });
   },
 };

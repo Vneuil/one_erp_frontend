@@ -24,6 +24,7 @@ import { productsApi, productCategoriesApi, unitsOfMeasureApi } from "@/lib/api/
 import { inventoryApi } from "@/lib/api/inventory";
 import { fetchAllPages } from "@/lib/api/pagination";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigationAccess } from "@/providers/navigation-access";
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -31,6 +32,7 @@ export default function ProductDetailPage() {
 }
 
 function ProductDetail() {
+  const { canViewPrices } = useNavigationAccess();
   const searchParams = useSearchParams();
   const params = useParams();
   const productId = params.id as string;
@@ -48,7 +50,9 @@ function ProductDetail() {
   const categoriesQuery = useQuery({ queryKey: ["product-categories"], queryFn: async () => (await productCategoriesApi.list()).data });
   const unitsQuery = useQuery({ queryKey: ["units-of-measure"], queryFn: async () => (await unitsOfMeasureApi.list()).data });
   const warehousesQuery = useQuery({ queryKey: ["warehouses"], queryFn: () => fetchAllPages(inventoryApi.listWarehouses) });
-  const [editFields, setEditFields] = React.useState<Partial<{ sku: string; barcode: string; category: string; unit: string }>>({});
+  const [editFields, setEditFields] = React.useState<Partial<{ sku: string; barcode: string; category: string; unit: string; grade: string; organicType: string }>>({});
+  const [editGrade, setEditGrade] = React.useState("");
+  const [editOrganicType, setEditOrganicType] = React.useState("Konvensional");
   const [bufferWarehouse, setBufferWarehouse] = React.useState("");
   const [bufferMin, setBufferMin] = React.useState("");
   const [bufferMax, setBufferMax] = React.useState("");
@@ -68,7 +72,7 @@ function ProductDetail() {
     finally { setBufferSaving(false); }
   };
   const product = productQuery.data;
-  const [isEditOpen, setIsEditOpen] = React.useState(searchParams.get("edit") === "true");
+  const [isEditOpen, setIsEditOpen] = React.useState(false);
   const [editName, setEditName] = React.useState<string | null>(null);
   const [editCostPrice, setEditCostPrice] = React.useState<string | null>(null);
   const [editSellingPrice, setEditSellingPrice] = React.useState<string | null>(null);
@@ -78,6 +82,8 @@ function ProductDetail() {
   const handleOpenEdit = React.useCallback(() => {
     if (!product) return;
     setEditFields({});
+    setEditGrade(product.grade || "");
+    setEditOrganicType(product.organicType || "Konvensional");
     setBufferWarehouse("");
     setBufferMessage("");
     setEditName(product.name);
@@ -98,7 +104,14 @@ function ProductDetail() {
     setIsSaving(true);
     setSaveError(null);
     try {
-      const response = await productsApi.update(productId, { name: (editName ?? product?.name ?? "").trim(), costPrice, sellingPrice, ...editFields });
+      const response = await productsApi.update(productId, {
+        name: (editName ?? product?.name ?? "").trim(),
+        costPrice,
+        sellingPrice,
+        grade: editGrade || undefined,
+        organicType: editOrganicType || undefined,
+        ...editFields,
+      });
       queryClient.setQueryData(["product", productId], response.data);
       setIsEditOpen(false);
     } catch (err) {
@@ -123,7 +136,7 @@ function ProductDetail() {
 
       <PageHeader
         title={product.name}
-        description={`SKU: ${product.sku} • Barcode: ${product.barcode || "—"} • Category: ${product.category} • UoM: ${product.unit}`}
+        description={`SKU: ${product.sku} • Barcode: ${product.barcode || "—"} • Category: ${product.category} • UoM: ${product.unit}${product.grade ? ` • Grade: ${product.grade}` : ""}${product.organicType ? ` • Organik: ${product.organicType}` : ""}`}
       >
         <StatusBadge status={product.status} />
         <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs" onClick={handleOpenEdit}>
@@ -145,7 +158,11 @@ function ProductDetail() {
           <CardContent className="p-4">
             <span className="text-xs text-muted-foreground font-semibold uppercase">Cost Price</span>
             <p className="text-xl font-bold text-foreground mt-1">
-              <MoneyDisplay amount={product.costPrice} />
+              {canViewPrices("products") ? (
+                <MoneyDisplay amount={product.costPrice} />
+              ) : (
+                <span className="text-sm font-mono text-muted-foreground italic">*** (Rahasia)</span>
+              )}
             </p>
           </CardContent>
         </Card>
@@ -153,7 +170,11 @@ function ProductDetail() {
           <CardContent className="p-4">
             <span className="text-xs text-muted-foreground font-semibold uppercase">Selling Price</span>
             <p className="text-xl font-bold text-brand-primary mt-1">
-              <MoneyDisplay amount={product.sellingPrice} highlight />
+              {canViewPrices("products") ? (
+                <MoneyDisplay amount={product.sellingPrice} highlight />
+              ) : (
+                <span className="text-sm font-mono text-muted-foreground italic">*** (Rahasia)</span>
+              )}
             </p>
           </CardContent>
         </Card>
@@ -161,7 +182,7 @@ function ProductDetail() {
           <CardContent className="p-4">
             <span className="text-xs text-muted-foreground font-semibold uppercase">Safety Stock</span>
             <p className="text-xl font-bold text-foreground mt-1">
-              {stockQuery.isError ? "Tidak tersedia" : stockQuery.isPending ? "Memuat..." : stockQuery.data.length ? `${formatNumber(stockQuery.data.reduce((sum, item) => sum + item.minStock, 0))} ${product.unit}` : "Belum diatur"}
+              {product.safetyStock ? `${formatNumber(product.safetyStock)} ${product.unit}` : stockQuery.isError ? "Tidak tersedia" : stockQuery.isPending ? "Memuat..." : stockQuery.data.length ? `${formatNumber(stockQuery.data.reduce((sum, item) => sum + item.minStock, 0))} ${product.unit}` : "Belum diatur"}
             </p>
           </CardContent>
         </Card>
@@ -278,17 +299,41 @@ function ProductDetail() {
                 </select>
               </label>
             </div>
-            {(categoriesQuery.isError || unitsQuery.isError) && <p role="alert" className="text-sm text-rose-700">Gagal memuat category atau UoM. <Button type="button" variant="outline" onClick={() => { void categoriesQuery.refetch(); void unitsQuery.refetch(); }}>Retry</Button></p>}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-foreground">Cost Price</label>
-                <Input type="number" min="0" step="0.01" value={editCostPrice ?? String(product.costPrice)} onChange={(e) => setEditCostPrice(e.target.value)} required />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-foreground">Selling Price</label>
-                <Input type="number" min="0" step="0.01" value={editSellingPrice ?? String(product.sellingPrice)} onChange={(e) => setEditSellingPrice(e.target.value)} required />
-              </div>
+              <label className="text-xs font-medium">Grade Gula Kelapa
+                <select className="h-10 w-full rounded-lg border px-3" value={editGrade} onChange={e => setEditGrade(e.target.value)}>
+                  <option value="">Tanpa Grade</option>
+                  <option value="A">Grade A (Super/Premium)</option>
+                  <option value="B">Grade B (Standar)</option>
+                  <option value="C">Grade C (Off-grade/Lokal)</option>
+                  <option value="Reject">Reject / Rework</option>
+                </select>
+              </label>
+              <label className="text-xs font-medium">Kategori Sertifikasi Organik
+                <select className="h-10 w-full rounded-lg border px-3" value={editOrganicType} onChange={e => setEditOrganicType(e.target.value)}>
+                  <option value="Konvensional">Konvensional</option>
+                  <option value="Organic">Organic</option>
+                  <option value="EU Organic">EU Organic</option>
+                  <option value="USDA Organic">USDA Organic</option>
+                  <option value="Fair Trade">Fair Trade</option>
+                </select>
+              </label>
             </div>
+            {(categoriesQuery.isError || unitsQuery.isError) && <p role="alert" className="text-sm text-rose-700">Gagal memuat category atau UoM. <Button type="button" variant="outline" onClick={() => { void categoriesQuery.refetch(); void unitsQuery.refetch(); }}>Retry</Button></p>}
+            {canViewPrices("products") ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">Cost Price</label>
+                  <Input type="number" min="0" step="0.01" value={editCostPrice ?? String(product.costPrice)} onChange={(e) => setEditCostPrice(e.target.value)} required />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">Selling Price</label>
+                  <Input type="number" min="0" step="0.01" value={editSellingPrice ?? String(product.sellingPrice)} onChange={(e) => setEditSellingPrice(e.target.value)} required />
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">Informasi harga dirahasiakan untuk role Anda.</p>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" disabled={isSaving || bufferSaving} onClick={() => setIsEditOpen(false)}>
                 Cancel

@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { MoneyDisplay } from "@/components/shared/money-display";
 import { financeApi, AccountItem, CashVoucherItem } from "@/lib/api/finance";
+import { usePrompt } from "@/components/shared/confirm-modal";
 
 type Filter = "all" | "receipt" | "payment";
 interface DraftLine { accountCode: string; description: string; amount: number }
@@ -18,6 +19,7 @@ const isCashCode = (code: string) => /^10\d\d$/.test(code);
 const emptyLine = (): DraftLine => ({ accountCode: "", description: "", amount: 0 });
 
 export default function CashVouchersPage() {
+  const prompt = usePrompt();
   const [vouchers, setVouchers] = React.useState<CashVoucherItem[]>([]);
   const [accounts, setAccounts] = React.useState<AccountItem[]>([]);
   const [filter, setFilter] = React.useState<Filter>("all");
@@ -81,7 +83,16 @@ export default function CashVouchersPage() {
   };
 
   const voidVoucher = async (v: CashVoucherItem) => {
-    const reason = window.prompt(`Alasan membatalkan ${v.number}? Jurnalnya akan dibalik dengan jurnal baru bertanggal hari ini (voucher tetap tercatat). Untuk mengoreksi, batalkan lalu catat voucher yang benar.`, "");
+    const reason = await prompt({
+      title: "Batalkan Kas Masuk / Keluar",
+      message: `Alasan membatalkan ${v.number}? Jurnalnya akan dibalik dengan jurnal baru bertanggal hari ini (voucher tetap tercatat). Untuk mengoreksi, batalkan lalu catat voucher yang benar.`,
+      placeholder: "Tuliskan alasan pembatalan...",
+      confirmText: "Batalkan Voucher",
+      cancelText: "Kembali",
+      variant: "destructive",
+      inputType: "textarea",
+      required: true,
+    });
     if (reason === null) return;
     if (!reason.trim()) {
       setError("Alasan pembatalan wajib diisi.");

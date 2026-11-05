@@ -6,20 +6,24 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { MoneyDisplay } from "@/components/shared/money-display";
 import { approvalApi, ApprovalRequest } from "@/lib/api/approval";
+import { useConfirm, useAlert, usePrompt } from "@/components/shared/confirm-modal";
 
 const DOCUMENT_TYPE_LABELS: Record<string, string> = {
+  purchase_request: "Permintaan Pembelian",
   purchase_order: "Pesanan Pembelian",
   sales_order: "Pesanan Penjualan",
 };
 
 export default function ApprovalCenterPage() {
+  const confirm = useConfirm();
+  const alert = useAlert();
+  const prompt = usePrompt();
   const [requests, setRequests] = React.useState<ApprovalRequest[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [actingId, setActingId] = React.useState<string | null>(null);
 
   const loadRequests = React.useCallback(() => {
-    setIsLoading(true);
     approvalApi
       .listMyPendingApprovals()
       .then((res) => setRequests(res.data || []))
@@ -35,25 +39,53 @@ export default function ApprovalCenterPage() {
   }, [loadRequests]);
 
   const handleApprove = async (req: ApprovalRequest) => {
+    const docLabel = DOCUMENT_TYPE_LABELS[req.documentType] || req.documentType;
+    const ok = await confirm({
+      title: "Setujui Dokumen",
+      message: `Setujui ${docLabel} "${req.documentNumber}"?`,
+      confirmText: "Setujui",
+      variant: "default",
+    });
+    if (!ok) return;
+
     setActingId(req.id);
     try {
       await approvalApi.approveStep(req.id);
       loadRequests();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Gagal menyetujui dokumen.");
+      await alert({
+        title: "Gagal Menyetujui Dokumen",
+        message: err instanceof Error ? err.message : "Gagal menyetujui dokumen.",
+        variant: "destructive",
+      });
     } finally {
       setActingId(null);
     }
   };
 
   const handleReject = async (req: ApprovalRequest) => {
-    const comments = prompt("Alasan penolakan (opsional):") || "";
+    const docLabel = DOCUMENT_TYPE_LABELS[req.documentType] || req.documentType;
+    const comments = await prompt({
+      title: "Tolak Dokumen",
+      message: `Masukkan alasan penolakan ${docLabel} "${req.documentNumber}":`,
+      placeholder: "Tuliskan alasan penolakan (opsional)...",
+      confirmText: "Tolak",
+      cancelText: "Batal",
+      variant: "destructive",
+      inputType: "textarea",
+    });
+    if (comments === null) return;
+
     setActingId(req.id);
     try {
-      await approvalApi.rejectStep(req.id, comments);
+      await approvalApi.rejectStep(req.id, comments.trim());
       loadRequests();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Gagal menolak dokumen.");
+      await alert({
+        title: "Gagal Menolak Dokumen",
+        message: err instanceof Error ? err.message : "Gagal menolak dokumen.",
+        variant: "destructive",
+      });
     } finally {
       setActingId(null);
     }

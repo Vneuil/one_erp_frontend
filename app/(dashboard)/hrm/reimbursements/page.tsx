@@ -28,6 +28,7 @@ import {
 } from "@/lib/api/reimbursement";
 import { hrmApi, EmployeeItem } from "@/lib/api/hrm";
 import { hropsApi, EvidenceItem } from "@/lib/api/hrops";
+import { useConfirm } from "@/components/shared/confirm-modal";
 
 interface ReimbursementItem {
   id: string;
@@ -69,6 +70,7 @@ const mapClaim = (c: ApiReimbursementClaim): ReimbursementItem => ({
 });
 
 export default function ReimbursementsPage() {
+  const confirm = useConfirm();
   const { canApprove } = useNavigationAccess();
   const mayApprove = canApprove("hrm");
   const isOwn = useIsOwnDocument();
@@ -151,7 +153,15 @@ export default function ReimbursementsPage() {
     confirmText?: string
   ) => {
     if (actioningId) return;
-    if (confirmText && !window.confirm(confirmText)) return;
+    if (confirmText) {
+      const ok = await confirm({
+        title: "Konfirmasi Klaim",
+        message: confirmText,
+        variant: /(tolak|reject)/i.test(confirmText) ? "destructive" : "default",
+        confirmText: /(tolak|reject)/i.test(confirmText) ? "Tolak" : "Lanjutkan",
+      });
+      if (!ok) return;
+    }
     setActioningId(id);
     setNotice(null);
     try {

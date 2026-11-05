@@ -17,6 +17,9 @@ import {
   TrendingUp,
   Check,
   X,
+  Eye,
+  Edit,
+  Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -64,6 +67,10 @@ interface SalesOrder {
   deliveryDate: string;
   shippingCourier?: string;
   trackingNumber?: string;
+  customerPoNumber?: string;
+  customerPoAttachment?: string;
+  dpPaid?: boolean;
+  dpAmount?: number;
   totalAmount: number;
   paymentTerms: string;
   status: string;
@@ -82,12 +89,21 @@ import { marketplaceApi } from "@/lib/api/marketplace";
 import { productsApi, ProductItem } from "@/lib/api/products";
 import { inventoryApi, WarehouseItem, StockLevelItem } from "@/lib/api/inventory";
 import { customersApi, CustomerItem } from "@/lib/api/customers";
+import { useConfirm, useAlert, usePrompt } from "@/components/shared/confirm-modal";
+import { useAppStore } from "@/stores/app-store";
+import { approvalApi, ApprovalRequest } from "@/lib/api/approval";
+import { ApprovalTimeline, canUserApprove } from "@/components/shared/approval-timeline";
 
 export default function SalesOrdersPage() {
-  const { canApprove } = useNavigationAccess();
+  const { canApprove, canViewPrices } = useNavigationAccess();
   const mayApprove = canApprove("sales");
   const isOwn = useIsOwnDocument();
+  const currentUser = useAppStore((s) => s.currentUser);
+  const confirm = useConfirm();
+  const alert = useAlert();
+  const prompt = usePrompt();
   const [orders, setOrders] = React.useState<SalesOrder[]>([]);
+  const [activeApprovals, setActiveApprovals] = React.useState<Record<string, ApprovalRequest>>({});
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [selectedChannel, setSelectedChannel] = React.useState<string>("all");
   const [selectedOrder, setSelectedOrder] = React.useState<SalesOrder | null>(null);
@@ -95,6 +111,10 @@ export default function SalesOrdersPage() {
   const [syncSuccessMessage, setSyncSuccessMessage] = React.useState<string | null>(null);
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
   const [newCustomerId, setNewCustomerId] = React.useState("");
+  const [customerPoNumber, setCustomerPoNumber] = React.useState("");
+  const [customerPoAttachment, setCustomerPoAttachment] = React.useState("");
+  const [dpPaid, setDpPaid] = React.useState(false);
+  const [dpAmount, setDpAmount] = React.useState("0");
   const [customers, setCustomers] = React.useState<CustomerItem[]>([]);
   const [customersLoading, setCustomersLoading] = React.useState(false);
   const [customersError, setCustomersError] = React.useState(false);
@@ -219,14 +239,18 @@ export default function SalesOrdersPage() {
   );
   const newTotalAmount = subtotalAmount - discountAmount + ppnAmount;
 
-  const handleAddLine = () => {
+  const handleAddLine = async () => {
     if (!lineProductId) return;
     const product = warehouseProducts.find((p) => p.id === lineProductId);
     if (!product || stockLoading || stockError) return;
     const qty = Number(lineQty);
     const existingQty = orderLines.find((line) => line.productId === lineProductId)?.quantity || 0;
     if (!Number.isInteger(qty) || qty < 1 || existingQty + qty > product.stock) {
-      alert("Jumlah pesanan melebihi stok tersedia di gudang atau jumlah tidak valid.");
+      await alert({
+        title: "Stok Tidak Cukup",
+        message: "Jumlah pesanan melebihi stok tersedia di gudang atau jumlah tidak valid.",
+        variant: "warning",
+      });
       return;
     }
     setOrderLines((prev) => {
@@ -322,6 +346,10 @@ export default function SalesOrdersPage() {
             customerName: o.customerName,
             orderDate: o.orderDate || "2026-09-02",
             deliveryDate: "2026-09-05",
+            customerPoNumber: o.customerPoNumber,
+            customerPoAttachment: o.customerPoAttachment,
+            dpPaid: o.dpPaid,
+            dpAmount: o.dpAmount,
             totalAmount: o.totalAmount,
             paymentTerms: o.paymentStatus || "Paid",
             status: o.status.toLowerCase(),
@@ -350,35 +378,106 @@ export default function SalesOrdersPage() {
       });
   }, [products]);
 
+  const fetchApprovals = React.useCallback(() => {
+    approvalApi
+      .listRequests({ documentType: "sales_order", perPage: 100 })
+      .then((res) => {
+        const map: Record<string, ApprovalRequest> = {};
+        (res.data || []).forEach((r) => {
+          if (r.documentId && (!map[r.documentId] || r.status === "pending")) {
+            map[r.documentId] = r;
+          }
+        });
+        setActiveApprovals(map);
+      })
+      .catch((err) => console.warn("Failed to load approval requests for SOs", err));
+  }, []);
+
   React.useEffect(() => {
     fetchOrders();
-  }, [fetchOrders]);
+    fetchApprovals();
+  }, [fetchOrders, fetchApprovals]);
+
+  const handleSendForApproval = async (so: SalesOrder) => {
+    const ok = await confirm({
+      title: "Kirim untuk Approval",
+      message: `Kirim Sales Order "${so.orderNumber}" untuk diajukan ke atasan sesuai hirarki approval?`,
+      confirmText: "Kirim Sekarang",
+      cancelText: "Batal",
+      variant: "default",
+    });
+    if (!ok) return;
+
+    setActingId(so.id);
+    try {
+      await salesApi.submitOrder(so.id);
+      fetchOrders();
+      fetchApprovals();
+      if (selectedOrder && selectedOrder.id === so.id) {
+        setSelectedOrder((prev) => (prev ? { ...prev, status: "pending_approval" } : null));
+      }
+    } catch (err) {
+      await alert({
+        title: "Gagal Mengirim SO",
+        message: err instanceof Error ? err.message : "Gagal mengirim Sales Order.",
+        variant: "destructive",
+      });
+    } finally {
+      setActingId(null);
+    }
+  };
 
   // Sales Orders routed through an admin-configured approval workflow (see
   // Approval Workflow settings) land in "pending_approval" - approving or
   // rejecting here mirrors Purchase Orders' same flow.
   const handleApproveOrder = async (so: SalesOrder) => {
+    const ok = await confirm({
+      title: "Setujui Sales Order",
+      message: `Setujui Sales Order "${so.orderNumber}"?`,
+      confirmText: "Setujui",
+      variant: "default",
+    });
+    if (!ok) return;
+
     setActingId(so.id);
     try {
       await salesApi.approveOrder(so.id);
       fetchOrders();
       setSelectedOrder(null);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Gagal menyetujui Sales Order.");
+      await alert({
+        title: "Gagal Menyetujui SO",
+        message: err instanceof Error ? err.message : "Gagal menyetujui Sales Order.",
+        variant: "destructive",
+      });
     } finally {
       setActingId(null);
     }
   };
 
   const handleRejectOrder = async (so: SalesOrder) => {
-    const comments = prompt("Alasan penolakan (opsional):") || "";
+    const comments = await prompt({
+      title: "Tolak Sales Order",
+      message: `Masukkan alasan penolakan Sales Order "${so.orderNumber}":`,
+      placeholder: "Tuliskan alasan penolakan (opsional)...",
+      confirmText: "Tolak SO",
+      cancelText: "Batal",
+      variant: "destructive",
+      inputType: "textarea",
+    });
+    if (comments === null) return;
+
     setActingId(so.id);
     try {
-      await salesApi.rejectOrder(so.id, comments);
+      await salesApi.rejectOrder(so.id, comments.trim());
       fetchOrders();
       setSelectedOrder(null);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Gagal menolak Sales Order.");
+      await alert({
+        title: "Gagal Menolak SO",
+        message: err instanceof Error ? err.message : "Gagal menolak Sales Order.",
+        variant: "destructive",
+      });
     } finally {
       setActingId(null);
     }
@@ -457,11 +556,21 @@ export default function SalesOrdersPage() {
       const product = warehouseProducts.find((item) => item.id === line.productId);
       return !product || line.quantity > product.stock;
     })) {
-      alert("Periksa produk dan stok tersedia di gudang yang dipilih.");
+      await alert({
+        title: "Periksa Stok",
+        message: "Periksa produk dan stok tersedia di gudang yang dipilih.",
+        variant: "warning",
+      });
       return;
     }
     if (customersLoading || customersError || !customer || orderLines.length === 0) {
-      if (orderLines.length === 0) alert("Tambahkan minimal 1 item barang ke pesanan.");
+      if (orderLines.length === 0) {
+        await alert({
+          title: "Item Kosong",
+          message: "Tambahkan minimal 1 item barang ke pesanan.",
+          variant: "warning",
+        });
+      }
       return;
     }
 
@@ -483,6 +592,11 @@ export default function SalesOrdersPage() {
         customerName: customer.name,
         totalAmount: newTotalAmount,
         warehouseId: newWarehouseId || undefined,
+        customerPoNumber: customerPoNumber || undefined,
+        customerPoAttachment: customerPoAttachment || undefined,
+        dpPaid,
+        dpAmount: Number(dpAmount) || 0,
+        status: "draft",
         lines: orderLines,
       });
       const o = res.data;
@@ -497,7 +611,11 @@ export default function SalesOrdersPage() {
           deliveryDate: newDeliveryDate || orderDate.slice(0, 10),
           totalAmount: o.totalAmount,
           paymentTerms: o.paymentStatus || "Pending",
-          status: o.status?.toLowerCase() || "processing",
+          status: "draft",
+          customerPoNumber: o.customerPoNumber || customerPoNumber,
+          customerPoAttachment: o.customerPoAttachment || customerPoAttachment,
+          dpPaid: o.dpPaid ?? dpPaid,
+          dpAmount: o.dpAmount ?? Number(dpAmount),
           editable: true,
           items: itemsForDisplay,
         },
@@ -506,7 +624,11 @@ export default function SalesOrdersPage() {
       loadCatalog();
     } catch (err) {
       console.warn("Failed to create sales order via API", err);
-      alert("Gagal membuat pesanan (kemungkinan stok tidak cukup di gudang terpilih). Coba lagi.");
+      await alert({
+        title: "Gagal Membuat Pesanan",
+        message: "Gagal membuat pesanan (kemungkinan stok tidak cukup di gudang terpilih). Coba lagi.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -588,6 +710,11 @@ export default function SalesOrdersPage() {
       render: (so) => (
         <div>
           <span className="text-xs font-semibold text-foreground block">{so.customerName}</span>
+          {so.customerPoNumber && (
+            <span className="inline-block px-1.5 py-0.2 rounded bg-blue-50 text-brand-primary text-[10px] font-mono border border-blue-200 mt-0.5">
+              PO Pembeli: {so.customerPoNumber}
+            </span>
+          )}
           {so.shippingCourier && (
             <span className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
               <Truck className="h-3 w-3" /> {so.shippingCourier}
@@ -607,7 +734,12 @@ export default function SalesOrdersPage() {
       header: "Total Amount",
       align: "right",
       sortable: true,
-      render: (so) => <MoneyDisplay amount={so.totalAmount} highlight className="text-xs font-bold" />,
+      render: (so) => {
+        if (!canViewPrices("sales")) {
+          return <span className="text-xs font-mono text-muted-foreground italic">*** (Rahasia)</span>;
+        }
+        return <MoneyDisplay amount={so.totalAmount} highlight className="text-xs font-bold" />;
+      },
     },
     {
       key: "paymentTerms",
@@ -618,37 +750,101 @@ export default function SalesOrdersPage() {
     },
     {
       key: "status",
-      header: "Status",
-      render: (so) => <StatusBadge status={so.status} />,
+      header: "Status & DP 50%",
+      render: (so) => (
+        <div className="flex flex-col gap-1 items-start">
+          <StatusBadge status={so.status} />
+          {so.dpPaid ? (
+            <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[9px] font-bold border border-emerald-300">
+              DP 50% Lunas (Siap Produksi)
+            </span>
+          ) : (
+            <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-bold border border-amber-300">
+              Gating: Belum DP 50%
+            </span>
+          )}
+        </div>
+      ),
     },
     {
       key: "id",
       header: "Aksi",
-      render: (so) =>
-        so.status === "pending_approval" && mayApprove && !isOwn(so.createdByEmail) ? (
-          <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+      align: "right",
+      render: (so) => {
+        const isDraft = so.status === "draft";
+        const isPending = so.status === "pending_approval";
+        const canAct =
+          isPending &&
+          mayApprove &&
+          !isOwn(so.createdByEmail) &&
+          canUserApprove(
+            currentUser?.role,
+            currentUser?.email,
+            so.createdByEmail,
+            activeApprovals[so.id],
+            so.status
+          );
+
+        return (
+          <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
             <Button
-              size="sm"
-              variant="outline"
-              disabled={actingId === so.id}
-              onClick={() => handleRejectOrder(so)}
-              className="h-7 gap-1 text-[11px] font-bold border-rose-300 text-rose-700 hover:bg-rose-50"
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7 text-muted-foreground hover:text-brand-primary"
+              title="Lihat Detail & Timeline"
+              onClick={() => setSelectedOrder(so)}
             >
-              <X className="h-3 w-3" /> Tolak
+              <Eye className="h-4 w-4" />
             </Button>
-            <Button
-              size="sm"
-              variant="gradient"
-              disabled={actingId === so.id}
-              onClick={() => handleApproveOrder(so)}
-              className="h-7 gap-1 text-[11px] font-bold"
-            >
-              <Check className="h-3 w-3" /> Setujui
-            </Button>
+
+            {isDraft && so.editable && (
+              <>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  title="Edit Draft SO"
+                  onClick={() => handleOpenEditOrder(so)}
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1 text-[11px] font-semibold text-brand-primary border-brand-primary/30 hover:bg-brand-tint"
+                  title="Kirim untuk Approval Atasan"
+                  onClick={() => handleSendForApproval(so)}
+                >
+                  <Send className="h-3 w-3" /> Kirim
+                </Button>
+              </>
+            )}
+
+            {canAct && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={actingId === so.id}
+                  onClick={() => handleRejectOrder(so)}
+                  className="h-7 gap-1 text-[11px] font-bold border-rose-300 text-rose-700 hover:bg-rose-50"
+                >
+                  <X className="h-3 w-3" /> Tolak
+                </Button>
+                <Button
+                  size="sm"
+                  variant="gradient"
+                  disabled={actingId === so.id}
+                  onClick={() => handleApproveOrder(so)}
+                  className="h-7 gap-1 text-[11px] font-bold"
+                >
+                  <Check className="h-3 w-3" /> Setujui
+                </Button>
+              </>
+            )}
           </div>
-        ) : (
-          <span className="text-[11px] text-muted-foreground">-</span>
-        ),
+        );
+      },
     },
   ];
 
@@ -972,20 +1168,81 @@ export default function SalesOrdersPage() {
                   />
                 </div>
               </div>
+              {/* Interactive Timeline & Hierarchy Status */}
+              <ApprovalTimeline
+                documentType="sales_order"
+                documentId={selectedOrder.id}
+                creatorName={selectedOrder.createdByEmail}
+                createdAt={selectedOrder.orderDate}
+                currentStatus={selectedOrder.status}
+              />
+
               {readyToShipError && <div role="alert" className="text-xs text-rose-700">{readyToShipError}</div>}
-              {(selectedOrder.editable || selectedOrder.source === "marketplace") && (
-                <DialogFooter>
-                  {selectedOrder.editable && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleOpenEditOrder(selectedOrder)}
-                    >
-                      Edit Sales Order
-                    </Button>
+              
+              <DialogFooter className="flex flex-wrap items-center justify-between gap-2 sm:justify-between">
+                <Button type="button" variant="outline" size="sm" onClick={() => setSelectedOrder(null)}>
+                  Tutup
+                </Button>
+
+                <div className="flex items-center gap-2">
+                  {/* Draft Actions */}
+                  {selectedOrder.status === "draft" && selectedOrder.editable && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenEditOrder(selectedOrder)}
+                      >
+                        Edit Sales Order
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="gradient"
+                        size="sm"
+                        onClick={() => handleSendForApproval(selectedOrder)}
+                      >
+                        Kirim untuk Approval
+                      </Button>
+                    </>
                   )}
-                  {selectedOrder.editable && (
+
+                  {/* Approval Actions in Detail */}
+                  {selectedOrder.status === "pending_approval" &&
+                    mayApprove &&
+                    !isOwn(selectedOrder.createdByEmail) &&
+                    canUserApprove(
+                      currentUser?.role,
+                      currentUser?.email,
+                      selectedOrder.createdByEmail,
+                      activeApprovals[selectedOrder.id],
+                      selectedOrder.status
+                    ) && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={actingId === selectedOrder.id}
+                          className="border-rose-300 text-rose-700 hover:bg-rose-50 font-bold"
+                          onClick={() => handleRejectOrder(selectedOrder)}
+                        >
+                          <X className="h-3.5 w-3.5 mr-1" /> Tolak
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="gradient"
+                          size="sm"
+                          disabled={actingId === selectedOrder.id}
+                          className="font-bold"
+                          onClick={() => handleApproveOrder(selectedOrder)}
+                        >
+                          <Check className="h-3.5 w-3.5 mr-1" /> Setujui
+                        </Button>
+                      </>
+                    )}
+
+                  {selectedOrder.status !== "draft" && selectedOrder.editable && (
                     <Button
                       type="button"
                       variant="outline"
@@ -1006,8 +1263,8 @@ export default function SalesOrdersPage() {
                       {isMarkingReadyToShip === selectedOrder.id ? "Memproses..." : "Mark Ready to Ship (Pickup)"}
                     </Button>
                   )}
-                </DialogFooter>
-              )}
+                </div>
+              </DialogFooter>
             </div>
           </DialogContent>
         )}

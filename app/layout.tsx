@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { ConfirmModalProvider } from "@/components/shared/confirm-modal";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -23,7 +24,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.className}>
       <body className="min-h-screen bg-white antialiased selection:bg-brand-tint selection:text-brand-indigo">
-        {children}
+        <ConfirmModalProvider>
+          {children}
+        </ConfirmModalProvider>
       </body>
     </html>
   );

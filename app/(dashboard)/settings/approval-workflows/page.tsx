@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Trash2, Workflow as WorkflowIcon, GitBranch } from "lucide-react";
+import { Plus, Trash2, Pencil, Workflow as WorkflowIcon, GitBranch, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,21 +15,27 @@ import {
 import { PageHeader } from "@/components/shared/page-header";
 import { MoneyDisplay } from "@/components/shared/money-display";
 import { approvalApi, Workflow, WorkflowLevel } from "@/lib/api/approval";
+import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
 
 const DOCUMENT_TYPES = [
-  { value: "purchase_order", label: "Pesanan Pembelian (Purchase Order)" },
-  { value: "sales_order", label: "Pesanan Penjualan (Sales Order)" },
+  { value: "purchase_request", label: "Permintaan Pembelian (Purchase Request / PR)" },
+  { value: "purchase_order", label: "Pesanan Pembelian (Purchase Order / PO)" },
+  { value: "sales_order", label: "Pesanan Penjualan (Sales Order / SO)" },
 ];
 
 export default function ApprovalWorkflowsPage() {
+  const confirm = useConfirm();
+  const alert = useAlert();
   const [workflows, setWorkflows] = React.useState<Workflow[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
 
-  const [isCreateOpen, setIsCreateOpen] = React.useState(false);
+  const [isModalOpen, setIsModalOpen] = React.useState(false);
+  const [editingWorkflow, setEditingWorkflow] = React.useState<Workflow | null>(null);
   const [documentType, setDocumentType] = React.useState(DOCUMENT_TYPES[0].value);
   const [name, setName] = React.useState("");
   const [minAmount, setMinAmount] = React.useState(0);
+  const [isActive, setIsActive] = React.useState(true);
   const [levels, setLevels] = React.useState<WorkflowLevel[]>([{ levelOrder: 1, approverRole: "manager" }]);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -50,6 +56,32 @@ export default function ApprovalWorkflowsPage() {
     loadWorkflows();
   }, [loadWorkflows]);
 
+  const openCreate = () => {
+    setEditingWorkflow(null);
+    setDocumentType(DOCUMENT_TYPES[0].value);
+    setName("");
+    setMinAmount(0);
+    setIsActive(true);
+    setLevels([{ levelOrder: 1, approverRole: "manager" }]);
+    setFormError(null);
+    setIsModalOpen(true);
+  };
+
+  const openEdit = (w: Workflow) => {
+    setEditingWorkflow(w);
+    setDocumentType(w.documentType);
+    setName(w.name);
+    setMinAmount(w.minAmount);
+    setIsActive(w.isActive ?? true);
+    setLevels(
+      w.levels && w.levels.length > 0
+        ? w.levels.map((l, i) => ({ levelOrder: i + 1, approverRole: l.approverRole }))
+        : [{ levelOrder: 1, approverRole: "manager" }]
+    );
+    setFormError(null);
+    setIsModalOpen(true);
+  };
+
   const addLevel = () => {
     setLevels((prev) => [...prev, { levelOrder: prev.length + 1, approverRole: "manager" }]);
   };
@@ -62,32 +94,59 @@ export default function ApprovalWorkflowsPage() {
     setLevels((prev) => prev.map((l, i) => (i === idx ? { ...l, approverRole: role } : l)));
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || levels.length === 0) return;
     setIsSubmitting(true);
     setFormError(null);
     try {
-      await approvalApi.createWorkflow({ documentType, name: name.trim(), minAmount, levels });
-      setIsCreateOpen(false);
+      if (editingWorkflow) {
+        await approvalApi.updateWorkflow(editingWorkflow.id, {
+          documentType,
+          name: name.trim(),
+          minAmount,
+          isActive,
+          levels,
+        });
+      } else {
+        await approvalApi.createWorkflow({
+          documentType,
+          name: name.trim(),
+          minAmount,
+          levels,
+        });
+      }
+      setIsModalOpen(false);
+      setEditingWorkflow(null);
       setName("");
       setMinAmount(0);
+      setIsActive(true);
       setLevels([{ levelOrder: 1, approverRole: "manager" }]);
       loadWorkflows();
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Gagal membuat approval workflow.");
+      setFormError(err instanceof Error ? err.message : "Gagal menyimpan approval workflow.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDelete = async (w: Workflow) => {
-    if (!confirm(`Hapus workflow "${w.name}"?`)) return;
+    const ok = await confirm({
+      title: "Hapus Workflow",
+      message: `Hapus workflow "${w.name}"?`,
+      variant: "destructive",
+      confirmText: "Hapus",
+    });
+    if (!ok) return;
     try {
       await approvalApi.deleteWorkflow(w.id);
       loadWorkflows();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Gagal menghapus workflow.");
+      await alert({
+        title: "Gagal Menghapus Workflow",
+        message: err instanceof Error ? err.message : "Gagal menghapus workflow.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -99,7 +158,7 @@ export default function ApprovalWorkflowsPage() {
         title="Approval Workflow (Persetujuan Berjenjang)"
         description="Atur aturan approval dinamis: dokumen jenis apa, di atas nilai berapa, perlu disetujui role apa saja secara berurutan."
       >
-        <Button variant="gradient" size="sm" className="h-9 gap-1.5 text-xs font-semibold" onClick={() => setIsCreateOpen(true)}>
+        <Button variant="gradient" size="sm" className="h-9 gap-1.5 text-xs font-semibold" onClick={openCreate}>
           <Plus className="h-3.5 w-3.5" /> Buat Workflow Baru
         </Button>
       </PageHeader>
@@ -120,16 +179,42 @@ export default function ApprovalWorkflowsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {workflows.map((w) => (
-            <Card key={w.id} className="border-border shadow-2xs">
+            <Card key={w.id} className="border-border shadow-2xs hover:shadow-xs transition-shadow">
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="text-sm font-bold text-foreground">{w.name}</h3>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-foreground">{w.name}</h3>
+                      {w.isActive === false ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                          <XCircle className="h-2.5 w-2.5 text-slate-500" /> Nonaktif
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600" /> Aktif
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[11px] text-muted-foreground">{documentTypeLabel(w.documentType)}</p>
                   </div>
-                  <button onClick={() => handleDelete(w)} className="text-muted-foreground hover:text-rose-600 cursor-pointer">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => openEdit(w)}
+                      className="p-1.5 rounded-md text-muted-foreground hover:text-brand-primary hover:bg-slate-100 transition-colors cursor-pointer"
+                      title="Edit Workflow"
+                      aria-label="Edit Workflow"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(w)}
+                      className="p-1.5 rounded-md text-muted-foreground hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                      title="Hapus Workflow"
+                      aria-label="Hapus Workflow"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
                 <div className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-slate-50 border border-border">
                   <span className="text-muted-foreground">Berlaku mulai nilai</span>
@@ -156,12 +241,12 @@ export default function ApprovalWorkflowsPage() {
         </div>
       )}
 
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Buat Approval Workflow Baru</DialogTitle>
+            <DialogTitle>{editingWorkflow ? "Edit Approval Workflow" : "Buat Approval Workflow Baru"}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleCreate} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-foreground">Jenis Dokumen</label>
               <select
@@ -178,12 +263,42 @@ export default function ApprovalWorkflowsPage() {
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-foreground">Nama Workflow</label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="PO di atas Rp 50 Juta" required />
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="PO di atas Rp 50 Juta"
+                required
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-foreground">Berlaku Mulai Nilai (Rp)</label>
-              <Input type="number" value={minAmount} onChange={(e) => setMinAmount(Number(e.target.value))} min={0} />
+              <Input
+                type="number"
+                value={minAmount}
+                onChange={(e) => setMinAmount(Number(e.target.value))}
+                min={0}
+              />
             </div>
+
+            {editingWorkflow && (
+              <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-slate-50/50">
+                <div>
+                  <label htmlFor="is-active-toggle" className="text-xs font-medium text-foreground block cursor-pointer">
+                    Status Aktif
+                  </label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Workflow nonaktif tidak akan digunakan untuk mencocokkan dokumen baru.
+                  </p>
+                </div>
+                <input
+                  id="is-active-toggle"
+                  type="checkbox"
+                  checked={isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-brand-primary focus:ring-brand-primary cursor-pointer"
+                />
+              </div>
+            )}
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -205,7 +320,12 @@ export default function ApprovalWorkflowsPage() {
                     <option value="staff">Staff</option>
                   </select>
                   {levels.length > 1 && (
-                    <button type="button" onClick={() => removeLevel(idx)} className="text-muted-foreground hover:text-rose-600 cursor-pointer shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => removeLevel(idx)}
+                      className="text-muted-foreground hover:text-rose-600 cursor-pointer shrink-0"
+                      aria-label={`Hapus Level ${l.levelOrder}`}
+                    >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   )}
@@ -215,11 +335,11 @@ export default function ApprovalWorkflowsPage() {
 
             {formError && <p className="text-xs text-rose-600 font-semibold">{formError}</p>}
             <DialogFooter>
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsCreateOpen(false)}>
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsModalOpen(false)}>
                 Batal
               </Button>
               <Button type="submit" variant="gradient" size="sm" disabled={isSubmitting}>
-                {isSubmitting ? "Menyimpan..." : "Buat Workflow"}
+                {isSubmitting ? "Menyimpan..." : editingWorkflow ? "Simpan Perubahan" : "Buat Workflow"}
               </Button>
             </DialogFooter>
           </form>

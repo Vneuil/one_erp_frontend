@@ -14,6 +14,8 @@ export interface PermissionItem {
   canManage: boolean;
   /** Allows approving/rejecting/paying/posting documents in this module (implies canManage). */
   canApprove?: boolean;
+  /** Confidential pricing access: view unit costs, totals, and selling prices. */
+  canViewPrices?: boolean;
 }
 
 export interface RoleWithPermissions {

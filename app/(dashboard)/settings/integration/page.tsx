@@ -26,6 +26,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { useConfirm } from "@/components/shared/confirm-modal";
 
 const MARKETPLACES: { platform: MarketplacePlatform; label: string }[] = [
   { platform: "tiktok_shop", label: "TikTok Shop" },
@@ -41,6 +42,7 @@ const CONNECT_URL_FOR: Partial<Record<MarketplacePlatform, () => ReturnType<type
 
 function MarketplaceConnectionsSection() {
   const [connections, setConnections] = React.useState<MarketplaceConnection[]>([]);
+  const confirm = useConfirm();
   const [loading, setLoading] = React.useState(true);
   const [busyPlatform, setBusyPlatform] = React.useState<MarketplacePlatform | null>(null);
   const [busyAction, setBusyAction] = React.useState<"connect" | "sync" | "disconnect" | null>(null);
@@ -170,8 +172,14 @@ function MarketplaceConnectionsSection() {
       });
   };
 
-  const handleDisconnect = (platform: MarketplacePlatform) => {
-    if (!confirm(`Disconnect this marketplace? Sales Orders already synced will not be affected.`)) return;
+  const handleDisconnect = async (platform: MarketplacePlatform) => {
+    const ok = await confirm({
+      title: "Disconnect Marketplace",
+      message: `Disconnect this marketplace? Sales Orders already synced will not be affected.`,
+      variant: "destructive",
+      confirmText: "Disconnect",
+    });
+    if (!ok) return;
     setBusyPlatform(platform);
     setBusyAction("disconnect");
     marketplaceApi
@@ -381,6 +389,7 @@ function MarketplaceConnectionsSection() {
 // "connected" (see POST /omnichannel/connections/whatsapp).
 function WhatsAppConnectionSection() {
   const [connections, setConnections] = React.useState<ChannelConnection[]>([]);
+  const confirm = useConfirm();
   const [loading, setLoading] = React.useState(true);
   const [busyAction, setBusyAction] = React.useState<"connect" | "disconnect" | null>(null);
 
@@ -432,8 +441,14 @@ function WhatsAppConnectionSection() {
       .finally(() => setBusyAction(null));
   };
 
-  const handleDisconnect = () => {
-    if (!confirm("Disconnect WhatsApp? Existing conversations will not be affected, but sending/receiving will stop until reconnected.")) return;
+  const handleDisconnect = async () => {
+    const ok = await confirm({
+      title: "Disconnect WhatsApp",
+      message: "Disconnect WhatsApp? Existing conversations will not be affected, but sending/receiving will stop until reconnected.",
+      variant: "destructive",
+      confirmText: "Disconnect",
+    });
+    if (!ok) return;
     setBusyAction("disconnect");
     omnichannelApi
       .disconnectChannel("whatsapp")
@@ -564,6 +579,7 @@ export default function IntegrationSettingsPage() {
   const [apiKeys, setApiKeys] = React.useState<ApiKeyItem[]>([]);
   const [webhooks, setWebhooks] = React.useState<WebhookItem[]>([]);
   const [loadError, setLoadError] = React.useState(false);
+  const confirm = useConfirm();
   const [loading, setLoading] = React.useState(true);
 
   const [isNewKeyOpen, setIsNewKeyOpen] = React.useState(false);

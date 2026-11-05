@@ -8,8 +8,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { MoneyDisplay } from "@/components/shared/money-display";
 import { assetsApi, AssetItem, CreateAssetInput, AssetFundingSource } from "@/lib/api/assets";
+import { useConfirm } from "@/components/shared/confirm-modal";
 
 export default function AssetsPage() {
+  const confirm = useConfirm();
   const [assets, setAssets] = React.useState<AssetItem[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
@@ -75,7 +77,13 @@ export default function AssetsPage() {
   };
 
   const handleRecalculateAll = async () => {
-    if (!window.confirm("Hitung ulang depresiasi untuk semua aktiva tetap?")) return;
+    const ok = await confirm({
+      title: "Hitung Ulang Depresiasi",
+      message: "Hitung ulang depresiasi untuk semua aktiva tetap?",
+      variant: "warning",
+      confirmText: "Hitung Ulang",
+    });
+    if (!ok) return;
     try {
       setLoading(true);
       await assetsApi.recalculateAllDepreciation();

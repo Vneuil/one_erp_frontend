@@ -10,6 +10,8 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { MoneyDisplay } from "@/components/shared/money-display";
 import { CopyProductsDialog } from "@/components/shared/copy-products-dialog";
 import { formatNumber } from "@/lib/utils";
+import { useNavigationAccess } from "@/providers/navigation-access";
+import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
 
 interface Product {
   id: string;
@@ -24,6 +26,10 @@ interface Product {
   variantLabel?: string;
   marketplacePlatform?: string;
   marketplaceProductId?: string;
+  grade?: string;
+  safetyStock?: number;
+  organicType?: string;
+  isBelowSafetyStock?: boolean;
 }
 
 import { fetchAllPages } from "@/lib/api/pagination";
@@ -31,6 +37,9 @@ import { productsApi } from "@/lib/api/products";
 import { downloadCsv } from "@/lib/utils/csv";
 
 export default function ProductsPage() {
+  const { canViewPrices } = useNavigationAccess();
+  const confirm = useConfirm();
+  const alert = useAlert();
   const [products, setProducts] = React.useState<Product[]>([]);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -38,7 +47,7 @@ export default function ProductsPage() {
   React.useEffect(() => {
     fetchAllPages(productsApi.list)
       .then((res) => {
-                  setProducts(res);
+        setProducts(res);
       })
       .catch((err) => {
         setLoadError(err instanceof Error ? err.message : "Gagal memuat daftar barang.");
@@ -49,20 +58,46 @@ export default function ProductsPage() {
   }, []);
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Hapus produk "${name}"?`)) return;
+    const ok = await confirm({
+      title: "Hapus Produk",
+      message: `Hapus produk "${name}"?`,
+      description: "Data produk yang dihapus tidak dapat dikembalikan dari sistem.",
+      confirmText: "Hapus",
+      cancelText: "Batal",
+      variant: "destructive",
+    });
+    if (!ok) return;
+
     try {
       await productsApi.delete(id);
       setProducts((prev) => prev.filter((p) => p.id !== id));
     } catch (err) {
-      alert("Gagal menghapus produk: " + (err instanceof Error ? err.message : "Kesalahan server"));
+      await alert({
+        title: "Gagal Menghapus",
+        message: "Gagal menghapus produk: " + (err instanceof Error ? err.message : "Kesalahan server"),
+        variant: "destructive",
+      });
     }
   };
 
   const handleExport = () => {
+    const pricesAllowed = canViewPrices("products");
     downloadCsv(
       "products.csv",
-      ["SKU", "Name", "Category", "Unit", "Stock", "Cost Price", "Selling Price", "Status"],
-      products.map((p) => [p.sku, p.name, p.category, p.unit, p.stock, p.costPrice, p.sellingPrice, p.status])
+      ["SKU", "Name", "Grade", "Organic", "Category", "Unit", "Stock", "Safety Stock", "Cost Price", "Selling Price", "Status"],
+      products.map((p) => [
+        p.sku,
+        p.name,
+        p.grade || "-",
+        p.organicType || "-",
+        p.category,
+        p.unit,
+        p.stock,
+        p.safetyStock ?? "-",
+        pricesAllowed ? p.costPrice : "***",
+        pricesAllowed ? p.sellingPrice : "***",
+        p.status,
+      ])
     );
   };
 
@@ -86,7 +121,24 @@ export default function ProductsPage() {
       sortable: true,
       render: (item) => (
         <div>
-          <p className="font-semibold text-xs text-foreground">{item.name}{item.variantLabel && <span className="ml-1.5 px-1.5 py-0.5 rounded bg-brand-tint text-brand-primary text-[10px] font-bold">{item.variantLabel}</span>}</p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="font-semibold text-xs text-foreground">{item.name}</p>
+            {item.grade && (
+              <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold">
+                Grade {item.grade}
+              </span>
+            )}
+            {item.organicType && (
+              <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase">
+                {item.organicType}
+              </span>
+            )}
+            {item.variantLabel && (
+              <span className="px-1.5 py-0.5 rounded bg-brand-tint text-brand-primary text-[10px] font-bold">
+                {item.variantLabel}
+              </span>
+            )}
+          </div>
           <span className="text-[11px] text-muted-foreground">{item.category}</span>
           {item.marketplaceProductId && (
             <span className="block text-[10px] text-muted-foreground">
@@ -101,31 +153,48 @@ export default function ProductsPage() {
       header: "Stock Level",
       sortable: true,
       render: (item) => (
-        <span className="text-xs font-medium">
-          {formatNumber(item.stock)} {item.unit}
-        </span>
+        <div>
+          <span className="text-xs font-medium">
+            {formatNumber(item.stock)} {item.unit}
+          </span>
+          {(item.isBelowSafetyStock || (item.safetyStock !== undefined && item.safetyStock > 0 && item.stock < item.safetyStock)) && (
+            <span className="block text-[10px] font-semibold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded mt-0.5 border border-rose-200">
+              Di Bawah Safety Stock ({formatNumber(item.safetyStock || 0)} {item.unit})
+            </span>
+          )}
+        </div>
       ),
     },
     {
       key: "costPrice",
       header: "Cost Price",
       align: "right",
-      render: (item) => (
-        <span className="text-xs text-muted-foreground">
-          <MoneyDisplay amount={item.costPrice} />
-        </span>
-      ),
+      render: (item) => {
+        if (!canViewPrices("products")) {
+          return <span className="text-xs font-mono text-muted-foreground italic">*** (Rahasia)</span>;
+        }
+        return (
+          <span className="text-xs text-muted-foreground">
+            <MoneyDisplay amount={item.costPrice} />
+          </span>
+        );
+      },
     },
     {
       key: "sellingPrice",
       header: "Selling Price",
       align: "right",
       sortable: true,
-      render: (item) => (
-        <span className="text-xs font-semibold">
-          <MoneyDisplay amount={item.sellingPrice} highlight />
-        </span>
-      ),
+      render: (item) => {
+        if (!canViewPrices("products")) {
+          return <span className="text-xs font-mono text-muted-foreground italic">*** (Rahasia)</span>;
+        }
+        return (
+          <span className="text-xs font-semibold">
+            <MoneyDisplay amount={item.sellingPrice} highlight />
+          </span>
+        );
+      },
     },
     {
       key: "status",
@@ -143,8 +212,8 @@ export default function ProductsPage() {
               <Eye className="h-4 w-4" />
             </Link>
           </Button>
-          <Button asChild variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-            <Link href={`/master-data/products/${item.id}?edit=true`}>
+          <Button asChild variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" title="Lihat & Edit Detail">
+            <Link href={`/master-data/products/${item.id}`}>
               <Edit className="h-4 w-4" />
             </Link>
           </Button>

@@ -10,8 +10,11 @@ import { DataTable, Column } from "@/components/data-table/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { MoneyDisplay } from "@/components/shared/money-display";
 import { shippingMethodsApi, ShippingMethodItem } from "@/lib/api/shipping-methods";
+import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
 
 export default function ShippingMethodsPage() {
+  const confirm = useConfirm();
+  const alert = useAlert();
   const [methods, setMethods] = React.useState<ShippingMethodItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
@@ -97,12 +100,22 @@ export default function ShippingMethodsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Yakin ingin menghapus metode pengiriman ini?")) return;
+    const ok = await confirm({
+      title: "Hapus Metode Pengiriman",
+      message: "Yakin ingin menghapus metode pengiriman ini?",
+      variant: "destructive",
+      confirmText: "Hapus",
+    });
+    if (!ok) return;
     try {
       await shippingMethodsApi.delete(id);
       setMethods((prev) => prev.filter((m) => m.id !== id));
     } catch (err) {
-      alert("Gagal menghapus metode pengiriman: " + (err instanceof Error ? err.message : "Kesalahan server"));
+      await alert({
+        title: "Gagal Menghapus Metode Pengiriman",
+        message: err instanceof Error ? err.message : "Kesalahan server",
+        variant: "destructive",
+      });
     }
   };
 

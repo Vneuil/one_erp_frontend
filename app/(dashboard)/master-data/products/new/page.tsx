@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 
-import { productsApi, ProductItem } from "@/lib/api/products";
+import { productsApi, productCategoriesApi, unitsOfMeasureApi, ProductItem } from "@/lib/api/products";
 
 export default function NewProductPage() {
   const router = useRouter();
@@ -17,16 +17,61 @@ export default function NewProductPage() {
   const [baseProducts, setBaseProducts] = React.useState<ProductItem[]>([]);
   const [variantOf, setVariantOf] = React.useState("");
   const [variantLabel, setVariantLabel] = React.useState("");
+  const [availableCategories, setAvailableCategories] = React.useState<string[]>([
+    "Raw Material",
+    "Components",
+    "Finished Goods",
+    "Packaging",
+    "Electronics",
+  ]);
+  const [availableUnits, setAvailableUnits] = React.useState<{ name: string; symbol: string }[]>([
+    { name: "Pieces", symbol: "Pcs" },
+    { name: "Kilogram", symbol: "KG" },
+    { name: "Roll", symbol: "Roll" },
+    { name: "Unit", symbol: "Unit" },
+    { name: "Box", symbol: "Box" },
+    { name: "Meter", symbol: "Meter" },
+  ]);
+
   React.useEffect(() => {
     productsApi
       .list({ perPage: 500 })
       .then((res) => setBaseProducts((res.data || []).filter((p) => !p.variantOf)))
       .catch((err) => console.error("Failed to load products for the variant picker", err));
+
+    productCategoriesApi
+      .list()
+      .then((res) => {
+        if (res.data && res.data.length > 0) {
+          const names = res.data.map((c) => c.name);
+          setAvailableCategories((prev) => Array.from(new Set([...names, ...prev])));
+        }
+      })
+      .catch(console.error);
+
+    unitsOfMeasureApi
+      .list()
+      .then((res) => {
+        if (res.data && res.data.length > 0) {
+          const uoms = res.data.map((u) => ({ name: u.name, symbol: u.symbol || u.name }));
+          setAvailableUnits((prev) => {
+            const map = new Map<string, { name: string; symbol: string }>();
+            uoms.forEach((item) => map.set(item.symbol, item));
+            prev.forEach((item) => {
+              if (!map.has(item.symbol)) map.set(item.symbol, item);
+            });
+            return Array.from(map.values());
+          });
+        }
+      })
+      .catch(console.error);
   }, []);
   const [formData, setFormData] = React.useState({
     sku: "PRD-RAW-",
     barcode: "",
     name: "",
+    grade: "",
+    organicType: "Konvensional",
     category: "Raw Material",
     unit: "Pcs",
     minStock: 10,
@@ -48,6 +93,9 @@ export default function NewProductPage() {
         stock: formData.minStock,
         costPrice: formData.costPrice,
         sellingPrice: formData.sellingPrice,
+        grade: formData.grade || undefined,
+        organicType: formData.organicType || undefined,
+        safetyStock: formData.minStock,
         variantOf: variantOf || undefined,
         variantLabel: variantOf ? variantLabel : undefined,
       });
@@ -132,33 +180,82 @@ export default function NewProductPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">Category *</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-foreground">Category *</label>
+                  <Link
+                    href="/master-data/categories-units/new"
+                    target="_blank"
+                    className="text-[11px] text-brand-primary hover:underline"
+                  >
+                    + Buat Kategori
+                  </Link>
+                </div>
                 <select
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                   className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
                 >
-                  <option value="Raw Material">Raw Material</option>
-                  <option value="Components">Components</option>
-                  <option value="Finished Goods">Finished Goods</option>
-                  <option value="Packaging">Packaging</option>
-                  <option value="Electronics">Electronics</option>
+                  {availableCategories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
                 </select>
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">Unit of Measurement (UoM) *</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-foreground">Unit of Measurement (UoM) *</label>
+                  <Link
+                    href="/master-data/categories-units/new"
+                    target="_blank"
+                    className="text-[11px] text-brand-primary hover:underline"
+                  >
+                    + Buat Satuan
+                  </Link>
+                </div>
                 <select
                   value={formData.unit}
                   onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                   className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
                 >
-                  <option value="Pcs">Pcs (Pieces)</option>
-                  <option value="KG">KG (Kilogram)</option>
-                  <option value="Roll">Roll</option>
-                  <option value="Unit">Unit</option>
-                  <option value="Box">Box</option>
-                  <option value="Meter">Meter</option>
+                  {availableUnits.map((u) => (
+                    <option key={u.symbol} value={u.symbol}>
+                      {u.symbol} ({u.name})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground">Grade Mutu Gula Kelapa</label>
+                <select
+                  value={formData.grade}
+                  onChange={(e) => setFormData({ ...formData, grade: e.target.value })}
+                  className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
+                >
+                  <option value="">Tanpa Grade</option>
+                  <option value="A">Grade A (Super/Premium)</option>
+                  <option value="B">Grade B (Standar)</option>
+                  <option value="C">Grade C (Off-grade/Lokal)</option>
+                  <option value="Reject">Reject / Rework</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground">Sertifikasi & Kategori Organik</label>
+                <select
+                  value={formData.organicType}
+                  onChange={(e) => setFormData({ ...formData, organicType: e.target.value })}
+                  className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
+                >
+                  <option value="Konvensional">Konvensional</option>
+                  <option value="Organic">Organic</option>
+                  <option value="EU Organic">EU Organic</option>
+                  <option value="USDA Organic">USDA Organic</option>
+                  <option value="Fair Trade">Fair Trade</option>
                 </select>
               </div>
             </div>

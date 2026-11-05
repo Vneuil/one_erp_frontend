@@ -12,6 +12,7 @@ import { salesApi, InvoiceItem } from "@/lib/api/sales";
 import { procurementApi, PurchaseInvoiceItem } from "@/lib/api/procurement";
 import { taxApi, PosCandidate, TaxDirection, TaxInvoice, TaxStatus, UpdateTaxInvoiceInput } from "@/lib/api/tax";
 import { downloadCsv } from "@/lib/utils/csv";
+import { usePrompt } from "@/components/shared/confirm-modal";
 
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
 const errText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
@@ -23,6 +24,7 @@ const STATUS: Record<TaxStatus, { label: string; cls: string }> = {
 };
 
 export default function TaxInvoicesPage() {
+  const prompt = usePrompt();
   const [direction, setDirection] = React.useState<TaxDirection>("output");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [search, setSearch] = React.useState("");
@@ -118,13 +120,30 @@ export default function TaxInvoicesPage() {
       setSupplierFaktur("");
     }, "Draft Faktur Pajak dibuat. Periksa datanya lalu terbitkan.");
 
-  const askReason = (t: TaxInvoice) => {
-    const reason = window.prompt(`Alasan pembatalan ${t.taxNumber || t.number}:`, "");
+  const askReason = async (t: TaxInvoice) => {
+    const reason = await prompt({
+      title: "Batalkan Faktur Pajak",
+      message: `Alasan pembatalan ${t.taxNumber || t.number}:`,
+      placeholder: "Tulis alasan pembatalan...",
+      confirmText: "Batalkan Faktur",
+      cancelText: "Batal",
+      variant: "destructive",
+      inputType: "textarea",
+    });
     if (reason === null) return;
     run(() => taxApi.cancel(t.id, reason), "Faktur Pajak dibatalkan.");
   };
-  const askNumber = (t: TaxInvoice) => {
-    const n = window.prompt("Nomor Faktur Pajak resmi:", t.taxNumber);
+  const askNumber = async (t: TaxInvoice) => {
+    const n = await prompt({
+      title: "Nomor Faktur Pajak Resmi",
+      message: "Masukkan Nomor Faktur Pajak resmi dari DJP:",
+      defaultValue: t.taxNumber,
+      placeholder: "Contoh: 010.000-24.00000001",
+      confirmText: "Simpan Nomor",
+      cancelText: "Batal",
+      inputType: "text",
+      required: true,
+    });
     if (n === null || !n.trim()) return;
     run(() => taxApi.setTaxNumber(t.id, n.trim()), "Nomor Faktur Pajak disimpan.");
   };

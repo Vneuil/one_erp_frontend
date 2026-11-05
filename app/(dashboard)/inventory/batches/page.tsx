@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useNavigationAccess } from "@/providers/navigation-access";
 import { inventoryApi, StockBatchItem, WarehouseItem } from "@/lib/api/inventory";
 import { productsApi, ProductItem } from "@/lib/api/products";
+import { usePrompt } from "@/components/shared/confirm-modal";
 
 const errText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 const STATUS: Record<string, { label: string; style: string }> = {
@@ -18,6 +19,7 @@ const STATUS: Record<string, { label: string; style: string }> = {
 };
 
 export default function StockBatchesPage() {
+  const prompt = usePrompt();
   const { canApprove } = useNavigationAccess();
   const mayWriteOff = canApprove("inventory");
 
@@ -69,6 +71,23 @@ export default function StockBatchesPage() {
       setError(errText(e, "Aksi gagal."));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleWriteOffBatch = async (b: StockBatchItem) => {
+    const reason = await prompt({
+      title: "Hapus Stok Batch",
+      message: `Hapus ${b.quantity} unit batch ${b.batchNo} sebagai kerugian? Isi alasan:`,
+      defaultValue: b.status === "expired" ? "Kedaluwarsa" : "",
+      placeholder: "Alasan penghapusan stok...",
+      confirmText: "Hapus Stok",
+      cancelText: "Batal",
+      variant: "destructive",
+      inputType: "textarea",
+      required: true,
+    });
+    if (reason && reason.trim()) {
+      run(() => inventoryApi.writeOffBatch(b.id, reason.trim()), `Batch ${b.batchNo} dihapus dari stok dan dijurnal sebagai kerugian.`);
     }
   };
 
@@ -146,7 +165,7 @@ export default function StockBatchesPage() {
                   <td className={td}>
                     {mayWriteOff && b.quantity > 0 && (
                       <Button size="sm" variant="outline" disabled={busy} className="h-7 px-2 text-[11px] text-rose-600 border-rose-200"
-                        onClick={() => { const reason = window.prompt(`Hapus ${b.quantity} unit batch ${b.batchNo} sebagai kerugian? Isi alasan:`, b.status === "expired" ? "Kedaluwarsa" : ""); if (reason && reason.trim()) run(() => inventoryApi.writeOffBatch(b.id, reason.trim()), `Batch ${b.batchNo} dihapus dari stok dan dijurnal sebagai kerugian.`); }}>
+                        onClick={() => handleWriteOffBatch(b)}>
                         Hapus stok
                       </Button>
                     )}

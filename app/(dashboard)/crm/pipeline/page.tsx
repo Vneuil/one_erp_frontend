@@ -30,6 +30,7 @@ import { salesApi } from "@/lib/api/sales";
 import { crmPlusApi, PipelineStageItem } from "@/lib/api/crmplus";
 import { CrmActivityPanel } from "@/components/crm/activity-panel";
 import { useAppStore } from "@/stores/app-store";
+import { usePrompt } from "@/components/shared/confirm-modal";
 
 type StageId = string;
 
@@ -91,6 +92,7 @@ const FALLBACK_STAGES: StageView[] = toStageViews([
 
 export default function DealPipelinePage() {
   const { currentUser } = useAppStore();
+  const prompt = usePrompt();
   const [deals, setDeals] = React.useState<DealItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [pageError, setPageError] = React.useState<string | null>(null);
@@ -153,9 +155,18 @@ export default function DealPipelinePage() {
   const stageById = (id: StageId) => stages.find((s) => s.id === id);
   const kindOf = (id: StageId) => stageById(id)?.kind ?? (id === "won" ? "won" : id === "lost" ? "lost" : "open");
   // Losing a deal needs a reason (the server insists too); null means the user cancelled.
-  const askLostReason = (stageId: StageId): string | null | undefined => {
+  const askLostReason = async (stageId: StageId): Promise<string | null | undefined> => {
     if (kindOf(stageId) !== "lost") return undefined;
-    const reason = window.prompt("Alasan deal ini tidak berlanjut? (wajib, dipakai untuk analisis kalah-menang)");
+    const reason = await prompt({
+      title: "Alasan Deal Tidak Berlanjut",
+      message: "Alasan deal ini tidak berlanjut? (Wajib, dipakai untuk analisis kalah-menang)",
+      placeholder: "Contoh: Harga kompetitor lebih murah / budget dibatalkan...",
+      confirmText: "Tandai Kalah",
+      cancelText: "Batal",
+      variant: "destructive",
+      inputType: "textarea",
+      required: true,
+    });
     return reason && reason.trim() ? reason.trim() : null;
   };
 
@@ -164,7 +175,7 @@ export default function DealPipelinePage() {
   // The stage only changes when the server confirms it.
   const moveDealStage = async (dealId: string, nextStage: StageId) => {
     setPageError(null);
-    const lostReason = askLostReason(nextStage);
+    const lostReason = await askLostReason(nextStage);
     if (lostReason === null) return;
     try {
       const res = await crmApi.updateDealStage(dealId, nextStage, lostReason);
@@ -219,7 +230,7 @@ export default function DealPipelinePage() {
     }
   };
 
-  const handleDrop = (targetStage: StageId, beforeId: string | null) => (e: React.DragEvent) => {
+  const handleDrop = (targetStage: StageId, beforeId: string | null) => async (e: React.DragEvent) => {
     e.preventDefault();
     const dealId = e.dataTransfer.getData("text/plain") || draggedId;
     setDragOverStage(null);
@@ -232,7 +243,7 @@ export default function DealPipelinePage() {
       reorderDeals(dealId, targetStage, beforeId);
       return;
     }
-    const lostReason = askLostReason(targetStage);
+    const lostReason = await askLostReason(targetStage);
     if (lostReason === null) return; // cancelled: the card stays where it is
 
     reorderDeals(dealId, targetStage, beforeId);

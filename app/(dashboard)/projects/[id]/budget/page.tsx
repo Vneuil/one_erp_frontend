@@ -11,6 +11,7 @@ import { MoneyDisplay } from "@/components/shared/money-display";
 import { downloadCsv } from "@/lib/utils/csv";
 import { parseDelimited, parseNumber } from "@/lib/utils/csv-parse";
 import { projectCostApi, BudgetView, BudgetLineInput, CostEntryItem } from "@/lib/api/projectcost";
+import { useConfirm } from "@/components/shared/confirm-modal";
 
 const errText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
@@ -47,6 +48,7 @@ function readSheet(text: string): { lines: BudgetLineInput[]; problems: string[]
 }
 
 export default function ProjectBudgetPage() {
+  const confirm = useConfirm();
   const { id } = useParams<{ id: string }>();
   const [view, setView] = React.useState<BudgetView | null>(null);
   const [costs, setCosts] = React.useState<CostEntryItem[]>([]);
@@ -170,7 +172,15 @@ export default function ProjectBudgetPage() {
                   {costs.slice(0, 30).map((c) => (
                     <li key={c.id} className="flex items-center justify-between rounded border border-border px-2 py-1 text-xs">
                       <span>{c.date} · <b>{c.category}</b>{c.description ? ` · ${c.description}` : ""}</span>
-                      <span className="flex items-center gap-2"><MoneyDisplay amount={c.amount} /><button onClick={() => window.confirm("Hapus catatan biaya ini?") && run(() => projectCostApi.deleteCost(id, c.id), "Biaya dihapus.")} className="text-rose-600 cursor-pointer" aria-label="Hapus">✕</button></span>
+                      <span className="flex items-center gap-2"><MoneyDisplay amount={c.amount} /><button onClick={async () => {
+                        const ok = await confirm({
+                          title: "Hapus Catatan Biaya",
+                          message: "Hapus catatan biaya ini?",
+                          variant: "destructive",
+                          confirmText: "Hapus",
+                        });
+                        if (ok) run(() => projectCostApi.deleteCost(id, c.id), "Biaya dihapus.");
+                      }} className="text-rose-600 cursor-pointer" aria-label="Hapus">✕</button></span>
                     </li>
                   ))}
                 </ul>
@@ -210,7 +220,15 @@ export default function ProjectBudgetPage() {
                     <tr key={it.id} className="border-t border-border">
                       <td className={`${td} uppercase font-bold`}>{it.kind}</td><td className={td}>{it.category}</td><td className={td}>{it.description}</td><td className={td}>{it.quantity}</td><td className={td}>{it.unit}</td>
                       <td className={td}><MoneyDisplay amount={it.unitPrice} /></td><td className={`${td} font-semibold`}><MoneyDisplay amount={it.amount} /></td>
-                      <td className={td}><button onClick={() => window.confirm("Hapus baris ini?") && run(() => projectCostApi.deleteBudgetLine(id, it.id), "Baris dihapus.")} className="text-rose-600 cursor-pointer" aria-label="Hapus">✕</button></td>
+                      <td className={td}><button onClick={async () => {
+                        const ok = await confirm({
+                          title: "Hapus Baris Anggaran",
+                          message: "Hapus baris ini?",
+                          variant: "destructive",
+                          confirmText: "Hapus",
+                        });
+                        if (ok) run(() => projectCostApi.deleteBudgetLine(id, it.id), "Baris dihapus.");
+                      }} className="text-rose-600 cursor-pointer" aria-label="Hapus">✕</button></td>
                     </tr>
                   ))}
                 </tbody>

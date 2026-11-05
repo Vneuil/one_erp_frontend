@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { MoneyDisplay } from "@/components/shared/money-display";
 import { downloadCsv } from "@/lib/utils/csv";
+import { useConfirm } from "@/components/shared/confirm-modal";
 import { financeApi, AccountItem, TempAdvanceItem, OutstandingTempAdvances } from "@/lib/api/finance";
 
 type Tab = "list" | "outstanding";
@@ -19,6 +20,7 @@ const emptyLine = (): DraftLine => ({ accountCode: "", description: "", amount: 
 const STATUS_LABEL: Record<TempAdvanceItem["status"], string> = { open: "Belum selesai", settled: "Selesai", cancelled: "Dibatalkan" };
 
 export default function TempAdvancesPage() {
+  const confirm = useConfirm();
   const [tab, setTab] = React.useState<Tab>("list");
   const [advances, setAdvances] = React.useState<TempAdvanceItem[]>([]);
   const [accounts, setAccounts] = React.useState<AccountItem[]>([]);
@@ -129,7 +131,14 @@ export default function TempAdvancesPage() {
   };
 
   const cancel = async (a: TempAdvanceItem) => {
-    if (!window.confirm(`Batalkan KBS ${a.number}? Kas akan dikembalikan lewat jurnal pembalik.`)) return;
+    const ok = await confirm({
+      title: "Batalkan Kas Bon Sementara",
+      message: `Batalkan KBS ${a.number}?`,
+      description: "Kas akan dikembalikan lewat jurnal pembalik.",
+      variant: "destructive",
+      confirmText: "Ya, Batalkan",
+    });
+    if (!ok) return;
     setBusy(true);
     setError(null);
     try {

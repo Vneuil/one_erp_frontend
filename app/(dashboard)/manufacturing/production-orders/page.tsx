@@ -12,10 +12,13 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { errText, today, useReport } from "@/components/reports/report-ui";
 import { inventoryApi } from "@/lib/api/inventory";
 import { manufacturingApi, ProductionBatchItem, ProductionOrderItem } from "@/lib/api/manufacturing";
+import { useConfirm, usePrompt } from "@/components/shared/confirm-modal";
 
 const select = "w-full h-9 px-2 rounded-lg border border-border bg-white text-xs";
 
 export default function ProductionOrdersPage() {
+  const confirm = useConfirm();
+  const prompt = usePrompt();
   const { canApprove } = useNavigationAccess();
   const mayApprove = canApprove("manufacturing");
   const [reload, setReload] = React.useState(0);
@@ -56,8 +59,15 @@ export default function ProductionOrdersPage() {
     }
   };
 
-  const handleCancel = (order: ProductionOrderItem) => {
-    if (!confirm(`Batalkan ${order.orderNumber}? Tindakan ini tidak bisa dibatalkan.`)) return;
+  const handleCancel = async (order: ProductionOrderItem) => {
+    const ok = await confirm({
+      title: "Batalkan Order Produksi",
+      message: `Batalkan ${order.orderNumber}?`,
+      description: "Tindakan ini tidak bisa dibatalkan.",
+      variant: "destructive",
+      confirmText: "Ya, Batalkan",
+    });
+    if (!ok) return;
     return act(order, manufacturingApi.cancelProductionOrder, `${order.orderNumber} dibatalkan.`);
   };
 
@@ -71,7 +81,16 @@ export default function ProductionOrdersPage() {
   };
 
   const voidBatch = async (order: ProductionOrderItem, b: ProductionBatchItem) => {
-    const reason = window.prompt(`Alasan membatalkan batch ${b.quantityCompleted} unit (${b.completionDate}) pada ${order.orderNumber}? Barang jadi dikeluarkan dari stok, bahan yang dipakai otomatis dikembalikan, dan jurnalnya dibalik.`, "");
+    const reason = await prompt({
+      title: "Batalkan Batch Produksi",
+      message: `Alasan membatalkan batch ${b.quantityCompleted} unit (${b.completionDate}) pada ${order.orderNumber}? Barang jadi dikeluarkan dari stok, bahan yang dipakai otomatis dikembalikan, dan jurnalnya dibalik.`,
+      placeholder: "Tuliskan alasan pembatalan...",
+      confirmText: "Batalkan Batch",
+      cancelText: "Kembali",
+      variant: "destructive",
+      inputType: "textarea",
+      required: true,
+    });
     if (reason === null) return;
     if (!reason.trim()) {
       setNotice({ kind: "error", text: "Alasan pembatalan wajib diisi." });

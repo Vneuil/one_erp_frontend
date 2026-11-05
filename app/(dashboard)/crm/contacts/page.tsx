@@ -6,10 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { crmPlusApi, CrmContactItem } from "@/lib/api/crmplus";
+import { useConfirm } from "@/components/shared/confirm-modal";
 
 const errText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 
 export default function CrmContactsPage() {
+  const confirm = useConfirm();
   const [contacts, setContacts] = React.useState<CrmContactItem[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -95,7 +97,15 @@ export default function CrmContactsPage() {
                   <td className={td}>
                     <div className="flex gap-1.5">
                       {!c.isPrimary && <Button size="sm" variant="outline" disabled={busy} onClick={() => run(() => crmPlusApi.updateContact(c.id, { ...c, isPrimary: true }))} className="h-7 px-2 text-[11px]">Jadikan utama</Button>}
-                      <Button size="sm" variant="outline" disabled={busy} onClick={() => window.confirm(`Hapus kontak ${c.name}?`) && run(() => crmPlusApi.deleteContact(c.id))} className="h-7 px-2 text-[11px] text-rose-600 border-rose-200">Hapus</Button>
+                      <Button size="sm" variant="outline" disabled={busy} onClick={async () => {
+                        const ok = await confirm({
+                          title: "Hapus Kontak",
+                          message: `Hapus kontak ${c.name}?`,
+                          variant: "destructive",
+                          confirmText: "Hapus",
+                        });
+                        if (ok) run(() => crmPlusApi.deleteContact(c.id));
+                      }} className="h-7 px-2 text-[11px] text-rose-600 border-rose-200">Hapus</Button>
                     </div>
                   </td>
                 </tr>

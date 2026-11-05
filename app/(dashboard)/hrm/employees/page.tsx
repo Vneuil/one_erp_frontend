@@ -28,6 +28,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { useConfirm } from "@/components/shared/confirm-modal";
 
 interface EmployeeItem {
   id: string;
@@ -46,6 +47,7 @@ interface EmployeeItem {
 }
 
 export default function EmployeesPage() {
+  const confirm = useConfirm();
   const [employees, setEmployees] = React.useState<EmployeeItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
@@ -140,7 +142,15 @@ export default function EmployeesPage() {
   };
 
   const removeEmployee = async () => {
-    if (!detailEmployee || !window.confirm(`Hapus karyawan ${detailEmployee.name}? Untuk karyawan yang berhenti, lebih baik ubah statusnya.`)) return;
+    if (!detailEmployee) return;
+    const ok = await confirm({
+      title: "Hapus Karyawan",
+      message: `Hapus karyawan ${detailEmployee.name}?`,
+      description: "Untuk karyawan yang berhenti atau dinonaktifkan, disarankan untuk mengubah statusnya daripada menghapusnya permanen.",
+      variant: "destructive",
+      confirmText: "Hapus",
+    });
+    if (!ok) return;
     setEditError(null);
     try {
       await hrmApi.deleteEmployee(detailEmployee.id);

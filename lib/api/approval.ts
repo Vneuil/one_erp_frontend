@@ -22,6 +22,14 @@ export interface CreateWorkflowInput {
   levels: WorkflowLevel[];
 }
 
+export interface UpdateWorkflowInput {
+  documentType: string;
+  name: string;
+  minAmount: number;
+  isActive?: boolean;
+  levels: WorkflowLevel[];
+}
+
 export interface ApprovalStep {
   id: string;
   levelOrder: number;
@@ -53,6 +61,9 @@ export const approvalApi = {
   createWorkflow: async (data: CreateWorkflowInput): Promise<ApiResponse<Workflow>> =>
     apiClient<Workflow>("/approval/workflows", { method: "POST", body: JSON.stringify(data) }),
 
+  updateWorkflow: async (id: string, data: UpdateWorkflowInput): Promise<ApiResponse<Workflow>> =>
+    apiClient<Workflow>(`/approval/workflows/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
   deleteWorkflow: async (id: string): Promise<ApiResponse<null>> =>
     apiClient<null>(`/approval/workflows/${id}`, { method: "DELETE" }),
 
@@ -61,6 +72,9 @@ export const approvalApi = {
 
   listRequests: async (params?: { page?: number; perPage?: number; documentType?: string }): Promise<ApiResponse<ApprovalRequest[]>> =>
     apiClient<ApprovalRequest[]>("/approval/requests", { params }),
+
+  getActiveRequestForDocument: async (documentType: string, documentId: string): Promise<ApiResponse<ApprovalRequest | null>> =>
+    apiClient<ApprovalRequest | null>(`/approval/requests/document/${documentType}/${documentId}`),
 
   approveStep: async (requestId: string, comments?: string): Promise<ApiResponse<ApprovalRequest>> =>
     apiClient<ApprovalRequest>(`/approval/requests/${requestId}/approve`, { method: "POST", body: JSON.stringify({ comments }) }),

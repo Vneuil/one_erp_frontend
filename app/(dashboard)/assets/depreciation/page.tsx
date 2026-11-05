@@ -9,11 +9,13 @@ import { PageHeader } from "@/components/shared/page-header";
 import { MoneyDisplay } from "@/components/shared/money-display";
 import { assetsApi, DepreciationReport } from "@/lib/api/assets";
 import { downloadCsv } from "@/lib/utils/csv";
+import { useConfirm } from "@/components/shared/confirm-modal";
 
 const currentPeriod = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date()).slice(0, 7);
 const errText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 
 export default function DepreciationPage() {
+  const confirm = useConfirm();
   const [period, setPeriod] = React.useState(currentPeriod());
   const [catchUp, setCatchUp] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
@@ -44,7 +46,14 @@ export default function DepreciationPage() {
 
   const post = async () => {
     const scope = catchUp ? `semua bulan yang belum diposting sampai ${period}` : `bulan ${period}`;
-    if (!window.confirm(`Posting penyusutan ${scope} ke buku besar? Jurnal yang sudah terposting tidak bisa diposting ulang.`)) return;
+    const ok = await confirm({
+      title: "Posting Penyusutan",
+      message: `Posting penyusutan ${scope} ke buku besar?`,
+      description: "Jurnal yang sudah terposting tidak bisa diposting ulang.",
+      variant: "info",
+      confirmText: "Posting ke Buku Besar",
+    });
+    if (!ok) return;
     setBusy(true);
     setActionError(null);
     setNotice(null);

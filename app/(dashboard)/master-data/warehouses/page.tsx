@@ -15,8 +15,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { inventoryApi, WarehouseItem } from "@/lib/api/inventory";
+import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
 
 export default function WarehousesPage() {
+  const confirm = useConfirm();
+  const alert = useAlert();
   const [warehouses, setWarehouses] = React.useState<WarehouseItem[]>([]);
   const [isAddOpen, setIsAddOpen] = React.useState(false);
   const [code, setCode] = React.useState("");
@@ -104,12 +107,22 @@ export default function WarehousesPage() {
   };
 
   const handleDeleteWarehouse = async (id: string) => {
-    if (!window.confirm("Yakin ingin menghapus gudang ini?")) return;
+    const ok = await confirm({
+      title: "Hapus Gudang",
+      message: "Yakin ingin menghapus gudang ini?",
+      variant: "destructive",
+      confirmText: "Hapus",
+    });
+    if (!ok) return;
     try {
       await inventoryApi.deleteWarehouse(id);
       setWarehouses((prev) => prev.filter((wh) => wh.id !== id));
     } catch (err) {
-      alert("Gagal menghapus gudang: " + (err instanceof Error ? err.message : "Kesalahan server"));
+      await alert({
+        title: "Gagal Menghapus Gudang",
+        message: err instanceof Error ? err.message : "Kesalahan server",
+        variant: "destructive",
+      });
     }
   };
 

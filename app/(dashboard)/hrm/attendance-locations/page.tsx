@@ -6,10 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { hrmApi, AttendanceLocationItem } from "@/lib/api/hrm";
+import { useConfirm } from "@/components/shared/confirm-modal";
 
 const errText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 
 export default function AttendanceLocationsPage() {
+  const confirm = useConfirm();
   const [items, setItems] = React.useState<AttendanceLocationItem[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -113,7 +115,15 @@ export default function AttendanceLocationsPage() {
                       <button
                         aria-label={`Hapus ${l.name}`}
                         disabled={busy}
-                        onClick={() => window.confirm(`Hapus lokasi ${l.name}?`) && run(() => hrmApi.deleteAttendanceLocation(l.id), "Lokasi dihapus.")}
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: "Hapus Lokasi",
+                            message: `Hapus lokasi ${l.name}?`,
+                            variant: "destructive",
+                            confirmText: "Hapus",
+                          });
+                          if (ok) run(() => hrmApi.deleteAttendanceLocation(l.id), "Lokasi dihapus.");
+                        }}
                         className="p-1 rounded text-muted-foreground hover:text-rose-600 cursor-pointer"
                       ><Trash2 className="h-3.5 w-3.5" /></button>
                     </td>

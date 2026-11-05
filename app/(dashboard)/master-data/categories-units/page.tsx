@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/shared/page-header";
+import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
 import {
   productCategoriesApi,
   unitsOfMeasureApi,
@@ -15,20 +16,27 @@ import {
 } from "@/lib/api/products";
 
 export default function CategoriesUnitsPage() {
+  const confirm = useConfirm();
+  const alert = useAlert();
   const [categories, setCategories] = React.useState<ProductCategoryItem[]>([]);
   const [units, setUnits] = React.useState<UnitOfMeasureItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
 
+  // Quick inline add
   const [newCategory, setNewCategory] = React.useState("");
+  const [isAddingCategory, setIsAddingCategory] = React.useState(false);
   const [newUnitName, setNewUnitName] = React.useState("");
   const [newUnitSymbol, setNewUnitSymbol] = React.useState("");
+  const [isAddingUnit, setIsAddingUnit] = React.useState(false);
 
+  // Modal Edit Category
   const [editingCategory, setEditingCategory] = React.useState<ProductCategoryItem | null>(null);
   const [editCategoryName, setEditCategoryName] = React.useState("");
   const [editCategoryError, setEditCategoryError] = React.useState<string | null>(null);
   const [isEditCategorySubmitting, setIsEditCategorySubmitting] = React.useState(false);
 
+  // Modal Edit Unit
   const [editingUnit, setEditingUnit] = React.useState<UnitOfMeasureItem | null>(null);
   const [editUnitName, setEditUnitName] = React.useState("");
   const [editUnitSymbol, setEditUnitSymbol] = React.useState("");
@@ -56,22 +64,39 @@ export default function CategoriesUnitsPage() {
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCategory.trim()) return;
+    setIsAddingCategory(true);
     try {
       await productCategoriesApi.create(newCategory.trim());
       setNewCategory("");
       loadData();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Gagal menambah kategori.");
+      await alert({
+        title: "Gagal Menambah Kategori",
+        message: err instanceof Error ? err.message : "Gagal menambah kategori.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAddingCategory(false);
     }
   };
 
   const handleDeleteCategory = async (id: string) => {
-    if (!window.confirm("Yakin ingin menghapus kategori ini?")) return;
+    const ok = await confirm({
+      title: "Hapus Kategori",
+      message: "Yakin ingin menghapus kategori ini?",
+      variant: "destructive",
+      confirmText: "Hapus",
+    });
+    if (!ok) return;
     try {
       await productCategoriesApi.remove(id);
       loadData();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Gagal menghapus kategori.");
+      await alert({
+        title: "Gagal Menghapus Kategori",
+        message: err instanceof Error ? err.message : "Gagal menghapus kategori.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -102,23 +127,40 @@ export default function CategoriesUnitsPage() {
   const handleAddUnit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUnitName.trim()) return;
+    setIsAddingUnit(true);
     try {
       await unitsOfMeasureApi.create(newUnitName.trim(), newUnitSymbol.trim());
       setNewUnitName("");
       setNewUnitSymbol("");
       loadData();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Gagal menambah satuan.");
+      await alert({
+        title: "Gagal Menambah Satuan",
+        message: err instanceof Error ? err.message : "Gagal menambah satuan.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAddingUnit(false);
     }
   };
 
   const handleDeleteUnit = async (id: string) => {
-    if (!window.confirm("Yakin ingin menghapus satuan ini?")) return;
+    const ok = await confirm({
+      title: "Hapus Satuan",
+      message: "Yakin ingin menghapus satuan ini?",
+      variant: "destructive",
+      confirmText: "Hapus",
+    });
+    if (!ok) return;
     try {
       await unitsOfMeasureApi.remove(id);
       loadData();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Gagal menghapus satuan.");
+      await alert({
+        title: "Gagal Menghapus Satuan",
+        message: err instanceof Error ? err.message : "Gagal menghapus satuan.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -166,6 +208,7 @@ export default function CategoriesUnitsPage() {
         <div className="py-10 text-center text-xs text-muted-foreground">Memuat data...</div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {/* Card Kategori Barang */}
           <Card className="border-border shadow-2xs">
             <CardContent className="p-4 space-y-3">
               <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
@@ -178,9 +221,17 @@ export default function CategoriesUnitsPage() {
                   onChange={(e) => setNewCategory(e.target.value)}
                   placeholder="Nama kategori baru..."
                   className="h-8 text-xs"
+                  disabled={isAddingCategory}
                 />
-                <Button type="submit" size="sm" variant="gradient" className="h-8 gap-1 text-xs font-bold shrink-0">
-                  <Plus className="h-3.5 w-3.5" /> Tambah
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="gradient"
+                  className="h-8 gap-1 text-xs font-bold shrink-0"
+                  disabled={isAddingCategory || !newCategory.trim()}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {isAddingCategory ? "Menambah..." : "Tambah"}
                 </Button>
               </form>
               <div className="space-y-1.5 max-h-80 overflow-y-auto">
@@ -215,6 +266,7 @@ export default function CategoriesUnitsPage() {
             </CardContent>
           </Card>
 
+          {/* Card Satuan Ukuran (UoM) */}
           <Card className="border-border shadow-2xs">
             <CardContent className="p-4 space-y-3">
               <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
@@ -227,15 +279,24 @@ export default function CategoriesUnitsPage() {
                   onChange={(e) => setNewUnitName(e.target.value)}
                   placeholder="Nama satuan (mis. Kilogram)"
                   className="h-8 text-xs flex-1"
+                  disabled={isAddingUnit}
                 />
                 <Input
                   value={newUnitSymbol}
                   onChange={(e) => setNewUnitSymbol(e.target.value)}
                   placeholder="Simbol (KG)"
                   className="h-8 text-xs w-24 shrink-0"
+                  disabled={isAddingUnit}
                 />
-                <Button type="submit" size="sm" variant="gradient" className="h-8 gap-1 text-xs font-bold shrink-0">
-                  <Plus className="h-3.5 w-3.5" /> Tambah
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="gradient"
+                  className="h-8 gap-1 text-xs font-bold shrink-0"
+                  disabled={isAddingUnit || !newUnitName.trim()}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {isAddingUnit ? "Menambah..." : "Tambah"}
                 </Button>
               </form>
               <div className="space-y-1.5 max-h-80 overflow-y-auto">
@@ -274,6 +335,7 @@ export default function CategoriesUnitsPage() {
         </div>
       )}
 
+      {/* Modal Edit Category */}
       <Dialog open={Boolean(editingCategory)} onOpenChange={(open) => !open && setEditingCategory(null)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
@@ -297,6 +359,7 @@ export default function CategoriesUnitsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Modal Edit Unit */}
       <Dialog open={Boolean(editingUnit)} onOpenChange={(open) => !open && setEditingUnit(null)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>

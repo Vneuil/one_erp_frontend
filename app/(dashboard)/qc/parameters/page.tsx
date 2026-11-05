@@ -9,10 +9,12 @@ import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, Column } from "@/components/data-table/data-table";
 import { errText, useReport } from "@/components/reports/report-ui";
 import { qcApi, QCParameterItem, CreateQCParameterInput } from "@/lib/api/qc";
+import { useConfirm } from "@/components/shared/confirm-modal";
 
 const selectCls = "w-full h-9 px-3 rounded-lg border border-border bg-white text-xs text-foreground focus:ring-1 focus:ring-primary";
 
 export default function QCParametersPage() {
+  const confirm = useConfirm();
   const [reload, setReload] = React.useState(0);
   const { data: rawParameters, loading: isLoading, error } = useReport(
     `qc-parameters|${reload}`,
@@ -154,7 +156,13 @@ export default function QCParametersPage() {
   };
 
   const handleDelete = async (item: QCParameterItem) => {
-    if (!window.confirm(`Hapus parameter mutu '${item.name}'?`)) return;
+    const ok = await confirm({
+      title: "Hapus Parameter Mutu",
+      message: `Hapus parameter mutu '${item.name}'?`,
+      variant: "destructive",
+      confirmText: "Hapus",
+    });
+    if (!ok) return;
     try {
       await qcApi.deleteParameter(item.id);
       setNotice(`Parameter '${item.name}' berhasil dihapus.`);

@@ -26,8 +26,11 @@ import { customersApi, CustomerItem } from "@/lib/api/customers";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { downloadCsv } from "@/lib/utils/csv";
+import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
 
 export default function CustomersPage() {
+  const confirm = useConfirm();
+  const alert = useAlert();
   const [customers, setCustomers] = React.useState<Customer[]>([]);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
@@ -163,12 +166,22 @@ export default function CustomersPage() {
   };
 
   const handleDeleteCustomer = async (id: string) => {
-    if (!window.confirm("Yakin ingin menghapus pelanggan ini?")) return;
+    const ok = await confirm({
+      title: "Hapus Pelanggan",
+      message: "Yakin ingin menghapus pelanggan ini?",
+      variant: "destructive",
+      confirmText: "Hapus",
+    });
+    if (!ok) return;
     try {
       await customersApi.delete(id);
       setCustomers((prev) => prev.filter((c) => c.id !== id));
     } catch (err) {
-      alert("Gagal menghapus pelanggan: " + (err instanceof Error ? err.message : "Kesalahan server"));
+      await alert({
+        title: "Gagal Menghapus Pelanggan",
+        message: err instanceof Error ? err.message : "Kesalahan server",
+        variant: "destructive",
+      });
     }
   };
 

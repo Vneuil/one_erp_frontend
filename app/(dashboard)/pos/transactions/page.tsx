@@ -13,6 +13,7 @@ import { useNavigationAccess } from "@/providers/navigation-access";
 import { useIsOwnDocument } from "@/lib/hooks/use-own-document";
 import { posApi, POSTransactionItem, POSRefundItem } from "@/lib/api/pos";
 import { defaultPosSettings, PosSettings } from "@/lib/utils/pos-totals";
+import { useConfirm } from "@/components/shared/confirm-modal";
 
 const errText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 const fmtDate = (iso: string) => (iso ? new Date(iso).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }) : "");
@@ -33,6 +34,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default function PosTransactionsPage() {
+  const confirm = useConfirm();
   const { canApprove } = useNavigationAccess();
   const mayReverse = canApprove("pos");
   const isOwn = useIsOwnDocument();
@@ -264,7 +266,16 @@ export default function PosTransactionsPage() {
                       </Button>
                     )}
                     {canVoid && (
-                      <Button size="sm" variant="outline" disabled={busy || !reason.trim()} onClick={() => window.confirm("Batalkan (void) seluruh penjualan ini?") && act(() => posApi.voidTransaction(detail.id, reason), "Transaksi dibatalkan (void).")} className="h-8 text-xs font-bold text-rose-700 border-rose-200">
+                      <Button size="sm" variant="outline" disabled={busy || !reason.trim()} onClick={async () => {
+                        const ok = await confirm({
+                          title: "Void Transaksi",
+                          message: "Batalkan (void) seluruh penjualan ini?",
+                          description: "Tindakan ini akan membatalkan seluruh transaksi penjualan ini.",
+                          variant: "destructive",
+                          confirmText: "Void Transaksi",
+                        });
+                        if (ok) act(() => posApi.voidTransaction(detail.id, reason), "Transaksi dibatalkan (void).");
+                      }} className="h-8 text-xs font-bold text-rose-700 border-rose-200">
                         Void Seluruh Transaksi
                       </Button>
                     )}

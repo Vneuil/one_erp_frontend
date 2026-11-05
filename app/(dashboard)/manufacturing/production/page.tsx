@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { errText } from "@/components/reports/report-ui";
 import { manufacturingApi, ProductionOrderItem, ProductionStepLogItem } from "@/lib/api/manufacturing";
+import { usePrompt } from "@/components/shared/confirm-modal";
 
 type Notice = { kind: "success" | "error"; text: string } | null;
 
@@ -23,6 +24,7 @@ function completable(o: ProductionOrderItem): number {
 }
 
 export default function ProductionRunPage() {
+  const prompt = usePrompt();
   const [orders, setOrders] = React.useState<ProductionOrderItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
@@ -47,7 +49,16 @@ export default function ProductionRunPage() {
   };
 
   const voidLog = async (order: ProductionOrderItem, log: ProductionStepLogItem, stepName: string) => {
-    const reason = window.prompt(`Alasan membatalkan log ${stepName} ${log.quantity} unit (${log.date})? Jumlah di proses itu akan dikurangi dan biaya tenaga kerja/overhead-nya dibalik.`, "");
+    const reason = await prompt({
+      title: "Batalkan Log Proses",
+      message: `Alasan membatalkan log ${stepName} ${log.quantity} unit (${log.date})? Jumlah di proses itu akan dikurangi dan biaya tenaga kerja/overhead-nya dibalik.`,
+      placeholder: "Tuliskan alasan pembatalan...",
+      confirmText: "Batalkan Log",
+      cancelText: "Batal",
+      variant: "destructive",
+      inputType: "textarea",
+      required: true,
+    });
     if (reason === null) return;
     if (!reason.trim()) {
       setNotice({ kind: "error", text: "Alasan pembatalan wajib diisi." });
@@ -95,15 +106,16 @@ export default function ProductionRunPage() {
   };
 
   const handleEvaluateMoisture = async (order: ProductionOrderItem) => {
-    const input = window.prompt(
-      `Evaluasi Routing Kondisional (BRL-01 CV Manna):\n` +
-      `Order: ${order.orderNumber}\n\n` +
-      `Aturan BRL-01:\n` +
-      `- Kadar Air <= 2.0% -> Melewati Ayak 1, Oven, Pendinginan (Langsung Ayak 2)\n` +
-      `- Kadar Air > 2.0%  -> Rute Standar Lengkap (Wajib Ayak 1, Oven, Pendinginan)\n\n` +
-      `Masukkan hasil uji Kadar Air (%):`,
-      "1.8"
-    );
+    const input = await prompt({
+      title: "Evaluasi Routing Kondisional (Kadar Air)",
+      message: `Order: ${order.orderNumber}\n\nAturan BRL-01:\n- Kadar Air <= 2.0% -> Melewati Ayak 1, Oven, Pendinginan (Langsung Ayak 2)\n- Kadar Air > 2.0% -> Rute Standar Lengkap (Wajib Ayak 1, Oven, Pendinginan)\n\nMasukkan hasil uji Kadar Air (%):`,
+      defaultValue: "1.8",
+      placeholder: "Contoh: 1.8",
+      confirmText: "Evaluasi",
+      cancelText: "Batal",
+      inputType: "text",
+      required: true,
+    });
     if (input === null) return;
     const val = parseFloat(input);
     if (isNaN(val) || val < 0) {
