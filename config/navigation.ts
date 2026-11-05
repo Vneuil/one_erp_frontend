@@ -10,7 +10,6 @@ import {
   UserCheck,
   Building2,
   Sparkles,
-  Sparkles,
   ShieldCheck,
   LucideIcon,
 } from "lucide-react";
