@@ -32,7 +32,11 @@ export interface SalesOrderItem {
   customerPoNumber?: string;
   customerPoAttachment?: string;
   dpPaid?: boolean;
+  dpPercent?: number;
   dpAmount?: number;
+  shippingAddress?: string;
+  shippingCourier?: string;
+  deliveryDate?: string;
   lines?: SalesOrderLine[];
   createdAt?: string;
 }
@@ -42,7 +46,11 @@ export interface UpdateSalesOrderInput {
   customerPoNumber?: string;
   customerPoAttachment?: string;
   dpPaid?: boolean;
+  dpPercent?: number;
   dpAmount?: number;
+  shippingAddress?: string;
+  shippingCourier?: string;
+  deliveryDate?: string;
   lines: SalesOrderLineInput[];
 }
 
@@ -57,7 +65,11 @@ export interface CreateSalesOrderInput {
   customerPoNumber?: string;
   customerPoAttachment?: string;
   dpPaid?: boolean;
+  dpPercent?: number;
   dpAmount?: number;
+  shippingAddress?: string;
+  shippingCourier?: string;
+  deliveryDate?: string;
   lines?: SalesOrderLineInput[];
 }
 
@@ -266,6 +278,10 @@ export const salesApi = {
 
   listOrders: async (params?: { page?: number; perPage?: number; search?: string }): Promise<ApiResponse<SalesOrderItem[]>> => {
     return apiClient<SalesOrderItem[]>("/sales/orders", { params });
+  },
+
+  getOrder: async (id: string): Promise<ApiResponse<SalesOrderItem>> => {
+    return apiClient<SalesOrderItem>(`/sales/orders/${id}`);
   },
 
   createOrder: async (data: CreateSalesOrderInput): Promise<ApiResponse<SalesOrderItem>> => {

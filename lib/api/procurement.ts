@@ -20,6 +20,8 @@ export interface PurchaseRequestItem {
   neededByDate: string;
   status: string;
   category?: string;
+  salesOrderId?: string;
+  salesOrderNo?: string;
   supervisorApprovedBy?: string;
   supervisorApprovedAt?: string;
   ownerApprovedBy?: string;
@@ -35,6 +37,8 @@ export interface CreatePurchaseRequestInput {
   department?: string;
   neededByDate?: string;
   category?: string;
+  salesOrderId?: string;
+  salesOrderNo?: string;
   lines: PurchaseRequestLineInput[];
 }
 
@@ -62,6 +66,8 @@ export interface PurchaseOrderItem {
   expectedDate: string;
   status: string;
   category?: string;
+  salesOrderId?: string;
+  salesOrderNo?: string;
   supervisorApprovedBy?: string;
   supervisorApprovedAt?: string;
   ownerApprovedBy?: string;
@@ -74,6 +80,7 @@ export interface PurchaseOrderItem {
   freightScheme?: string;
   freightCost?: number;
   qualityNotes?: string;
+  notes?: string;
   lines: PurchaseOrderLineItem[];
   createdAt?: string;
 }
@@ -83,6 +90,8 @@ export interface CreatePurchaseOrderInput {
   supplierName?: string;
   notes?: string;
   purchaseRequestId?: string | null;
+  salesOrderId?: string;
+  salesOrderNo?: string;
   orderDate?: string;
   expectedDate?: string;
   requestedBy?: string;
@@ -177,6 +186,8 @@ export interface PurchaseInvoiceItem {
   outstanding: number;
   status: string;
   category?: string;
+  salesOrderId?: string;
+  salesOrderNo?: string;
   supervisorApprovedBy?: string;
   supervisorApprovedAt?: string;
   ownerApprovedBy?: string;
@@ -221,6 +232,8 @@ export interface PurchaseDownPaymentItem {
   paymentMethod: string;
   status: string;
   category?: string;
+  salesOrderId?: string;
+  salesOrderNo?: string;
   supervisorApprovedBy?: string;
   supervisorApprovedAt?: string;
   ownerApprovedBy?: string;
@@ -262,6 +275,8 @@ export interface PurchaseReturnItem {
   reason: string;
   status: string;
   category?: string;
+  salesOrderId?: string;
+  salesOrderNo?: string;
   supervisorApprovedBy?: string;
   supervisorApprovedAt?: string;
   ownerApprovedBy?: string;
@@ -350,6 +365,9 @@ export const procurementApi = {
   },
   listPurchaseOrders: async (params?: { page?: number; perPage?: number; search?: string }): Promise<ApiResponse<PurchaseOrderItem[]>> => {
     return apiClient<PurchaseOrderItem[]>("/procurement/orders", { params });
+  },
+  getPurchaseOrder: async (id: string): Promise<ApiResponse<PurchaseOrderItem>> => {
+    return apiClient<PurchaseOrderItem>(`/procurement/orders/${id}`);
   },
   createPurchaseOrder: async (data: CreatePurchaseOrderInput): Promise<ApiResponse<PurchaseOrderItem>> => {
     return apiClient<PurchaseOrderItem>("/procurement/orders", { method: "POST", body: JSON.stringify(data) });

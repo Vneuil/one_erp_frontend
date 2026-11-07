@@ -2,7 +2,7 @@
 
 import { useNavigationAccess } from "@/providers/navigation-access";
 import * as React from "react";
-import { Plus, Download, Check, X, Eye, Edit, Send } from "lucide-react";
+import { Plus, Download, Check, X, Eye, Edit, Send, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,6 +23,7 @@ import { productsApi, ProductItem } from "@/lib/api/products";
 import { currencyApi, CurrencyItem } from "@/lib/api/currency";
 import { approvalApi, ApprovalRequest } from "@/lib/api/approval";
 import { useIsOwnDocument } from "@/lib/hooks/use-own-document";
+import { PoPrintDialog } from "@/components/procurement/po-print-dialog";
 import { useAppStore } from "@/stores/app-store";
 import { useConfirm, useAlert, usePrompt } from "@/components/shared/confirm-modal";
 import { ApprovalTimeline, canUserApprove } from "@/components/shared/approval-timeline";
@@ -64,6 +65,15 @@ export default function PurchaseOrdersPage() {
 
   // Detail Modal state (All statuses with Timeline)
   const [selectedPo, setSelectedPo] = React.useState<PurchaseOrderItem | null>(null);
+
+  // Print Modal state (Approved PO only)
+  const [printPo, setPrintPo] = React.useState<PurchaseOrderItem | null>(null);
+  const [isPrintOpen, setIsPrintOpen] = React.useState(false);
+
+  const handleOpenPrint = (po: PurchaseOrderItem) => {
+    setPrintPo(po);
+    setIsPrintOpen(true);
+  };
 
   // Edit Modal state (Draft only)
   const [editingPo, setEditingPo] = React.useState<PurchaseOrderItem | null>(null);
@@ -118,7 +128,28 @@ export default function PurchaseOrdersPage() {
       .catch((err) => console.warn("Failed to load products", err));
     procurementApi
       .listPurchaseRequests({ perPage: 100 })
-      .then((res) => setApprovedPRs((res.data || []).filter((pr) => pr.status === "approved")))
+      .then((res) => {
+        const approved = (res.data || []).filter((pr) => pr.status === "approved");
+        setApprovedPRs(approved);
+        if (typeof window !== "undefined") {
+          const params = new URLSearchParams(window.location.search);
+          const fromPrId = params.get("fromPrId");
+          if (fromPrId && approved.some((p) => p.id === fromPrId)) {
+            setPrId(fromPrId);
+            setIsNewOpen(true);
+            const pr = approved.find((p) => p.id === fromPrId);
+            if (pr) {
+              setPoLines(
+                pr.lines.map((l) => ({
+                  productId: l.productId,
+                  quantity: l.quantity,
+                  unitPrice: 0,
+                }))
+              );
+            }
+          }
+        }
+      })
       .catch((err) => console.warn("Failed to load purchase requests", err));
     currencyApi
       .list()
@@ -207,11 +238,14 @@ export default function PurchaseOrdersPage() {
       return;
     }
     setFormError(null);
+    const linkedPr = approvedPRs.find((p) => p.id === prId);
     try {
-      await procurementApi.createPurchaseOrder({
+      const res = await procurementApi.createPurchaseOrder({
         supplierId,
         supplierName: selectedSupplier?.name,
         purchaseRequestId: prId || null,
+        salesOrderId: linkedPr?.salesOrderId,
+        salesOrderNo: linkedPr?.salesOrderNo,
         expectedDate,
         requestedBy: currentUser?.name || currentUser?.email,
         currency: currency || undefined,
@@ -227,17 +261,23 @@ export default function PurchaseOrdersPage() {
       setExpectedDate("");
       setCurrency("");
       setPoLines([]);
-      setNotice("Draft Purchase Order berhasil dibuat.");
+      if (res.data?.status === "approved") {
+        setNotice("Purchase Order berhasil dibuat dan langsung disetujui (tidak membutuhkan approval).");
+      } else if (res.data?.status === "pending_approval") {
+        setNotice("Purchase Order berhasil dibuat dan menunggu persetujuan (approval).");
+      } else {
+        setNotice("Draft Purchase Order berhasil dibuat.");
+      }
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Gagal membuat purchase order.");
     }
   };
 
-  // Send for approval (Draft -> Pending Approval)
+  // Send for approval (Draft -> Pending Approval or Approved)
   const handleSendForApproval = async (po: PurchaseOrderItem) => {
     const ok = await confirm({
       title: "Kirim untuk Approval",
-      message: `Kirim Purchase Order "${po.orderNo}" untuk diajukan ke atasan sesuai hirarki approval?`,
+      message: `Kirim Purchase Order "${po.orderNo}" untuk diproses persetujuan?`,
       confirmText: "Kirim Sekarang",
       cancelText: "Batal",
       variant: "default",
@@ -245,13 +285,18 @@ export default function PurchaseOrdersPage() {
     if (!ok) return;
 
     try {
-      await procurementApi.submitPurchaseOrder(po.id);
+      const res = await procurementApi.submitPurchaseOrder(po.id);
       fetchPOs();
       fetchApprovals();
+      const updatedStatus = res.data?.status || "approved";
       if (selectedPo && selectedPo.id === po.id) {
-        setSelectedPo((prev) => (prev ? { ...prev, status: "pending_approval" } : null));
+        setSelectedPo((prev) => (prev ? { ...prev, status: updatedStatus } : null));
       }
-      setNotice(`Purchase Order "${po.orderNo}" berhasil diajukan untuk approval atasan.`);
+      if (updatedStatus === "approved") {
+        setNotice(`Purchase Order "${po.orderNo}" tidak memerlukan approval dan langsung disetujui.`);
+      } else {
+        setNotice(`Purchase Order "${po.orderNo}" berhasil diajukan untuk approval atasan.`);
+      }
     } catch (err) {
       await alert({
         title: "Gagal Mengirim PO",
@@ -406,13 +451,29 @@ export default function PurchaseOrdersPage() {
       header: "PO Number",
       sortable: true,
       render: (po) => (
-        <button
-          type="button"
-          onClick={() => setSelectedPo(po)}
-          className="font-mono text-xs font-bold text-brand-primary hover:underline cursor-pointer text-left"
-        >
-          {po.orderNo}
-        </button>
+        <div className="flex flex-col items-start gap-0.5">
+          <button
+            type="button"
+            onClick={() => setSelectedPo(po)}
+            className="font-mono text-xs font-bold text-brand-primary hover:underline cursor-pointer text-left"
+          >
+            {po.orderNo}
+          </button>
+          <div className="flex items-center gap-1 flex-wrap">
+            {po.purchaseRequestId ? (
+              <span className="px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 text-[9px] font-medium border border-purple-200">
+                Dari PR
+              </span>
+            ) : (
+              <span className="text-[9px] text-muted-foreground">PO Mandiri</span>
+            )}
+            {po.salesOrderNo && (
+              <span className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 text-[9px] font-mono border border-blue-200">
+                SO: {po.salesOrderNo}
+              </span>
+            )}
+          </div>
+        </div>
       ),
     },
     {
@@ -493,6 +554,19 @@ export default function PurchaseOrdersPage() {
             >
               <Eye className="h-4 w-4" />
             </Button>
+
+            {/* Print Button - Available when Approved */}
+            {(po.status || "").toLowerCase() === "approved" && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                title="Cetak Dokumen PO Resmi"
+                onClick={() => handleOpenPrint(po)}
+              >
+                <Printer className="h-4 w-4" />
+              </Button>
+            )}
 
             {/* Draft Actions: Edit & Kirim untuk Approval */}
             {isDraft && (
@@ -619,11 +693,18 @@ export default function PurchaseOrdersPage() {
                 onChange={(e) => handleSelectPR(e.target.value)}
                 className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30 focus-visible:border-brand-primary"
               >
-                <option value="">Pilih PR (hanya yang sudah disetujui)...</option>
+                <option value="">-- Tanpa PR (Pembelian Langsung ke Vendor) --</option>
                 {approvedPRs.map((pr) => (
-                  <option key={pr.id} value={pr.id}>{pr.requestNo} — {pr.department} ({pr.lines?.length || 0} items)</option>
+                  <option key={pr.id} value={pr.id}>
+                    {pr.requestNo} — {pr.department} ({pr.lines?.length || 0} items) {pr.salesOrderNo ? `[SO: ${pr.salesOrderNo}]` : ""}
+                  </option>
                 ))}
               </select>
+              {prId && approvedPRs.find((p) => p.id === prId)?.salesOrderNo && (
+                <p className="text-[11px] text-blue-700 font-medium">
+                  PR ini terhubung ke Sales Order: <span className="font-mono font-bold">{approvedPRs.find((p) => p.id === prId)?.salesOrderNo}</span>
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -940,7 +1021,7 @@ export default function PurchaseOrdersPage() {
             </DialogHeader>
 
             {/* General Info Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-slate-50/70 p-3.5 rounded-xl border border-border">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs bg-slate-50/70 p-3.5 rounded-xl border border-border">
               <div>
                 <span className="text-muted-foreground text-[11px] block">Vendor</span>
                 <span className="font-semibold text-foreground">{selectedPo.supplierName}</span>
@@ -948,6 +1029,17 @@ export default function PurchaseOrdersPage() {
               <div>
                 <span className="text-muted-foreground text-[11px] block">Estimasi Pengiriman</span>
                 <span className="font-semibold text-foreground">{selectedPo.expectedDate}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-[11px] block">Sumber Pengadaan</span>
+                {selectedPo.purchaseRequestId ? (
+                  <span className="font-medium text-purple-700">Dari Approved PR</span>
+                ) : (
+                  <span className="text-muted-foreground">PO Mandiri</span>
+                )}
+                {selectedPo.salesOrderNo && (
+                  <span className="font-mono text-blue-700 block text-[10px]">SO: {selectedPo.salesOrderNo}</span>
+                )}
               </div>
               <div>
                 <span className="text-muted-foreground text-[11px] block">Skema Ongkir</span>
@@ -1080,11 +1172,34 @@ export default function PurchaseOrdersPage() {
                       </Button>
                     </>
                   )}
+                {/* Print Action in Detail for Approved PO */}
+                {(selectedPo.status || "").toLowerCase() === "approved" && (
+                  <Button
+                    variant="gradient"
+                    size="sm"
+                    className="gap-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 shadow-sm"
+                    onClick={() => {
+                      const toPrint = selectedPo;
+                      handleOpenPrint(toPrint);
+                    }}
+                  >
+                    <Printer className="h-3.5 w-3.5" /> Cetak Dokumen PO
+                  </Button>
+                )}
               </div>
             </div>
           </DialogContent>
         )}
       </Dialog>
+
+      {/* PO Print Preview Dialog (Exact A4 PDF Layout) */}
+      <PoPrintDialog
+        open={isPrintOpen}
+        onOpenChange={setIsPrintOpen}
+        po={printPo}
+        products={products}
+        suppliers={suppliers}
+      />
     </div>
   );
 }

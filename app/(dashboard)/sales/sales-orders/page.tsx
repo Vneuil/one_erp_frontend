@@ -20,6 +20,7 @@ import {
   Eye,
   Edit,
   Send,
+  CreditCard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -70,7 +71,9 @@ interface SalesOrder {
   customerPoNumber?: string;
   customerPoAttachment?: string;
   dpPaid?: boolean;
+  dpPercent?: number;
   dpAmount?: number;
+  shippingAddress?: string;
   totalAmount: number;
   paymentTerms: string;
   status: string;
@@ -114,7 +117,10 @@ export default function SalesOrdersPage() {
   const [customerPoNumber, setCustomerPoNumber] = React.useState("");
   const [customerPoAttachment, setCustomerPoAttachment] = React.useState("");
   const [dpPaid, setDpPaid] = React.useState(false);
+  const [dpPercent, setDpPercent] = React.useState<number>(30);
   const [dpAmount, setDpAmount] = React.useState("0");
+  const [shippingAddress, setShippingAddress] = React.useState("");
+  const [shippingCourier, setShippingCourier] = React.useState("");
   const [customers, setCustomers] = React.useState<CustomerItem[]>([]);
   const [customersLoading, setCustomersLoading] = React.useState(false);
   const [customersError, setCustomersError] = React.useState(false);
@@ -130,11 +136,11 @@ export default function SalesOrdersPage() {
   const [stockReload, setStockReload] = React.useState(0);
   const stockLoading = !!newWarehouseId && warehouseStock?.warehouseId !== newWarehouseId;
   const stockError = warehouseStock?.warehouseId === newWarehouseId && warehouseStock.error;
-  const warehouseProducts = products.flatMap((product) => {
+  const warehouseProducts = products.map((product) => {
     const stock = warehouseStock?.warehouseId === newWarehouseId
       ? warehouseStock.items.find((item) => item.productId === product.id && item.warehouseId === newWarehouseId)
       : undefined;
-    return stock && stock.available > 0 ? [{ ...product, stock: stock.available }] : [];
+    return { ...product, stock: stock ? stock.available : 0 };
   });
 
   React.useEffect(() => {
@@ -242,13 +248,12 @@ export default function SalesOrdersPage() {
   const handleAddLine = async () => {
     if (!lineProductId) return;
     const product = warehouseProducts.find((p) => p.id === lineProductId);
-    if (!product || stockLoading || stockError) return;
+    if (!product || stockLoading) return;
     const qty = Number(lineQty);
-    const existingQty = orderLines.find((line) => line.productId === lineProductId)?.quantity || 0;
-    if (!Number.isInteger(qty) || qty < 1 || existingQty + qty > product.stock) {
+    if (!Number.isInteger(qty) || qty < 1) {
       await alert({
-        title: "Stok Tidak Cukup",
-        message: "Jumlah pesanan melebihi stok tersedia di gudang atau jumlah tidak valid.",
+        title: "Jumlah Tidak Valid",
+        message: "Masukkan jumlah pesanan yang valid (minimal 1).",
         variant: "warning",
       });
       return;
@@ -345,10 +350,13 @@ export default function SalesOrdersPage() {
             externalOrderId: o.marketplaceOrderId,
             customerName: o.customerName,
             orderDate: o.orderDate || "2026-09-02",
-            deliveryDate: "2026-09-05",
+            deliveryDate: o.deliveryDate || "2026-09-05",
+            shippingCourier: o.shippingCourier,
+            shippingAddress: o.shippingAddress,
             customerPoNumber: o.customerPoNumber,
             customerPoAttachment: o.customerPoAttachment,
             dpPaid: o.dpPaid,
+            dpPercent: o.dpPercent,
             dpAmount: o.dpAmount,
             totalAmount: o.totalAmount,
             paymentTerms: o.paymentStatus || "Paid",
@@ -410,11 +418,11 @@ export default function SalesOrdersPage() {
 
     setActingId(so.id);
     try {
-      await salesApi.submitOrder(so.id);
+      const res = await salesApi.submitOrder(so.id);
       fetchOrders();
       fetchApprovals();
       if (selectedOrder && selectedOrder.id === so.id) {
-        setSelectedOrder((prev) => (prev ? { ...prev, status: "pending_approval" } : null));
+        setSelectedOrder((prev) => (prev ? { ...prev, status: res.data?.status || "Confirmed" } : null));
       }
     } catch (err) {
       await alert({
@@ -552,13 +560,10 @@ export default function SalesOrdersPage() {
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     const customer = customers.find((item) => item.id === newCustomerId);
-    if (!newWarehouseId || stockLoading || stockError || orderLines.some((line) => {
-      const product = warehouseProducts.find((item) => item.id === line.productId);
-      return !product || line.quantity > product.stock;
-    })) {
+    if (!newWarehouseId) {
       await alert({
-        title: "Periksa Stok",
-        message: "Periksa produk dan stok tersedia di gudang yang dipilih.",
+        title: "Pilih Gudang",
+        message: "Pilih gudang pemenuhan pesanan terlebih dahulu.",
         variant: "warning",
       });
       return;
@@ -587,6 +592,7 @@ export default function SalesOrdersPage() {
       };
     });
 
+    const calculatedDp = Math.round((newTotalAmount * dpPercent) / 100);
     try {
       const res = await salesApi.createOrder({
         customerName: customer.name,
@@ -595,7 +601,11 @@ export default function SalesOrdersPage() {
         customerPoNumber: customerPoNumber || undefined,
         customerPoAttachment: customerPoAttachment || undefined,
         dpPaid,
-        dpAmount: Number(dpAmount) || 0,
+        dpPercent,
+        dpAmount: calculatedDp,
+        shippingAddress: shippingAddress || undefined,
+        shippingCourier: shippingCourier || undefined,
+        deliveryDate: newDeliveryDate || undefined,
         status: "draft",
         lines: orderLines,
       });
@@ -608,14 +618,17 @@ export default function SalesOrdersPage() {
           source: "manual",
           customerName: o.customerName,
           orderDate: o.orderDate || orderDate,
-          deliveryDate: newDeliveryDate || orderDate.slice(0, 10),
+          deliveryDate: o.deliveryDate || newDeliveryDate || orderDate.slice(0, 10),
+          shippingCourier: o.shippingCourier || shippingCourier,
+          shippingAddress: o.shippingAddress || shippingAddress,
           totalAmount: o.totalAmount,
           paymentTerms: o.paymentStatus || "Pending",
-          status: "draft",
+          status: o.status || "Confirmed",
           customerPoNumber: o.customerPoNumber || customerPoNumber,
           customerPoAttachment: o.customerPoAttachment || customerPoAttachment,
           dpPaid: o.dpPaid ?? dpPaid,
-          dpAmount: o.dpAmount ?? Number(dpAmount),
+          dpPercent: o.dpPercent ?? dpPercent,
+          dpAmount: o.dpAmount ?? calculatedDp,
           editable: true,
           items: itemsForDisplay,
         },
@@ -626,7 +639,7 @@ export default function SalesOrdersPage() {
       console.warn("Failed to create sales order via API", err);
       await alert({
         title: "Gagal Membuat Pesanan",
-        message: "Gagal membuat pesanan (kemungkinan stok tidak cukup di gudang terpilih). Coba lagi.",
+        message: err instanceof Error ? err.message : "Gagal membuat pesanan. Coba lagi.",
         variant: "destructive",
       });
       return;
@@ -634,6 +647,13 @@ export default function SalesOrdersPage() {
 
     setIsCreateOpen(false);
     setNewCustomerId("");
+    setCustomerPoNumber("");
+    setCustomerPoAttachment("");
+    setDpPaid(false);
+    setDpPercent(30);
+    setDpAmount("0");
+    setShippingAddress("");
+    setShippingCourier("");
     setNewDeliveryDate("");
     setOrderLines([]);
     setDiscountPercent("0");
@@ -750,21 +770,28 @@ export default function SalesOrdersPage() {
     },
     {
       key: "status",
-      header: "Status & DP 50%",
-      render: (so) => (
-        <div className="flex flex-col gap-1 items-start">
-          <StatusBadge status={so.status} />
-          {so.dpPaid ? (
-            <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[9px] font-bold border border-emerald-300">
-              DP 50% Lunas (Siap Produksi)
-            </span>
-          ) : (
-            <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-bold border border-amber-300">
-              Gating: Belum DP 50%
-            </span>
-          )}
-        </div>
-      ),
+      header: "Status & DP",
+      render: (so) => {
+        const pct = so.dpPercent !== undefined ? so.dpPercent : (so.dpPaid ? 50 : 0);
+        return (
+          <div className="flex flex-col gap-1 items-start">
+            <StatusBadge status={so.status} />
+            {pct === 0 ? (
+              <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[9px] font-medium border border-slate-300">
+                Tanpa DP (0%)
+              </span>
+            ) : so.dpPaid ? (
+              <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[9px] font-bold border border-emerald-300">
+                DP {pct}% Lunas {so.dpAmount ? `(Rp ${Math.round(so.dpAmount).toLocaleString("id-ID")})` : ""}
+              </span>
+            ) : (
+              <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-bold border border-amber-300">
+                Menunggu DP {pct}% {so.dpAmount ? `(Rp ${Math.round(so.dpAmount).toLocaleString("id-ID")})` : ""}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "id",
@@ -1115,6 +1142,56 @@ export default function SalesOrdersPage() {
                 </div>
               </div>
 
+              {/* Additional Document & DP Meta */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs p-3 rounded-xl border border-border bg-slate-50/70">
+                <div>
+                  <span className="text-muted-foreground text-[11px] block">Customer PO</span>
+                  <span className="font-mono font-semibold text-foreground">
+                    {selectedOrder.customerPoNumber || "-"}
+                  </span>
+                  {selectedOrder.customerPoAttachment && (
+                    <a
+                      href={selectedOrder.customerPoAttachment}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[10px] text-brand-primary underline block truncate"
+                    >
+                      Lampiran Dokumen
+                    </a>
+                  )}
+                </div>
+                <div>
+                  <span className="text-muted-foreground text-[11px] block">Pengiriman</span>
+                  <span className="font-semibold text-foreground">
+                    {selectedOrder.shippingCourier || "Standar"}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground block truncate">
+                    {selectedOrder.shippingAddress || `Kirim: ${selectedOrder.deliveryDate}`}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground text-[11px] block">Ketentuan DP</span>
+                  <span className="font-semibold text-foreground font-mono">
+                    {selectedOrder.dpPercent != null ? `${selectedOrder.dpPercent}%` : selectedOrder.dpPaid ? "50%" : "0%"}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground block">
+                    Rp {(selectedOrder.dpAmount || 0).toLocaleString("id-ID")}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground text-[11px] block">Status Uang Muka</span>
+                  {selectedOrder.dpPaid ? (
+                    <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold inline-block mt-0.5">
+                      DP Lunas
+                    </span>
+                  ) : (
+                    <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold inline-block mt-0.5">
+                      Belum Bayar DP
+                    </span>
+                  )}
+                </div>
+              </div>
+
               {/* Items Line Table */}
               <div className="space-y-2">
                 <h4 className="text-xs font-bold text-foreground">Ordered Line Items</h4>
@@ -1252,6 +1329,18 @@ export default function SalesOrdersPage() {
                       Create Delivery
                     </Button>
                   )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="border-brand-primary/30 text-brand-primary hover:bg-brand-tint gap-1 font-semibold"
+                    onClick={() => {
+                      window.location.href = `/procurement/purchase-requests?fromSoId=${selectedOrder.id}&fromSoNo=${selectedOrder.orderNumber}`;
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Buat PR Pengadaan
+                  </Button>
                   {selectedOrder.source === "marketplace" && (
                     <Button
                       type="button"
@@ -1337,9 +1426,20 @@ export default function SalesOrdersPage() {
                       <tbody className="divide-y divide-border">
                         {orderLines.map((l) => {
                           const product = products.find((p) => p.id === l.productId);
+                          const stockInfo = warehouseProducts.find((p) => p.id === l.productId);
+                          const isLowStock = (stockInfo?.stock ?? 0) < l.quantity;
                           return (
                             <tr key={l.productId}>
-                              <td className="py-2 px-3">{product?.name || l.productId}</td>
+                              <td className="py-2 px-3">
+                                <div>
+                                  <span className="font-medium">{product?.name || l.productId}</span>
+                                  {isLowStock && (
+                                    <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-medium border border-amber-200">
+                                      Perlu Pengadaan (Stok: {stockInfo?.stock ?? 0})
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
                               <td className="py-2 px-3 text-center whitespace-nowrap">{l.quantity}x</td>
                               <td className="py-2 px-3 text-right font-semibold whitespace-nowrap">
                                 Rp {(l.quantity * l.unitPrice).toLocaleString("id-ID")}
@@ -1411,14 +1511,16 @@ export default function SalesOrdersPage() {
               <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-1.5 sm:flex">
                 <select
                   aria-label="Produk gudang"
-                  disabled={!newWarehouseId || stockLoading || !!stockError}
+                  disabled={!newWarehouseId || stockLoading}
                   value={lineProductId}
                   onChange={(e) => setLineProductId(e.target.value)}
                   className="col-span-2 flex h-10 w-full flex-1 min-w-0 rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30 focus-visible:border-brand-primary"
                 >
                   <option value="">{stockLoading ? "Memuat produk gudang..." : !newWarehouseId ? "Pilih gudang terlebih dahulu" : "Pilih produk..."}</option>
                   {warehouseProducts.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name} (Stok tersedia: {p.stock})</option>
+                    <option key={p.id} value={p.id}>
+                      {p.name} (Stok: {p.stock}{p.stock === 0 ? " — Pengadaan PR/PO" : ""})
+                    </option>
                   ))}
                 </select>
                 <Input
@@ -1428,20 +1530,138 @@ export default function SalesOrdersPage() {
                   onChange={(e) => setLineQty(e.target.value)}
                   className="w-16 shrink-0"
                 />
-                <Button type="button" variant="outline" size="sm" disabled={!lineProductId || stockLoading || !!stockError} onClick={handleAddLine} className="h-10 text-xs shrink-0">
+                <Button type="button" variant="outline" size="sm" disabled={!lineProductId || stockLoading} onClick={handleAddLine} className="h-10 text-xs shrink-0">
                   Tambah
                 </Button>
               </div>
               {stockError ? (
-                <p role="alert" className="text-xs text-rose-600">Gagal memuat stok gudang. <button type="button" className="underline" onClick={() => { setWarehouseStock(null); setStockReload((value) => value + 1); }}>Muat ulang stok</button></p>
+                <p role="alert" className="text-xs text-amber-600">Info stok gudang tidak dapat dimuat, Anda tetap dapat menambahkan produk untuk kebutuhan pengadaan.</p>
               ) : !stockLoading && newWarehouseId && warehouseProducts.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Tidak ada produk dengan stok tersedia di gudang ini.</p>
+                <p className="text-xs text-muted-foreground">Belum ada produk di master data.</p>
               ) : null}
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-foreground">Delivery Date</label>
-              <Input type="date" value={newDeliveryDate} onChange={(e) => setNewDeliveryDate(e.target.value)} />
+            {/* Customer Document / PO Info */}
+            <div className="p-3 rounded-xl border border-border bg-slate-50/70 space-y-2.5">
+              <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                <FileText className="h-3.5 w-3.5 text-brand-primary" />
+                Dokumen & Referensi PO Pembeli
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground">Nomor PO Pembeli (Customer PO)</label>
+                  <Input
+                    placeholder="Contoh: PO-CUST-2026/09/01"
+                    value={customerPoNumber}
+                    onChange={(e) => setCustomerPoNumber(e.target.value)}
+                    className="h-8 text-xs bg-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground">Tautan Dokumen / Lampiran</label>
+                  <Input
+                    placeholder="https://... atau nomor berkas fisik"
+                    value={customerPoAttachment}
+                    onChange={(e) => setCustomerPoAttachment(e.target.value)}
+                    className="h-8 text-xs bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Shipping Info */}
+            <div className="p-3 rounded-xl border border-border bg-slate-50/70 space-y-2.5">
+              <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                <Truck className="h-3.5 w-3.5 text-brand-primary" />
+                Informasi Pengiriman (Shipping)
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground">Tanggal Pengiriman</label>
+                  <Input
+                    type="date"
+                    value={newDeliveryDate}
+                    onChange={(e) => setNewDeliveryDate(e.target.value)}
+                    className="h-8 text-xs bg-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground">Kurir / Ekspedisi / Armada</label>
+                  <Input
+                    placeholder="Contoh: Truk Pabrik / JNE / Ambil Sendiri"
+                    value={shippingCourier}
+                    onChange={(e) => setShippingCourier(e.target.value)}
+                    className="h-8 text-xs bg-white"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground">Alamat Pengiriman</label>
+                <Input
+                  placeholder="Alamat lengkap penerima atau instruksi pengiriman"
+                  value={shippingAddress}
+                  onChange={(e) => setShippingAddress(e.target.value)}
+                  className="h-8 text-xs bg-white"
+                />
+              </div>
+            </div>
+
+            {/* Down Payment (DP) Slider 0-100% */}
+            <div className="p-3 rounded-xl border border-border bg-slate-50/70 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <CreditCard className="h-3.5 w-3.5 text-brand-primary" />
+                  Skema Down Payment (DP)
+                </h4>
+                <span className="text-xs font-bold font-mono text-brand-primary bg-white px-2 py-0.5 rounded border border-border">
+                  {dpPercent}% (Rp {Math.round((newTotalAmount * dpPercent) / 100).toLocaleString("id-ID")})
+                </span>
+              </div>
+              
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground font-medium">
+                  <span>0% (Net / COD)</span>
+                  <span>Slider DP: {dpPercent}%</span>
+                  <span>100% (Lunas Penuh)</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={dpPercent}
+                  onChange={(e) => setDpPercent(Number(e.target.value))}
+                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-brand-primary"
+                />
+                <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+                  {[0, 20, 30, 50, 70, 100].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setDpPercent(preset)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                        dpPercent === preset
+                          ? "bg-brand-primary text-white font-bold"
+                          : "bg-white border border-border text-foreground hover:bg-slate-100"
+                      }`}
+                    >
+                      {preset === 0 ? "0% (COD)" : preset === 100 ? "100% (Lunas)" : `${preset}%`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2 pt-1 text-xs cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={dpPaid}
+                  onChange={(e) => setDpPaid(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-brand-primary rounded"
+                />
+                <span className="text-foreground font-medium">
+                  Tandai uang muka (DP {dpPercent}%) sudah dibayarkan oleh customer
+                </span>
+              </label>
             </div>
             <DialogFooter className="gap-2 sm:gap-0">
               <Button type="button" variant="outline" size="sm" onClick={() => setIsCreateOpen(false)}>

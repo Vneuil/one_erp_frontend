@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Eye, Edit, Send, Check, X, Printer } from "lucide-react";
+import { Plus, Eye, Edit, Send, Check, X, Printer, Sparkles, AlertCircle, CheckCircle2, RotateCcw, PackageCheck, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -14,7 +14,9 @@ import {
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, Column } from "@/components/data-table/data-table";
 import { procurementApi, PurchaseRequestLineInput } from "@/lib/api/procurement";
+import { salesApi, SalesOrderItem as ApiSO } from "@/lib/api/sales";
 import { productsApi, ProductItem } from "@/lib/api/products";
+import { inventoryApi, StockLevelItem } from "@/lib/api/inventory";
 import { hrmApi } from "@/lib/api/hrm";
 import { approvalApi, ApprovalRequest } from "@/lib/api/approval";
 import { useAppStore } from "@/stores/app-store";
@@ -33,6 +35,8 @@ interface PurchaseRequest {
   itemCount: number;
   status: string;
   category?: string;
+  salesOrderId?: string;
+  salesOrderNo?: string;
   supervisorApprovedBy?: string;
   ownerApprovedBy?: string;
   rejectionReason?: string;
@@ -111,6 +115,24 @@ export default function PurchaseRequestsPage() {
 
   // Create Modal state
   const [isNewOpen, setIsNewOpen] = React.useState(false);
+  const [salesOrders, setSalesOrders] = React.useState<ApiSO[]>([]);
+  const [selectedSalesOrderId, setSelectedSalesOrderId] = React.useState<string>("");
+  const [stockLevels, setStockLevels] = React.useState<StockLevelItem[]>([]);
+  const [isAnalyzingSo, setIsAnalyzingSo] = React.useState(false);
+  const [soAnalysis, setSoAnalysis] = React.useState<{
+    salesOrder: ApiSO;
+    items: {
+      productId: string;
+      productName: string;
+      productSku: string;
+      unit: string;
+      orderedQty: number;
+      availableStock: number;
+      shortage: number;
+      status: "shortage" | "sufficient";
+    }[];
+    totalShortageItems: number;
+  } | null>(null);
   const [department, setDepartment] = React.useState("");
   const [requiredDate, setRequiredDate] = React.useState("");
   const [products, setProducts] = React.useState<ProductItem[]>([]);
@@ -174,6 +196,8 @@ export default function PurchaseRequestsPage() {
             itemCount: pr.lines?.length || 0,
             status: pr.status,
             category: pr.category,
+            salesOrderId: pr.salesOrderId,
+            salesOrderNo: pr.salesOrderNo,
             supervisorApprovedBy: pr.supervisorApprovedBy,
             ownerApprovedBy: pr.ownerApprovedBy,
             rejectionReason: pr.rejectionReason,
@@ -219,6 +243,16 @@ export default function PurchaseRequestsPage() {
       .then((res) => setProducts(res.data || []))
       .catch((err) => console.warn("Failed to load products for PR line items", err));
 
+    salesApi
+      .listOrders({ perPage: 100 })
+      .then((res) => setSalesOrders(res.data || []))
+      .catch((err) => console.warn("Failed to load sales orders for PR reference", err));
+
+    inventoryApi
+      .listStockLevels({ perPage: 500 })
+      .then((res) => setStockLevels(res.data || []))
+      .catch((err) => console.warn("Failed to load stock levels for PR shortage calculation", err));
+
     hrmApi
       .listEmployees({ perPage: 500 })
       .then((res) => {
@@ -229,6 +263,96 @@ export default function PurchaseRequestsPage() {
       })
       .catch((err) => console.warn("Failed to load employee record for department autofill", err));
   }, [currentUser.email]);
+
+  const handleSelectSalesOrder = React.useCallback(async (soId: string) => {
+    setSelectedSalesOrderId(soId);
+    if (!soId) {
+      setSoAnalysis(null);
+      return;
+    }
+
+    setIsAnalyzingSo(true);
+    try {
+      let so = salesOrders.find((s) => s.id === soId);
+      if (!so || !so.lines || so.lines.length === 0) {
+        const res = await salesApi.getOrder(soId);
+        if (res.data) so = res.data;
+      }
+
+      if (!so || !so.lines || so.lines.length === 0) {
+        setSoAnalysis(null);
+        return;
+      }
+
+      const analysisItems = so.lines.map((line) => {
+        const product = products.find((p) => p.id === line.productId);
+        let available = 0;
+        if (so?.warehouseId) {
+          const whStock = stockLevels.find(
+            (sl) => sl.productId === line.productId && sl.warehouseId === so?.warehouseId
+          );
+          available = whStock ? whStock.available : (product?.stock ?? 0);
+        } else {
+          const matchingStock = stockLevels.filter((sl) => sl.productId === line.productId);
+          if (matchingStock.length > 0) {
+            available = matchingStock.reduce((sum, s) => sum + (s.available || 0), 0);
+          } else {
+            available = product?.stock ?? 0;
+          }
+        }
+
+        const shortage = Math.max(0, line.quantity - available);
+        return {
+          productId: line.productId,
+          productName: product?.name || line.productId,
+          productSku: product?.sku || "-",
+          unit: product?.unit || "Unit",
+          orderedQty: line.quantity,
+          availableStock: Math.max(0, available),
+          shortage,
+          status: shortage > 0 ? ("shortage" as const) : ("sufficient" as const),
+        };
+      });
+
+      const totalShortage = analysisItems.filter((item) => item.shortage > 0).length;
+
+      setSoAnalysis({
+        salesOrder: so,
+        items: analysisItems,
+        totalShortageItems: totalShortage,
+      });
+
+      // Auto-suggest: populate prLines with items that have a shortage!
+      const suggestedLines: PurchaseRequestLineInput[] = analysisItems
+        .filter((item) => item.shortage > 0)
+        .map((item) => ({
+          productId: item.productId,
+          quantity: item.shortage,
+          notes: `Kekurangan ${so?.orderNumber} (Butuh ${item.orderedQty.toLocaleString("id-ID")}, Stok ${item.availableStock.toLocaleString("id-ID")})`,
+        }));
+
+      if (suggestedLines.length > 0) {
+        setPrLines(suggestedLines);
+      } else {
+        setPrLines([]);
+      }
+    } catch (err) {
+      console.warn("Failed to analyze SO shortage", err);
+    } finally {
+      setIsAnalyzingSo(false);
+    }
+  }, [salesOrders, products, stockLevels]);
+
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const fromSoId = params.get("fromSoId");
+      if (fromSoId && salesOrders.length > 0 && products.length > 0 && stockLevels.length >= 0) {
+        setIsNewOpen(true);
+        void handleSelectSalesOrder(fromSoId);
+      }
+    }
+  }, [salesOrders, products, stockLevels, handleSelectSalesOrder]);
 
   const handleAddLine = () => {
     if (!lineProductId) return;
@@ -279,11 +403,14 @@ export default function PurchaseRequestsPage() {
       return;
     }
 
+    const linkedSo = salesOrders.find((s) => s.id === selectedSalesOrderId);
     try {
       const created = await procurementApi.createPurchaseRequest({
         department,
         neededByDate: requiredDate,
         category,
+        salesOrderId: linkedSo ? linkedSo.id : undefined,
+        salesOrderNo: linkedSo ? linkedSo.orderNumber : undefined,
         lines: prLines,
       });
       const pr = created.data;
@@ -298,11 +425,19 @@ export default function PurchaseRequestsPage() {
           itemCount: pr.lines?.length || prLines.length,
           status: pr.status || "draft",
           category: pr.category,
+          salesOrderId: pr.salesOrderId || (linkedSo ? linkedSo.id : undefined),
+          salesOrderNo: pr.salesOrderNo || (linkedSo ? linkedSo.orderNumber : undefined),
           lines: prLines,
         },
         ...prev,
       ]);
-      setNotice("Draft Purchase Request berhasil dibuat.");
+      if (pr.status === "approved") {
+        setNotice("Purchase Request berhasil dibuat dan langsung disetujui (tidak membutuhkan approval).");
+      } else if (pr.status === "pending_approval") {
+        setNotice("Purchase Request berhasil dibuat dan menunggu persetujuan (approval).");
+      } else {
+        setNotice("Draft Purchase Request berhasil dibuat.");
+      }
     } catch (err) {
       console.warn("Failed to create purchase request via API", err);
       await alert({
@@ -314,6 +449,8 @@ export default function PurchaseRequestsPage() {
     }
 
     setIsNewOpen(false);
+    setSelectedSalesOrderId("");
+    setSoAnalysis(null);
     setRequiredDate("");
     setPrLines([]);
   };
@@ -331,16 +468,21 @@ export default function PurchaseRequestsPage() {
 
     try {
       const res = await procurementApi.submitPurchaseRequest(id);
+      const updatedStatus = res.data?.status || "approved";
       setPrs((prev) =>
         prev.map((item) =>
-          item.id === id ? { ...item, status: res.data.status || "pending_approval" } : item
+          item.id === id ? { ...item, status: updatedStatus } : item
         )
       );
       if (selectedPr && selectedPr.id === id) {
-        setSelectedPr((prev) => (prev ? { ...prev, status: res.data.status || "pending_approval" } : null));
+        setSelectedPr((prev) => (prev ? { ...prev, status: updatedStatus } : null));
       }
       fetchApprovals();
-      setNotice("Purchase Request berhasil dikirim untuk approval atasan.");
+      if (updatedStatus === "approved") {
+        setNotice("Purchase Request tidak membutuhkan approval dan langsung disetujui.");
+      } else {
+        setNotice("Purchase Request berhasil dikirim untuk approval atasan.");
+      }
     } catch (err) {
       await alert({
         title: "Gagal Mengirim PR",
@@ -697,13 +839,22 @@ export default function PurchaseRequestsPage() {
       header: "PR Number",
       sortable: true,
       render: (pr) => (
-        <button
-          type="button"
-          onClick={() => setSelectedPr(pr)}
-          className="font-mono text-xs font-bold text-brand-primary hover:underline cursor-pointer text-left"
-        >
-          {pr.prNumber}
-        </button>
+        <div className="flex flex-col items-start gap-0.5">
+          <button
+            type="button"
+            onClick={() => setSelectedPr(pr)}
+            className="font-mono text-xs font-bold text-brand-primary hover:underline cursor-pointer text-left"
+          >
+            {pr.prNumber}
+          </button>
+          {pr.salesOrderNo ? (
+            <span className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 text-[9px] font-mono border border-blue-200">
+              SO: {pr.salesOrderNo}
+            </span>
+          ) : (
+            <span className="text-[9px] text-muted-foreground">Stok / Internal</span>
+          )}
+        </div>
       ),
     },
     {
@@ -869,7 +1020,12 @@ export default function PurchaseRequestsPage() {
           variant="gradient"
           size="sm"
           className="h-9 gap-1.5 text-xs font-semibold"
-          onClick={() => setIsNewOpen(true)}
+          onClick={() => {
+            setSelectedSalesOrderId("");
+            setSoAnalysis(null);
+            setPrLines([]);
+            setIsNewOpen(true);
+          }}
         >
           <Plus className="h-3.5 w-3.5" /> Submit Purchase Request
         </Button>
@@ -901,7 +1057,7 @@ export default function PurchaseRequestsPage() {
 
       {/* New PR Dialog */}
       <Dialog open={isNewOpen} onOpenChange={setIsNewOpen}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-lg max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto p-4 sm:p-6">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Submit Purchase Request (Draft)</DialogTitle>
           </DialogHeader>
@@ -921,6 +1077,155 @@ export default function PurchaseRequestsPage() {
                 Dokumen akan disimpan sebagai Draft terlebih dahulu sebelum dikirim untuk persetujuan.
               </p>
             </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                <span>Sumber Sales Order (Opsional)</span>
+                {isAnalyzingSo && (
+                  <span className="text-[11px] text-brand-primary flex items-center gap-1 font-normal">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Menghitung kekurangan stok...
+                  </span>
+                )}
+              </label>
+              <select
+                value={selectedSalesOrderId}
+                onChange={(e) => void handleSelectSalesOrder(e.target.value)}
+                className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
+              >
+                <option value="">-- Tanpa Sales Order (Stok Gudang / Kebutuhan Internal) --</option>
+                {salesOrders.map((so) => (
+                  <option key={so.id} value={so.id}>
+                    {so.orderNumber} — {so.customerName} ({so.status})
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-muted-foreground">
+                Pilih SO jika pengadaan ini dibuat untuk memenuhi pesanan pelanggan tertentu (sistem akan otomatis menghitung kekurangan stok), atau kosongkan jika untuk stok gudang.
+              </p>
+            </div>
+
+            {/* SO Shortage Analysis Card */}
+            {soAnalysis && (
+              <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/90 to-indigo-50/50 p-3.5 space-y-2.5 text-xs shadow-xs">
+                <div className="flex items-center justify-between flex-wrap gap-1">
+                  <div className="flex items-center gap-1.5 font-bold text-blue-950">
+                    <Sparkles className="h-4 w-4 text-brand-primary" />
+                    Analisis Kebutuhan dari {soAnalysis.salesOrder.orderNumber}
+                  </div>
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white border border-blue-200 text-blue-800">
+                    Pelanggan: {soAnalysis.salesOrder.customerName}
+                  </span>
+                </div>
+
+                <div className="rounded-lg border border-blue-200/80 bg-white overflow-x-auto shadow-xs">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-blue-50/70 text-[11px] font-semibold text-blue-900 border-b border-blue-200/70">
+                      <tr>
+                        <th className="py-2 px-3">Item Barang</th>
+                        <th className="py-2 px-3 text-center whitespace-nowrap">Kebutuhan SO</th>
+                        <th className="py-2 px-3 text-center whitespace-nowrap">Stok Gudang</th>
+                        <th className="py-2 px-3 text-center whitespace-nowrap">Kekurangan</th>
+                        <th className="py-2 px-3 text-right whitespace-nowrap">Status Rekomendasi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {soAnalysis.items.map((item) => (
+                        <tr key={item.productId} className={item.shortage > 0 ? "bg-amber-50/40" : "bg-emerald-50/30"}>
+                          <td className="py-2 px-3">
+                            <div className="font-semibold text-foreground">{item.productName}</div>
+                            <div className="text-[10px] text-muted-foreground font-mono">{item.productSku}</div>
+                          </td>
+                          <td className="py-2 px-3 text-center font-mono font-medium whitespace-nowrap">
+                            {item.orderedQty.toLocaleString("id-ID")} {item.unit}
+                          </td>
+                          <td className="py-2 px-3 text-center font-mono text-muted-foreground whitespace-nowrap">
+                            {item.availableStock.toLocaleString("id-ID")} {item.unit}
+                          </td>
+                          <td className="py-2 px-3 text-center font-mono font-bold whitespace-nowrap">
+                            {item.shortage > 0 ? (
+                              <span className="text-amber-700">-{item.shortage.toLocaleString("id-ID")} {item.unit}</span>
+                            ) : (
+                              <span className="text-emerald-700">0</span>
+                            )}
+                          </td>
+                          <td className="py-2 px-3 text-right whitespace-nowrap">
+                            {item.shortage > 0 ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                <AlertCircle className="h-3 w-3" /> Kurang {item.shortage.toLocaleString("id-ID")}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                <CheckCircle2 className="h-3 w-3" /> Stok Cukup
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
+                  <div className="text-[11px] text-blue-900 font-medium">
+                    {soAnalysis.totalShortageItems > 0 ? (
+                      <span className="flex items-center gap-1 text-amber-900">
+                        ⚡ Terdeteksi <strong>{soAnalysis.totalShortageItems} item</strong> kekurangan stok yang otomatis dimasukkan ke daftar pengadaan di bawah.
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-emerald-800">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Semua item pada SO ini stoknya telah mencukupi di gudang.
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const lines = soAnalysis.items
+                          .filter((i) => i.shortage > 0)
+                          .map((i) => ({
+                            productId: i.productId,
+                            quantity: i.shortage,
+                            notes: `Kekurangan ${soAnalysis.salesOrder.orderNumber} (Butuh ${i.orderedQty.toLocaleString("id-ID")}, Stok ${i.availableStock.toLocaleString("id-ID")})`,
+                          }));
+                        setPrLines(lines);
+                      }}
+                      className="h-7 text-[11px] bg-white border-blue-200 text-blue-800 hover:bg-blue-50"
+                    >
+                      <RotateCcw className="h-3 w-3 mr-1" /> Muat Kekurangan
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const lines = soAnalysis.items.map((i) => ({
+                          productId: i.productId,
+                          quantity: i.orderedQty,
+                          notes: `Seluruh kebutuhan ${soAnalysis.salesOrder.orderNumber}`,
+                        }));
+                        setPrLines(lines);
+                      }}
+                      className="h-7 text-[11px] bg-white border-slate-200 hover:bg-slate-50 text-slate-700"
+                    >
+                      Muat Semua Qty SO
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setPrLines([])}
+                      className="h-7 text-[11px] text-rose-600 hover:bg-rose-50"
+                    >
+                      Kosongkan
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-1">
               <label className="text-xs font-semibold text-foreground">Department</label>
               <Input
@@ -951,7 +1256,7 @@ export default function PurchaseRequestsPage() {
               <div className="rounded-lg border border-border bg-slate-50/60 p-3 space-y-3">
                 {prLines.length === 0 ? (
                   <p className="text-xs text-muted-foreground text-center py-2">
-                    Belum ada item. Pilih produk di bawah lalu klik &quot;Tambah&quot;.
+                    Belum ada item. Pilih produk di bawah lalu klik &quot;Tambah&quot; atau pilih Sumber SO untuk auto-suggest kekurangan barang.
                   </p>
                 ) : (
                   <div className="rounded-lg border border-border bg-white overflow-x-auto">
@@ -966,7 +1271,25 @@ export default function PurchaseRequestsPage() {
                                 <div className="font-medium text-foreground">{product?.name || l.productId}</div>
                                 {l.notes && <div className="text-[10px] text-muted-foreground">{l.notes}</div>}
                               </td>
-                              <td className="py-2 px-3 text-center whitespace-nowrap">{l.quantity}x</td>
+                              <td className="py-2 px-3 text-center whitespace-nowrap">
+                                <div className="flex items-center justify-center gap-1">
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    value={l.quantity}
+                                    onChange={(e) => {
+                                      const val = Number(e.target.value);
+                                      if (val >= 1) {
+                                        setPrLines((prev) =>
+                                          prev.map((item) => (item.productId === l.productId ? { ...item, quantity: val } : item))
+                                        );
+                                      }
+                                    }}
+                                    className="h-7 w-20 text-center text-xs bg-white font-medium"
+                                  />
+                                  <span className="text-[11px] text-muted-foreground">{product?.unit || "Unit"}</span>
+                                </div>
+                              </td>
                               {pricesAllowed && (
                                 <td className="py-2 px-3 text-right whitespace-nowrap text-muted-foreground">
                                   <MoneyDisplay amount={subtotal} />
@@ -1211,7 +1534,7 @@ export default function PurchaseRequestsPage() {
             </DialogHeader>
 
             {/* General Info Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs bg-slate-50/70 p-3.5 rounded-xl border border-border">
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 text-xs bg-slate-50/70 p-3.5 rounded-xl border border-border">
               <div>
                 <span className="text-muted-foreground text-[11px] block">Departemen</span>
                 <span className="font-semibold text-foreground">{selectedPr.department}</span>
@@ -1229,6 +1552,14 @@ export default function PurchaseRequestsPage() {
                 <span className="font-semibold text-foreground">
                   {pricesAllowed ? <MoneyDisplay amount={selectedPrTotalNominal} /> : "***"}
                 </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-[11px] block">Sumber Sales Order</span>
+                {selectedPr.salesOrderNo ? (
+                  <span className="font-mono font-semibold text-brand-primary">{selectedPr.salesOrderNo}</span>
+                ) : (
+                  <span className="text-muted-foreground">Stok / Internal</span>
+                )}
               </div>
               <div>
                 <span className="text-muted-foreground text-[11px] block">Status Dokumen</span>
@@ -1395,6 +1726,18 @@ export default function PurchaseRequestsPage() {
                       </Button>
                     </>
                   )}
+                {(selectedPr.status || "").toLowerCase() === "approved" && (
+                  <Button
+                    variant="gradient"
+                    size="sm"
+                    className="gap-1.5 text-xs font-semibold"
+                    onClick={() => {
+                      window.location.href = `/procurement/purchase-orders?fromPrId=${selectedPr.id}`;
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Terbitkan PO ke Supplier
+                  </Button>
+                )}
               </div>
             </div>
           </DialogContent>
