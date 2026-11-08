@@ -1,4 +1,4 @@
-import { apiClient, ApiResponse } from "./client";
+import { apiClient, apiClientDownload, ApiResponse } from "./client";
 
 export interface SalesOrderLine {
   id: string;
@@ -288,6 +288,34 @@ export const salesApi = {
     return apiClient<SalesOrderItem>("/sales/orders", {
       method: "POST",
       body: JSON.stringify(data),
+    });
+  },
+
+  uploadAttachment: async (
+    file: File
+  ): Promise<ApiResponse<{ key: string; filename: string; size: number; contentType: string }>> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiClient<{ key: string; filename: string; size: number; contentType: string }>(
+      "/sales/orders/upload-attachment",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+  },
+
+  downloadAttachment: async (
+    orderId: string
+  ): Promise<{ blob: Blob; filename: string | null } | ApiResponse<unknown>> => {
+    return apiClientDownload(`/sales/orders/${orderId}/attachment`);
+  },
+
+  downloadAttachmentByKey: async (
+    key: string
+  ): Promise<{ blob: Blob; filename: string | null } | ApiResponse<unknown>> => {
+    return apiClientDownload("/sales/orders/attachment/download", {
+      params: { key },
     });
   },
 

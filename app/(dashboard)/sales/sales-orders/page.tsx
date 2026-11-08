@@ -5,6 +5,11 @@ import * as React from "react";
 import {
   Plus,
   Download,
+  Upload,
+  Paperclip,
+  Loader2,
+  ExternalLink,
+  FileSpreadsheet,
   RefreshCw,
   ShoppingBag,
   Store,
@@ -116,6 +121,11 @@ export default function SalesOrdersPage() {
   const [newCustomerId, setNewCustomerId] = React.useState("");
   const [customerPoNumber, setCustomerPoNumber] = React.useState("");
   const [customerPoAttachment, setCustomerPoAttachment] = React.useState("");
+  const [isUploadingPoDoc, setIsUploadingPoDoc] = React.useState(false);
+  const [uploadedPoFileName, setUploadedPoFileName] = React.useState<string | null>(null);
+  const [uploadedPoFileSize, setUploadedPoFileSize] = React.useState<number | null>(null);
+  const poFileInputRef = React.useRef<HTMLInputElement>(null);
+  const [isDownloadingPoDoc, setIsDownloadingPoDoc] = React.useState(false);
   const [dpPaid, setDpPaid] = React.useState(false);
   const [dpPercent, setDpPercent] = React.useState<number>(30);
   const [dpAmount, setDpAmount] = React.useState("0");
@@ -272,6 +282,148 @@ export default function SalesOrdersPage() {
   const handleRemoveLine = (productId: string) => {
     setOrderLines((prev) => prev.filter((l) => l.productId !== productId));
   };
+
+  const handlePoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      await alert({
+        title: "Ukuran File Terlalu Besar",
+        message: "Maksimal ukuran dokumen adalah 10 MB.",
+        variant: "destructive",
+      });
+      if (poFileInputRef.current) poFileInputRef.current.value = "";
+      return;
+    }
+
+    setIsUploadingPoDoc(true);
+    try {
+      const res = await salesApi.uploadAttachment(file);
+      if (res.data) {
+        setCustomerPoAttachment(res.data.key);
+        setUploadedPoFileName(res.data.filename);
+        setUploadedPoFileSize(res.data.size);
+      }
+    } catch (err) {
+      await alert({
+        title: "Gagal Mengunggah Dokumen",
+        message: err instanceof Error ? err.message : "Gagal mengunggah dokumen ke Cloudflare R2.",
+        variant: "destructive",
+      });
+      if (poFileInputRef.current) poFileInputRef.current.value = "";
+    } finally {
+      setIsUploadingPoDoc(false);
+    }
+  };
+
+  const handleRemovePoFile = () => {
+    setCustomerPoAttachment("");
+    setUploadedPoFileName(null);
+    setUploadedPoFileSize(null);
+    if (poFileInputRef.current) poFileInputRef.current.value = "";
+  };
+
+  const handleDownloadAttachment = async (order: SalesOrder) => {
+    if (!order.customerPoAttachment) return;
+
+    // Backward compatibility jika berupa tautan eksternal
+    if (order.customerPoAttachment.startsWith("http://") || order.customerPoAttachment.startsWith("https://")) {
+      window.open(order.customerPoAttachment, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    setIsDownloadingPoDoc(true);
+    try {
+      const res = await salesApi.downloadAttachment(order.id);
+      if ("blob" in res) {
+        const url = URL.createObjectURL(res.blob);
+        const link = document.createElement("a");
+        link.href = url;
+        const keyParts = order.customerPoAttachment.split("/");
+        const defaultName = keyParts[keyParts.length - 1] || `${order.orderNumber}-PO-Document`;
+        link.download = res.filename || defaultName;
+        link.click();
+        URL.revokeObjectURL(url);
+      } else {
+        await alert({
+          title: "Gagal Mengunduh Dokumen",
+          message: "Tidak dapat mengunduh dokumen dari storage.",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      await alert({
+        title: "Gagal Mengunduh Dokumen",
+        message: err instanceof Error ? err.message : "Terjadi kesalahan saat mengunduh dokumen dari Cloudflare R2.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloadingPoDoc(false);
+    }
+  };
+
+  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = React.useState(false);
+  const [previewError, setPreviewError] = React.useState<string | null>(null);
+  const [previewFileType, setPreviewFileType] = React.useState<"image" | "pdf" | "other" | null>(null);
+
+  React.useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+
+    if (!selectedOrder?.customerPoAttachment) {
+      setPreviewUrl(null);
+      setPreviewFileType(null);
+      setPreviewError(null);
+      return;
+    }
+
+    const att = selectedOrder.customerPoAttachment;
+    const cleanPath = att.split("?")[0];
+    const ext = cleanPath.split(".").pop()?.toLowerCase() || "";
+    const isImg = ["jpg", "jpeg", "png", "webp", "gif"].includes(ext);
+    const isPdf = ext === "pdf";
+    const fileType = isImg ? "image" : isPdf ? "pdf" : "other";
+    setPreviewFileType(fileType);
+
+    // If external full URL and not a storage key
+    if (att.startsWith("http://") || att.startsWith("https://")) {
+      setPreviewUrl(att);
+      setPreviewLoading(false);
+      setPreviewError(null);
+      return;
+    }
+
+    setPreviewLoading(true);
+    setPreviewError(null);
+
+    salesApi
+      .downloadAttachment(selectedOrder.id)
+      .then((res) => {
+        if (cancelled) return;
+        if ("blob" in res) {
+          objectUrl = URL.createObjectURL(res.blob);
+          setPreviewUrl(objectUrl);
+        } else {
+          setPreviewError("Gagal memuat dokumen dari storage");
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setPreviewError(err instanceof Error ? err.message : "Gagal memuat dokumen");
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [selectedOrder?.id, selectedOrder?.customerPoAttachment]);
 
   const [actingId, setActingId] = React.useState<string | null>(null);
 
@@ -649,6 +801,9 @@ export default function SalesOrdersPage() {
     setNewCustomerId("");
     setCustomerPoNumber("");
     setCustomerPoAttachment("");
+    setUploadedPoFileName(null);
+    setUploadedPoFileSize(null);
+    if (poFileInputRef.current) poFileInputRef.current.value = "";
     setDpPaid(false);
     setDpPercent(30);
     setDpAmount("0");
@@ -731,9 +886,41 @@ export default function SalesOrdersPage() {
         <div>
           <span className="text-xs font-semibold text-foreground block">{so.customerName}</span>
           {so.customerPoNumber && (
-            <span className="inline-block px-1.5 py-0.2 rounded bg-blue-50 text-brand-primary text-[10px] font-mono border border-blue-200 mt-0.5">
-              PO Pembeli: {so.customerPoNumber}
-            </span>
+            <div className="flex items-center gap-1 mt-0.5">
+              <span className="inline-block px-1.5 py-0.2 rounded bg-blue-50 text-brand-primary text-[10px] font-mono border border-blue-200">
+                PO Pembeli: {so.customerPoNumber}
+              </span>
+              {so.customerPoAttachment && (
+                <button
+                  type="button"
+                  title="Unduh Lampiran Dokumen"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDownloadAttachment(so);
+                  }}
+                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-[10px] font-medium border border-emerald-200 transition-colors"
+                >
+                  <Paperclip className="h-3 w-3" />
+                  <span>File</span>
+                </button>
+              )}
+            </div>
+          )}
+          {!so.customerPoNumber && so.customerPoAttachment && (
+            <div className="mt-0.5">
+              <button
+                type="button"
+                title="Unduh Lampiran Dokumen"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDownloadAttachment(so);
+                }}
+                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-[10px] font-medium border border-emerald-200 transition-colors"
+              >
+                <Paperclip className="h-3 w-3" />
+                <span>Lampiran PO</span>
+              </button>
+            </div>
           )}
           {so.shippingCourier && (
             <span className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
@@ -1018,7 +1205,7 @@ export default function SalesOrdersPage() {
       {/* Order Source Detail Dialog */}
       <Dialog open={!!selectedOrder} onOpenChange={(open) => !open && setSelectedOrder(null)}>
         {selectedOrder && (
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <div className="flex items-center justify-between pr-6">
                 <div>
@@ -1150,14 +1337,19 @@ export default function SalesOrdersPage() {
                     {selectedOrder.customerPoNumber || "-"}
                   </span>
                   {selectedOrder.customerPoAttachment && (
-                    <a
-                      href={selectedOrder.customerPoAttachment}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[10px] text-brand-primary underline block truncate"
+                    <button
+                      type="button"
+                      disabled={isDownloadingPoDoc}
+                      onClick={() => handleDownloadAttachment(selectedOrder)}
+                      className="inline-flex items-center gap-1 mt-1 text-[11px] font-medium text-brand-primary hover:underline hover:text-brand-primary/80 disabled:opacity-50"
                     >
-                      Lampiran Dokumen
-                    </a>
+                      {isDownloadingPoDoc ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Download className="h-3 w-3" />
+                      )}
+                      <span>Unduh Dokumen PO</span>
+                    </button>
                   )}
                 </div>
                 <div>
@@ -1191,6 +1383,118 @@ export default function SalesOrdersPage() {
                   )}
                 </div>
               </div>
+
+              {/* Document Preview Box (When customerPoAttachment exists) */}
+              {selectedOrder.customerPoAttachment && (
+                <div className="rounded-xl border border-border bg-slate-50/70 p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                    <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <FileText className="h-4 w-4 text-brand-primary" />
+                      Preview Dokumen Lampiran PO (Cloudflare R2)
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {previewUrl && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-[11px] gap-1 px-2 text-foreground bg-white"
+                          onClick={() => window.open(previewUrl, "_blank")}
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          Buka di Tab Baru
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isDownloadingPoDoc}
+                        className="h-7 text-[11px] gap-1 px-2 text-brand-primary border-brand-primary/30 hover:bg-brand-tint bg-white"
+                        onClick={() => handleDownloadAttachment(selectedOrder)}
+                      >
+                        {isDownloadingPoDoc ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Download className="h-3 w-3" />
+                        )}
+                        Unduh File
+                      </Button>
+                    </div>
+                  </div>
+
+                  {previewLoading && (
+                    <div className="flex flex-col items-center justify-center p-8 text-muted-foreground gap-2">
+                      <Loader2 className="h-6 w-6 animate-spin text-brand-primary" />
+                      <span className="text-xs font-medium">Memuat preview dokumen dari Cloudflare R2...</span>
+                    </div>
+                  )}
+
+                  {previewError && (
+                    <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
+                      <span>{previewError}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-[11px] text-rose-800 hover:bg-rose-100"
+                        onClick={() => handleDownloadAttachment(selectedOrder)}
+                      >
+                        Coba Unduh Langsung
+                      </Button>
+                    </div>
+                  )}
+
+                  {!previewLoading && !previewError && previewUrl && (
+                    <div className="space-y-2">
+                      {previewFileType === "image" && (
+                        <div className="flex items-center justify-center bg-slate-900/5 rounded-lg border border-border p-3 overflow-hidden">
+                          <img
+                            src={previewUrl}
+                            alt="Lampiran PO Customer"
+                            className="max-h-96 w-auto object-contain rounded-md shadow-sm"
+                          />
+                        </div>
+                      )}
+
+                      {previewFileType === "pdf" && (
+                        <div className="w-full rounded-lg border border-border overflow-hidden bg-white shadow-sm">
+                          <iframe
+                            src={previewUrl}
+                            title="Preview Dokumen PO"
+                            className="w-full h-[480px] border-0"
+                          />
+                        </div>
+                      )}
+
+                      {previewFileType === "other" && (
+                        <div className="flex items-center justify-between p-3.5 rounded-lg border border-border bg-white text-xs">
+                          <div className="flex items-center gap-2.5">
+                            <FileSpreadsheet className="h-6 w-6 text-emerald-600 shrink-0" />
+                            <div>
+                              <span className="font-semibold text-foreground block">
+                                {selectedOrder.customerPoAttachment.split("/").pop()}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground">
+                                Format dokumen ini (Excel/Word/Data) dapat dibuka setelah diunduh ke perangkat Anda.
+                              </span>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="gradient"
+                            onClick={() => handleDownloadAttachment(selectedOrder)}
+                            className="h-7 text-xs shrink-0"
+                          >
+                            <Download className="h-3.5 w-3.5 mr-1" /> Unduh Dokumen
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Items Line Table */}
               <div className="space-y-2">
@@ -1558,13 +1862,65 @@ export default function SalesOrdersPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-muted-foreground">Tautan Dokumen / Lampiran</label>
-                  <Input
-                    placeholder="https://... atau nomor berkas fisik"
-                    value={customerPoAttachment}
-                    onChange={(e) => setCustomerPoAttachment(e.target.value)}
-                    className="h-8 text-xs bg-white"
+                  <label className="text-[11px] font-semibold text-muted-foreground flex items-center justify-between">
+                    <span>Dokumen Lampiran PO (Cloudflare R2)</span>
+                    <span className="text-[10px] text-muted-foreground font-normal">Maks 10 MB</span>
+                  </label>
+                  <input
+                    ref={poFileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx,.csv,.txt"
+                    onChange={handlePoFileUpload}
+                    disabled={isUploadingPoDoc}
                   />
+                  {customerPoAttachment ? (
+                    <div className="flex items-center justify-between p-2 rounded-lg border border-emerald-200 bg-emerald-50/60 text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                        <div className="min-w-0 truncate">
+                          <span className="font-semibold text-emerald-950 block truncate text-[11px]">
+                            {uploadedPoFileName || customerPoAttachment.split("/").pop()}
+                          </span>
+                          {uploadedPoFileSize != null && (
+                            <span className="text-[10px] text-emerald-700 block">
+                              {(uploadedPoFileSize / 1024).toFixed(1)} KB &bull; Tersimpan di Cloudflare R2
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleRemovePoFile}
+                        className="h-6 px-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-100/50 text-[11px] shrink-0"
+                      >
+                        <X className="h-3.5 w-3.5 mr-0.5" /> Hapus
+                      </Button>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => !isUploadingPoDoc && poFileInputRef.current?.click()}
+                      className={`flex items-center justify-center gap-2 p-2 rounded-lg border border-dashed cursor-pointer transition-colors text-xs ${
+                        isUploadingPoDoc
+                          ? "border-brand-primary bg-brand-tint/20 text-brand-primary cursor-wait"
+                          : "border-border hover:border-brand-primary hover:bg-white bg-slate-50 text-muted-foreground"
+                      }`}
+                    >
+                      {isUploadingPoDoc ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-brand-primary" />
+                          <span className="text-[11px] font-medium text-brand-primary">Mengunggah ke Cloudflare R2...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="text-[11px] font-medium text-muted-foreground">Pilih file dokumen PO (PDF, Word, Excel, Gambar)</span>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
