@@ -34,6 +34,9 @@ export interface SalesOrderItem {
   dpPaid?: boolean;
   dpPercent?: number;
   dpAmount?: number;
+  invoiceDocType?: string;
+  invoiceDocAttachment?: string;
+  invoiceDocNumber?: string;
   shippingAddress?: string;
   shippingCourier?: string;
   deliveryDate?: string;
@@ -48,6 +51,9 @@ export interface UpdateSalesOrderInput {
   dpPaid?: boolean;
   dpPercent?: number;
   dpAmount?: number;
+  invoiceDocType?: string;
+  invoiceDocAttachment?: string;
+  invoiceDocNumber?: string;
   shippingAddress?: string;
   shippingCourier?: string;
   deliveryDate?: string;
@@ -67,6 +73,9 @@ export interface CreateSalesOrderInput {
   dpPaid?: boolean;
   dpPercent?: number;
   dpAmount?: number;
+  invoiceDocType?: string;
+  invoiceDocAttachment?: string;
+  invoiceDocNumber?: string;
   shippingAddress?: string;
   shippingCourier?: string;
   deliveryDate?: string;
@@ -317,6 +326,22 @@ export const salesApi = {
     return apiClientDownload("/sales/orders/attachment/download", {
       params: { key },
     });
+  },
+
+  attachInvoiceDocument: async (
+    orderId: string,
+    data: { invoiceDocType: string; invoiceDocNumber?: string; invoiceDocAttachment: string }
+  ): Promise<ApiResponse<SalesOrderItem>> => {
+    return apiClient<SalesOrderItem>(`/sales/orders/${orderId}/invoice-document`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  downloadInvoiceAttachment: async (
+    orderId: string
+  ): Promise<{ blob: Blob; filename: string | null } | ApiResponse<unknown>> => {
+    return apiClientDownload(`/sales/orders/${orderId}/invoice-attachment`);
   },
 
   updateOrder: async (id: string, data: UpdateSalesOrderInput): Promise<ApiResponse<SalesOrderItem>> => {

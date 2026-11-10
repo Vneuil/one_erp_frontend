@@ -284,6 +284,29 @@ export default function PurchaseRequestsPage() {
         return;
       }
 
+      const isApproved = so.status?.toLowerCase() === "confirmed" || so.status?.toLowerCase() === "approved";
+      const hasInvoiceDoc = Boolean(so.invoiceDocAttachment || so.customerPoAttachment);
+      if (!isApproved) {
+        await alert({
+          title: "Sales Order Belum Disetujui",
+          message: `Sales Order ${so.orderNumber} masih berstatus "${so.status}" dan memerlukan persetujuan (Approval) manajerial terlebih dahulu sebelum dapat dibuatkan Purchase Requisition.`,
+          variant: "destructive",
+        });
+        setSelectedSalesOrderId("");
+        setSoAnalysis(null);
+        return;
+      }
+      if (!hasInvoiceDoc) {
+        await alert({
+          title: "Dokumen CI / PI Belum Diunggah",
+          message: `Sales Order ${so.orderNumber} telah disetujui, namun belum memiliki dokumen Commercial Invoice (CI) atau Proforma Invoice (PI). Silakan unggah dokumen terlebih dahulu di menu Sales Order.`,
+          variant: "destructive",
+        });
+        setSelectedSalesOrderId("");
+        setSoAnalysis(null);
+        return;
+      }
+
       const analysisItems = so.lines.map((line) => {
         const product = products.find((p) => p.id === line.productId);
         let available = 0;
@@ -1093,11 +1116,26 @@ export default function PurchaseRequestsPage() {
                 className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
               >
                 <option value="">-- Tanpa Sales Order (Stok Gudang / Kebutuhan Internal) --</option>
-                {salesOrders.map((so) => (
-                  <option key={so.id} value={so.id}>
-                    {so.orderNumber} — {so.customerName} ({so.status})
-                  </option>
-                ))}
+                {salesOrders.map((so) => {
+                  const isApproved = so.status?.toLowerCase() === "confirmed" || so.status?.toLowerCase() === "approved";
+                  const hasInvoiceDoc = Boolean(so.invoiceDocAttachment || so.customerPoAttachment);
+                  const isEligible = isApproved && hasInvoiceDoc;
+
+                  let statusTag = "";
+                  if (!isApproved) {
+                    statusTag = " [Terkunci: Menunggu Approval]";
+                  } else if (!hasInvoiceDoc) {
+                    statusTag = " [Terkunci: Belum Upload CI/PI]";
+                  } else {
+                    statusTag = ` [Siap Pengadaan - ${so.invoiceDocType || "CI/PI"}]`;
+                  }
+
+                  return (
+                    <option key={so.id} value={so.id} disabled={!isEligible}>
+                      {so.orderNumber} — {so.customerName}{statusTag}
+                    </option>
+                  );
+                })}
               </select>
               <p className="text-[11px] text-muted-foreground">
                 Pilih SO jika pengadaan ini dibuat untuk memenuhi pesanan pelanggan tertentu (sistem akan otomatis menghitung kekurangan stok), atau kosongkan jika untuk stok gudang.
