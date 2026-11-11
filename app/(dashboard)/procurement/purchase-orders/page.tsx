@@ -29,7 +29,7 @@ import { useConfirm, useAlert, usePrompt } from "@/components/shared/confirm-mod
 import { ApprovalTimeline, canUserApprove } from "@/components/shared/approval-timeline";
 
 export default function PurchaseOrdersPage() {
-  const { canApprove, canViewPrices } = useNavigationAccess();
+  const { canApprove, canViewPrices, roleName } = useNavigationAccess();
   const mayApprove = canApprove("procurement");
   const isOwn = useIsOwnDocument();
   const currentUser = useAppStore((s) => s.currentUser);
@@ -102,7 +102,7 @@ export default function PurchaseOrdersPage() {
 
   const fetchApprovals = React.useCallback(() => {
     approvalApi
-      .listRequests({ documentType: "purchase_order", perPage: 100 })
+      .listRequests({ documentType: "purchase_order", status: "pending", perPage: 100 })
       .then((res) => {
         const map: Record<string, ApprovalRequest> = {};
         (res.data || []).forEach((r) => {
@@ -255,6 +255,7 @@ export default function PurchaseOrdersPage() {
         lines: poLines,
       });
       fetchPOs();
+      fetchApprovals();
       setIsNewOpen(false);
       setSupplierId("");
       setPrId("");
@@ -395,13 +396,18 @@ export default function PurchaseOrdersPage() {
 
     setActingId(po.id);
     try {
-      await procurementApi.approvePurchaseOrder(po.id);
+      const res = await procurementApi.approvePurchaseOrder(po.id);
+      const updatedStatus = (res.data?.status || "approved").toLowerCase();
       fetchPOs();
       fetchApprovals();
       if (selectedPo && selectedPo.id === po.id) {
-        setSelectedPo((prev) => (prev ? { ...prev, status: "approved" } : null));
+        setSelectedPo((prev) => (prev ? { ...prev, status: updatedStatus } : null));
       }
-      setNotice(`Purchase Order "${po.orderNo}" berhasil disetujui.`);
+      setNotice(
+        updatedStatus === "approved"
+          ? `Purchase Order "${po.orderNo}" berhasil disetujui.`
+          : `Tahap approval Purchase Order "${po.orderNo}" disetujui dan diteruskan ke level berikutnya.`
+      );
     } catch (err) {
       await alert({
         title: "Gagal Menyetujui PO",
@@ -539,7 +545,8 @@ export default function PurchaseOrdersPage() {
             currentUser?.email,
             po.createdByEmail,
             activeApprovals[po.id],
-            po.status
+            po.status,
+            { roleName, mayApproveModule: mayApprove }
           );
 
         return (
@@ -1105,6 +1112,11 @@ export default function PurchaseOrdersPage() {
               creatorName={selectedPo.createdByEmail}
               createdAt={selectedPo.orderDate}
               currentStatus={selectedPo.status}
+              onRequestLoaded={(req) => {
+                if (req) {
+                  setActiveApprovals((prev) => ({ ...prev, [selectedPo.id]: req }));
+                }
+              }}
             />
 
             {/* Dialog Footer Actions */}
@@ -1149,7 +1161,8 @@ export default function PurchaseOrdersPage() {
                     currentUser?.email,
                     selectedPo.createdByEmail,
                     activeApprovals[selectedPo.id],
-                    selectedPo.status
+                    selectedPo.status,
+                    { roleName, mayApproveModule: mayApprove }
                   ) && (
                     <>
                       <Button

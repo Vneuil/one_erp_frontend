@@ -109,7 +109,7 @@ import { approvalApi, ApprovalRequest } from "@/lib/api/approval";
 import { ApprovalTimeline, canUserApprove } from "@/components/shared/approval-timeline";
 
 export default function SalesOrdersPage() {
-  const { canApprove, canViewPrices } = useNavigationAccess();
+  const { canApprove, canViewPrices, roleName } = useNavigationAccess();
   const mayApprove = canApprove("sales");
   const isOwn = useIsOwnDocument();
   const currentUser = useAppStore((s) => s.currentUser);
@@ -752,7 +752,7 @@ export default function SalesOrdersPage() {
 
   const fetchApprovals = React.useCallback(() => {
     approvalApi
-      .listRequests({ documentType: "sales_order", perPage: 100 })
+      .listRequests({ documentType: "sales_order", status: "pending", perPage: 100 })
       .then((res) => {
         const map: Record<string, ApprovalRequest> = {};
         (res.data || []).forEach((r) => {
@@ -815,6 +815,7 @@ export default function SalesOrdersPage() {
     try {
       await salesApi.approveOrder(so.id);
       fetchOrders();
+      fetchApprovals();
       setSelectedOrder(null);
     } catch (err) {
       await alert({
@@ -843,6 +844,7 @@ export default function SalesOrdersPage() {
     try {
       await salesApi.rejectOrder(so.id, comments.trim());
       fetchOrders();
+      fetchApprovals();
       setSelectedOrder(null);
     } catch (err) {
       await alert({
@@ -999,7 +1001,7 @@ export default function SalesOrdersPage() {
           shippingAddress: o.shippingAddress || shippingAddress,
           totalAmount: o.totalAmount,
           paymentTerms: o.paymentStatus || "Pending",
-          status: o.status || "Confirmed",
+          status: (o.status || "Confirmed").toLowerCase(),
           customerPoNumber: o.customerPoNumber || customerPoNumber,
           customerPoAttachment: o.customerPoAttachment || customerPoAttachment,
           dpPaid: o.dpPaid ?? dpPaid,
@@ -1013,6 +1015,7 @@ export default function SalesOrdersPage() {
         },
         ...orders,
       ]);
+      fetchApprovals();
       loadCatalog();
     } catch (err) {
       console.warn("Failed to create sales order via API", err);
@@ -1240,7 +1243,8 @@ export default function SalesOrdersPage() {
             currentUser?.email,
             so.createdByEmail,
             activeApprovals[so.id],
-            so.status
+            so.status,
+            { roleName, mayApproveModule: mayApprove }
           );
 
         return (
@@ -1876,6 +1880,11 @@ export default function SalesOrdersPage() {
                 creatorName={selectedOrder.createdByEmail}
                 createdAt={selectedOrder.orderDate}
                 currentStatus={selectedOrder.status}
+                onRequestLoaded={(req) => {
+                  if (req) {
+                    setActiveApprovals((prev) => ({ ...prev, [selectedOrder.id]: req }));
+                  }
+                }}
               />
 
               {readyToShipError && <div role="alert" className="text-xs text-rose-700">{readyToShipError}</div>}
@@ -1917,7 +1926,8 @@ export default function SalesOrdersPage() {
                       currentUser?.email,
                       selectedOrder.createdByEmail,
                       activeApprovals[selectedOrder.id],
-                      selectedOrder.status
+                      selectedOrder.status,
+                      { roleName, mayApproveModule: mayApprove }
                     ) && (
                       <>
                         <Button

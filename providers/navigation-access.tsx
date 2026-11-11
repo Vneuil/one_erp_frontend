@@ -8,7 +8,7 @@ import { useAppStore, type UserInfo, type CompanyInfo } from "@/stores/app-store
 import { useTranslation } from "@/lib/i18n/translations";
 import { filterNavigation, canViewRoute, canApproveModule, canViewPricesModule } from "@/lib/navigation-access";
 
-const AccessContext = React.createContext<{ navigation: NavGroup[]; canView: (href: string) => boolean; canApprove: (module: string) => boolean; canViewPrices: (module: string) => boolean }>({ navigation: [], canView: () => false, canApprove: () => false, canViewPrices: () => false });
+const AccessContext = React.createContext<{ navigation: NavGroup[]; canView: (href: string) => boolean; canApprove: (module: string) => boolean; canViewPrices: (module: string) => boolean; roleName: string | null }>({ navigation: [], canView: () => false, canApprove: () => false, canViewPrices: () => false, roleName: null });
 export const useNavigationAccess = () => React.useContext(AccessContext);
 
 export function NavigationAccessProvider({ children }: { children: React.ReactNode }) {
@@ -16,6 +16,7 @@ export function NavigationAccessProvider({ children }: { children: React.ReactNo
   const { isIndonesian } = useTranslation();
   const [permissions, setPermissions] = React.useState<PermissionItem[] | null>([]);
   const [account, setAccount] = React.useState<{ role: string; roleId?: string | null }>({ role: "" });
+  const [roleName, setRoleName] = React.useState<string | null>(null);
   const [ready, setReady] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
   const [attempt, setAttempt] = React.useState(0);
@@ -27,14 +28,16 @@ export function NavigationAccessProvider({ children }: { children: React.ReactNo
       if (!result.success || !result.data?.user) throw new Error("Unable to load account");
       const { user, company } = result.data;
       let granted: PermissionItem[] | null = null;
+      let resolvedRoleName: string | null = null;
       if (user.role.toLowerCase() !== "admin" && user.roleId) {
         const role = await rbacApi.getRolePermissions(user.roleId);
         if (!role.success) throw new Error(role.message);
         granted = role.data.permissions;
+        resolvedRoleName = role.data.role?.name ?? null;
       }
       if (cancelled) return;
       setUser(user); if (company) setCompany(company);
-      setPermissions(granted); setAccount({ role: user.role, roleId: user.roleId }); setReady(true);
+      setPermissions(granted); setAccount({ role: user.role, roleId: user.roleId }); setRoleName(resolvedRoleName); setReady(true);
     })().catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; };
   }, [token, attempt, setUser, setCompany]);
@@ -43,7 +46,8 @@ export function NavigationAccessProvider({ children }: { children: React.ReactNo
     canView: (href: string) => canViewRoute(href, permissions),
     canApprove: (module: string) => canApproveModule(module, account, permissions),
     canViewPrices: (module: string) => canViewPricesModule(module, account, permissions),
-  }), [permissions, account]);
+    roleName,
+  }), [permissions, account, roleName]);
   if (failed) return <div role="alert" className="p-6 space-y-3"><p>{isIndonesian ? "Gagal memuat akun dan izin akses." : "Unable to load your account and permissions."}</p><button className="underline" onClick={() => setAttempt((n) => n + 1)}>{isIndonesian ? "Coba lagi" : "Retry"}</button><a className="block underline" href="/login">{isIndonesian ? "Masuk kembali" : "Sign in again"}</a></div>;
   if (!ready) return <p role="status" className="p-6">{isIndonesian ? "Memuat akun…" : "Loading account…"}</p>;
   return <AccessContext.Provider value={value}>{children}</AccessContext.Provider>;
