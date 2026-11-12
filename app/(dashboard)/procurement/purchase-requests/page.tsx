@@ -98,7 +98,8 @@ function PRCategoryBadge({ category }: { category?: string }) {
 }
 
 export default function PurchaseRequestsPage() {
-  const { canViewPrices } = useNavigationAccess();
+  const { canApprove, canViewPrices, roleName } = useNavigationAccess();
+  const mayApprove = canApprove("procurement");
   const pricesAllowed = canViewPrices("procurement");
   const { currentUser, currentCompany } = useAppStore();
   const confirm = useConfirm();
@@ -194,7 +195,7 @@ export default function PurchaseRequestsPage() {
             requestDate: pr.createdAt ? pr.createdAt.slice(0, 10) : "-",
             requiredDate: pr.neededByDate,
             itemCount: pr.lines?.length || 0,
-            status: pr.status,
+            status: (pr.status || "").toLowerCase(),
             category: pr.category,
             salesOrderId: pr.salesOrderId,
             salesOrderNo: pr.salesOrderNo,
@@ -219,7 +220,7 @@ export default function PurchaseRequestsPage() {
   // Fetch approvals for matching
   const fetchApprovals = React.useCallback(() => {
     approvalApi
-      .listRequests({ documentType: "purchase_request", perPage: 100 })
+      .listRequests({ documentType: "purchase_request", status: "pending", perPage: 100 })
       .then((res) => {
         const map: Record<string, ApprovalRequest> = {};
         (res.data || []).forEach((r) => {
@@ -280,6 +281,29 @@ export default function PurchaseRequestsPage() {
       }
 
       if (!so || !so.lines || so.lines.length === 0) {
+        setSoAnalysis(null);
+        return;
+      }
+
+      const isApproved = so.status?.toLowerCase() === "confirmed" || so.status?.toLowerCase() === "approved";
+      const hasInvoiceDoc = Boolean(so.invoiceDocAttachment || so.customerPoAttachment);
+      if (!isApproved) {
+        await alert({
+          title: "Sales Order Belum Disetujui",
+          message: `Sales Order ${so.orderNumber} masih berstatus "${so.status}" dan memerlukan persetujuan (Approval) manajerial terlebih dahulu sebelum dapat dibuatkan Purchase Requisition.`,
+          variant: "destructive",
+        });
+        setSelectedSalesOrderId("");
+        setSoAnalysis(null);
+        return;
+      }
+      if (!hasInvoiceDoc) {
+        await alert({
+          title: "Dokumen CI / PI Belum Diunggah",
+          message: `Sales Order ${so.orderNumber} telah disetujui, namun belum memiliki dokumen Commercial Invoice (CI) atau Proforma Invoice (PI). Silakan unggah dokumen terlebih dahulu di menu Sales Order.`,
+          variant: "destructive",
+        });
+        setSelectedSalesOrderId("");
         setSoAnalysis(null);
         return;
       }
@@ -423,7 +447,7 @@ export default function PurchaseRequestsPage() {
           requestDate: pr.createdAt ? pr.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
           requiredDate: pr.neededByDate,
           itemCount: pr.lines?.length || prLines.length,
-          status: pr.status || "draft",
+          status: (pr.status || "draft").toLowerCase(),
           category: pr.category,
           salesOrderId: pr.salesOrderId || (linkedSo ? linkedSo.id : undefined),
           salesOrderNo: pr.salesOrderNo || (linkedSo ? linkedSo.orderNumber : undefined),
@@ -431,6 +455,7 @@ export default function PurchaseRequestsPage() {
         },
         ...prev,
       ]);
+      fetchApprovals();
       if (pr.status === "approved") {
         setNotice("Purchase Request berhasil dibuat dan langsung disetujui (tidak membutuhkan approval).");
       } else if (pr.status === "pending_approval") {
@@ -606,7 +631,16 @@ export default function PurchaseRequestsPage() {
         )
       );
       if (selectedPr && selectedPr.id === id) {
-        setSelectedPr((prev) => (prev ? { ...prev, status: res.data.status } : null));
+        setSelectedPr((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: (res.data.status || "").toLowerCase(),
+                supervisorApprovedBy: res.data.supervisorApprovedBy,
+                ownerApprovedBy: res.data.ownerApprovedBy,
+              }
+            : null
+        );
       }
       fetchApprovals();
       setNotice(`Purchase Request berhasil disetujui. Status saat ini: ${res.data.status}.`);
@@ -924,12 +958,14 @@ export default function PurchaseRequestsPage() {
 
         const canApprove =
           isPending &&
+          mayApprove &&
           canUserApprove(
             currentUser.role,
             currentUser.email,
             pr.requestedBy,
             activeApprovals[pr.id],
-            pr.status
+            pr.status,
+            { roleName, mayApproveModule: mayApprove }
           );
 
         return (
@@ -1093,11 +1129,26 @@ export default function PurchaseRequestsPage() {
                 className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
               >
                 <option value="">-- Tanpa Sales Order (Stok Gudang / Kebutuhan Internal) --</option>
-                {salesOrders.map((so) => (
-                  <option key={so.id} value={so.id}>
-                    {so.orderNumber} — {so.customerName} ({so.status})
-                  </option>
-                ))}
+                {salesOrders.map((so) => {
+                  const isApproved = so.status?.toLowerCase() === "confirmed" || so.status?.toLowerCase() === "approved";
+                  const hasInvoiceDoc = Boolean(so.invoiceDocAttachment || so.customerPoAttachment);
+                  const isEligible = isApproved && hasInvoiceDoc;
+
+                  let statusTag = "";
+                  if (!isApproved) {
+                    statusTag = " [Terkunci: Menunggu Approval]";
+                  } else if (!hasInvoiceDoc) {
+                    statusTag = " [Terkunci: Belum Upload CI/PI]";
+                  } else {
+                    statusTag = ` [Siap Pengadaan - ${so.invoiceDocType || "CI/PI"}]`;
+                  }
+
+                  return (
+                    <option key={so.id} value={so.id} disabled={!isEligible}>
+                      {so.orderNumber} — {so.customerName}{statusTag}
+                    </option>
+                  );
+                })}
               </select>
               <p className="text-[11px] text-muted-foreground">
                 Pilih SO jika pengadaan ini dibuat untuk memenuhi pesanan pelanggan tertentu (sistem akan otomatis menghitung kekurangan stok), atau kosongkan jika untuk stok gudang.
@@ -1647,6 +1698,11 @@ export default function PurchaseRequestsPage() {
               createdAt={selectedPr.requestDate}
               currentStatus={selectedPr.status}
               rejectionReason={selectedPr.rejectionReason}
+              onRequestLoaded={(req) => {
+                if (req) {
+                  setActiveApprovals((prev) => ({ ...prev, [selectedPr.id]: req }));
+                }
+              }}
             />
 
             {/* Dialog Footer Actions */}
@@ -1700,12 +1756,14 @@ export default function PurchaseRequestsPage() {
                   (selectedPr.status || "").toLowerCase() === "pending_supervisor" ||
                   (selectedPr.status || "").toLowerCase() === "pending_owner"
                 ) &&
+                  mayApprove &&
                   canUserApprove(
                     currentUser.role,
                     currentUser.email,
                     selectedPr.requestedBy,
                     activeApprovals[selectedPr.id],
-                    selectedPr.status
+                    selectedPr.status,
+                    { roleName, mayApproveModule: mayApprove }
                   ) && (
                     <>
                       <Button

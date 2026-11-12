@@ -5,6 +5,11 @@ import * as React from "react";
 import {
   Plus,
   Download,
+  Upload,
+  Paperclip,
+  Loader2,
+  ExternalLink,
+  FileSpreadsheet,
   RefreshCw,
   ShoppingBag,
   Store,
@@ -21,6 +26,9 @@ import {
   Edit,
   Send,
   CreditCard,
+  FileCheck,
+  AlertCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -73,6 +81,9 @@ interface SalesOrder {
   dpPaid?: boolean;
   dpPercent?: number;
   dpAmount?: number;
+  invoiceDocType?: string;
+  invoiceDocAttachment?: string;
+  invoiceDocNumber?: string;
   shippingAddress?: string;
   packagingAvailability?: PackagingAvailability;
   coaStatus?: CoaStatus;
@@ -106,7 +117,7 @@ import { approvalApi, ApprovalRequest } from "@/lib/api/approval";
 import { ApprovalTimeline, canUserApprove } from "@/components/shared/approval-timeline";
 
 export default function SalesOrdersPage() {
-  const { canApprove, canViewPrices } = useNavigationAccess();
+  const { canApprove, canViewPrices, roleName } = useNavigationAccess();
   const mayApprove = canApprove("sales");
   const isOwn = useIsOwnDocument();
   const currentUser = useAppStore((s) => s.currentUser);
@@ -125,9 +136,33 @@ export default function SalesOrdersPage() {
   const [newCustomerId, setNewCustomerId] = React.useState("");
   const [customerPoNumber, setCustomerPoNumber] = React.useState("");
   const [customerPoAttachment, setCustomerPoAttachment] = React.useState("");
+  const [isUploadingPoDoc, setIsUploadingPoDoc] = React.useState(false);
+  const [uploadedPoFileName, setUploadedPoFileName] = React.useState<string | null>(null);
+  const [uploadedPoFileSize, setUploadedPoFileSize] = React.useState<number | null>(null);
+  const poFileInputRef = React.useRef<HTMLInputElement>(null);
+  const [isDownloadingPoDoc, setIsDownloadingPoDoc] = React.useState(false);
   const [dpPaid, setDpPaid] = React.useState(false);
   const [dpPercent, setDpPercent] = React.useState<number>(30);
   const [dpAmount, setDpAmount] = React.useState("0");
+  const [invoiceDocType, setInvoiceDocType] = React.useState<"CI" | "PI">("CI");
+  const [invoiceDocNumber, setInvoiceDocNumber] = React.useState("");
+  const [invoiceDocAttachment, setInvoiceDocAttachment] = React.useState("");
+  const [isUploadingInvoiceDoc, setIsUploadingInvoiceDoc] = React.useState(false);
+  const [uploadedInvoiceDocFileName, setUploadedInvoiceDocFileName] = React.useState<string | null>(null);
+  const [uploadedInvoiceDocFileSize, setUploadedInvoiceDocFileSize] = React.useState<number | null>(null);
+  const invoiceDocFileInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Post-approval CI / PI Upload states (when SO was approved without DP)
+  const [isPostApprovalUploadOpen, setIsPostApprovalUploadOpen] = React.useState(false);
+  const [postApprovalOrder, setPostApprovalOrder] = React.useState<SalesOrder | null>(null);
+  const [postDocType, setPostDocType] = React.useState<"CI" | "PI">("CI");
+  const [postDocNumber, setPostDocNumber] = React.useState("");
+  const [postDocAttachment, setPostDocAttachment] = React.useState("");
+  const [postDocFileName, setPostDocFileName] = React.useState<string | null>(null);
+  const [postDocFileSize, setPostDocFileSize] = React.useState<number | null>(null);
+  const [isUploadingPostDoc, setIsUploadingPostDoc] = React.useState(false);
+  const [isSubmittingPostDoc, setIsSubmittingPostDoc] = React.useState(false);
+  const postDocFileInputRef = React.useRef<HTMLInputElement>(null);
   const [shippingAddress, setShippingAddress] = React.useState("");
   const [shippingCourier, setShippingCourier] = React.useState("");
   const [customers, setCustomers] = React.useState<CustomerItem[]>([]);
@@ -290,6 +325,332 @@ export default function SalesOrdersPage() {
     setOrderLines((prev) => prev.filter((l) => l.productId !== productId));
   };
 
+  const handlePoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      await alert({
+        title: "Ukuran File Terlalu Besar",
+        message: "Maksimal ukuran dokumen adalah 10 MB.",
+        variant: "destructive",
+      });
+      if (poFileInputRef.current) poFileInputRef.current.value = "";
+      return;
+    }
+
+    setIsUploadingPoDoc(true);
+    try {
+      const res = await salesApi.uploadAttachment(file);
+      if (res.data) {
+        setCustomerPoAttachment(res.data.key);
+        setUploadedPoFileName(res.data.filename);
+        setUploadedPoFileSize(res.data.size);
+      }
+    } catch (err) {
+      await alert({
+        title: "Gagal Mengunggah Dokumen",
+        message: err instanceof Error ? err.message : "Gagal mengunggah dokumen ke Cloudflare R2.",
+        variant: "destructive",
+      });
+      if (poFileInputRef.current) poFileInputRef.current.value = "";
+    } finally {
+      setIsUploadingPoDoc(false);
+    }
+  };
+
+  const handleRemovePoFile = () => {
+    setCustomerPoAttachment("");
+    setUploadedPoFileName(null);
+    setUploadedPoFileSize(null);
+    if (poFileInputRef.current) poFileInputRef.current.value = "";
+  };
+
+  const handleDownloadAttachment = async (order: SalesOrder) => {
+    if (!order.customerPoAttachment) return;
+
+    // Backward compatibility jika berupa tautan eksternal
+    if (order.customerPoAttachment.startsWith("http://") || order.customerPoAttachment.startsWith("https://")) {
+      window.open(order.customerPoAttachment, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    setIsDownloadingPoDoc(true);
+    try {
+      const res = await salesApi.downloadAttachment(order.id);
+      if ("blob" in res) {
+        const url = URL.createObjectURL(res.blob);
+        const link = document.createElement("a");
+        link.href = url;
+        const keyParts = order.customerPoAttachment.split("/");
+        const defaultName = keyParts[keyParts.length - 1] || `${order.orderNumber}-PO-Document`;
+        link.download = res.filename || defaultName;
+        link.click();
+        URL.revokeObjectURL(url);
+      } else {
+        await alert({
+          title: "Gagal Mengunduh Dokumen",
+          message: "Tidak dapat mengunduh dokumen dari storage.",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      await alert({
+        title: "Gagal Mengunduh Dokumen",
+        message: err instanceof Error ? err.message : "Terjadi kesalahan saat mengunduh dokumen dari Cloudflare R2.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloadingPoDoc(false);
+    }
+  };
+
+  const handleInvoiceDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      await alert({
+        title: "Ukuran File Terlalu Besar",
+        message: "Maksimal ukuran dokumen adalah 10 MB.",
+        variant: "destructive",
+      });
+      if (invoiceDocFileInputRef.current) invoiceDocFileInputRef.current.value = "";
+      return;
+    }
+
+    setIsUploadingInvoiceDoc(true);
+    try {
+      const res = await salesApi.uploadAttachment(file);
+      if (res.data) {
+        setInvoiceDocAttachment(res.data.key);
+        setUploadedInvoiceDocFileName(res.data.filename);
+        setUploadedInvoiceDocFileSize(res.data.size);
+      }
+    } catch (err) {
+      await alert({
+        title: "Gagal Mengunggah Dokumen",
+        message: err instanceof Error ? err.message : "Gagal mengunggah dokumen ke Cloudflare R2.",
+        variant: "destructive",
+      });
+      if (invoiceDocFileInputRef.current) invoiceDocFileInputRef.current.value = "";
+    } finally {
+      setIsUploadingInvoiceDoc(false);
+    }
+  };
+
+  const handleRemoveInvoiceDoc = () => {
+    setInvoiceDocAttachment("");
+    setUploadedInvoiceDocFileName(null);
+    setUploadedInvoiceDocFileSize(null);
+    if (invoiceDocFileInputRef.current) invoiceDocFileInputRef.current.value = "";
+  };
+
+  const handleDownloadInvoiceAttachment = async (order: SalesOrder) => {
+    if (!order.invoiceDocAttachment) return;
+
+    if (order.invoiceDocAttachment.startsWith("http://") || order.invoiceDocAttachment.startsWith("https://")) {
+      window.open(order.invoiceDocAttachment, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    try {
+      const res = await salesApi.downloadAttachmentByKey(order.invoiceDocAttachment);
+      if ("blob" in res) {
+        const url = URL.createObjectURL(res.blob);
+        const link = document.createElement("a");
+        link.href = url;
+        const keyParts = order.invoiceDocAttachment.split("/");
+        const defaultName = keyParts[keyParts.length - 1] || `${order.orderNumber}-${order.invoiceDocType || "Invoice"}-Document`;
+        link.download = res.filename || defaultName;
+        link.click();
+        URL.revokeObjectURL(url);
+      } else {
+        await alert({
+          title: "Gagal Mengunduh Dokumen",
+          message: "Tidak dapat mengunduh dokumen dari storage.",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      await alert({
+        title: "Gagal Mengunduh Dokumen",
+        message: err instanceof Error ? err.message : "Terjadi kesalahan saat mengunduh dokumen dari Cloudflare R2.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const openPostApprovalUpload = (order: SalesOrder) => {
+    setPostApprovalOrder(order);
+    setPostDocType((order.invoiceDocType as "CI" | "PI") || "CI");
+    setPostDocNumber(order.invoiceDocNumber || "");
+    setPostDocAttachment(order.invoiceDocAttachment || "");
+    setPostDocFileName(order.invoiceDocAttachment ? order.invoiceDocAttachment.split("/").pop() || null : null);
+    setPostDocFileSize(null);
+    if (postDocFileInputRef.current) postDocFileInputRef.current.value = "";
+    setIsPostApprovalUploadOpen(true);
+  };
+
+  const handlePostDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      await alert({
+        title: "Ukuran File Terlalu Besar",
+        message: "Maksimal ukuran dokumen adalah 10 MB.",
+        variant: "destructive",
+      });
+      if (postDocFileInputRef.current) postDocFileInputRef.current.value = "";
+      return;
+    }
+
+    setIsUploadingPostDoc(true);
+    try {
+      const res = await salesApi.uploadAttachment(file);
+      if (res.data) {
+        setPostDocAttachment(res.data.key);
+        setPostDocFileName(res.data.filename);
+        setPostDocFileSize(res.data.size);
+      }
+    } catch (err) {
+      await alert({
+        title: "Gagal Mengunggah Dokumen",
+        message: err instanceof Error ? err.message : "Gagal mengunggah dokumen ke Cloudflare R2.",
+        variant: "destructive",
+      });
+      if (postDocFileInputRef.current) postDocFileInputRef.current.value = "";
+    } finally {
+      setIsUploadingPostDoc(false);
+    }
+  };
+
+  const handleRemovePostDoc = () => {
+    setPostDocAttachment("");
+    setPostDocFileName(null);
+    setPostDocFileSize(null);
+    if (postDocFileInputRef.current) postDocFileInputRef.current.value = "";
+  };
+
+  const handleSavePostApprovalDoc = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!postApprovalOrder) return;
+    if (!postDocAttachment) {
+      await alert({
+        title: "Dokumen Wajib Diunggah",
+        message: "Silakan pilih dan unggah dokumen Commercial Invoice (CI) atau Proforma Invoice (PI) terlebih dahulu.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSubmittingPostDoc(true);
+    try {
+      await salesApi.attachInvoiceDocument(postApprovalOrder.id, {
+        invoiceDocType: postDocType,
+        invoiceDocNumber: postDocNumber || undefined,
+        invoiceDocAttachment: postDocAttachment,
+      });
+      await alert({
+        title: "Dokumen Berhasil Dilampirkan",
+        message: `Dokumen ${postDocType} berhasil disimpan. Sales Order ${postApprovalOrder.orderNumber} sekarang memenuhi syarat dan dapat digunakan untuk pengadaan barang di PR.`,
+      });
+      setIsPostApprovalUploadOpen(false);
+      setPostApprovalOrder(null);
+      setCustomerReload((prev) => prev + 1);
+
+      if (selectedOrder && selectedOrder.id === postApprovalOrder.id) {
+        setSelectedOrder((prev) =>
+          prev
+            ? {
+                ...prev,
+                invoiceDocType: postDocType,
+                invoiceDocNumber: postDocNumber,
+                invoiceDocAttachment: postDocAttachment,
+              }
+            : null
+        );
+      }
+    } catch (err) {
+      await alert({
+        title: "Gagal Menyimpan Dokumen",
+        message: err instanceof Error ? err.message : "Terjadi kesalahan saat menyimpan dokumen.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmittingPostDoc(false);
+    }
+  };
+
+  const isEligibleForPR = (so: SalesOrder): boolean => {
+    const isApproved = so.status === "confirmed" || so.status === "approved";
+    const hasInvoiceDoc = Boolean(so.invoiceDocAttachment || so.customerPoAttachment);
+    return isApproved && hasInvoiceDoc;
+  };
+
+  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = React.useState(false);
+  const [previewError, setPreviewError] = React.useState<string | null>(null);
+  const [previewFileType, setPreviewFileType] = React.useState<"image" | "pdf" | "other" | null>(null);
+
+  React.useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+
+    if (!selectedOrder?.customerPoAttachment) {
+      setPreviewUrl(null);
+      setPreviewFileType(null);
+      setPreviewError(null);
+      return;
+    }
+
+    const att = selectedOrder.customerPoAttachment;
+    const cleanPath = att.split("?")[0];
+    const ext = cleanPath.split(".").pop()?.toLowerCase() || "";
+    const isImg = ["jpg", "jpeg", "png", "webp", "gif"].includes(ext);
+    const isPdf = ext === "pdf";
+    const fileType = isImg ? "image" : isPdf ? "pdf" : "other";
+    setPreviewFileType(fileType);
+
+    // If external full URL and not a storage key
+    if (att.startsWith("http://") || att.startsWith("https://")) {
+      setPreviewUrl(att);
+      setPreviewLoading(false);
+      setPreviewError(null);
+      return;
+    }
+
+    setPreviewLoading(true);
+    setPreviewError(null);
+
+    salesApi
+      .downloadAttachment(selectedOrder.id)
+      .then((res) => {
+        if (cancelled) return;
+        if ("blob" in res) {
+          objectUrl = URL.createObjectURL(res.blob);
+          setPreviewUrl(objectUrl);
+        } else {
+          setPreviewError("Gagal memuat dokumen dari storage");
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setPreviewError(err instanceof Error ? err.message : "Gagal memuat dokumen");
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [selectedOrder?.id, selectedOrder?.customerPoAttachment]);
+
   const [actingId, setActingId] = React.useState<string | null>(null);
 
   const [isEditOpen, setIsEditOpen] = React.useState(false);
@@ -417,6 +778,9 @@ export default function SalesOrdersPage() {
             dpPaid: o.dpPaid,
             dpPercent: o.dpPercent,
             dpAmount: o.dpAmount,
+            invoiceDocType: o.invoiceDocType,
+            invoiceDocAttachment: o.invoiceDocAttachment,
+            invoiceDocNumber: o.invoiceDocNumber,
             packagingAvailability: o.packagingAvailability,
             coaStatus: o.coaStatus,
             productionStatus: o.productionStatus,
@@ -454,7 +818,7 @@ export default function SalesOrdersPage() {
 
   const fetchApprovals = React.useCallback(() => {
     approvalApi
-      .listRequests({ documentType: "sales_order", perPage: 100 })
+      .listRequests({ documentType: "sales_order", status: "pending", perPage: 100 })
       .then((res) => {
         const map: Record<string, ApprovalRequest> = {};
         (res.data || []).forEach((r) => {
@@ -517,6 +881,7 @@ export default function SalesOrdersPage() {
     try {
       await salesApi.approveOrder(so.id);
       fetchOrders();
+      fetchApprovals();
       setSelectedOrder(null);
     } catch (err) {
       await alert({
@@ -545,6 +910,7 @@ export default function SalesOrdersPage() {
     try {
       await salesApi.rejectOrder(so.id, comments.trim());
       fetchOrders();
+      fetchApprovals();
       setSelectedOrder(null);
     } catch (err) {
       await alert({
@@ -645,6 +1011,15 @@ export default function SalesOrdersPage() {
       return;
     }
 
+    if (dpPaid && !invoiceDocAttachment) {
+      await alert({
+        title: "Dokumen CI / PI Wajib Diunggah",
+        message: "Karena DP sudah dicentang dibayarkan, Anda wajib memilih dan mengunggah dokumen Commercial Invoice (CI) atau Proforma Invoice (PI) sebelum mengajukan pesanan.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const orderDate = new Date().toISOString().slice(0, 16).replace("T", " ");
     const itemsForDisplay: SalesOrderItem[] = orderLines.map((l) => {
       const product = products.find((p) => p.id === l.productId);
@@ -669,6 +1044,9 @@ export default function SalesOrdersPage() {
         dpPaid,
         dpPercent,
         dpAmount: calculatedDp,
+        invoiceDocType: dpPaid ? invoiceDocType : undefined,
+        invoiceDocAttachment: dpPaid ? invoiceDocAttachment : undefined,
+        invoiceDocNumber: dpPaid ? invoiceDocNumber : undefined,
         shippingAddress: shippingAddress || undefined,
         shippingCourier: shippingCourier || undefined,
         deliveryDate: newDeliveryDate || undefined,
@@ -693,17 +1071,21 @@ export default function SalesOrdersPage() {
           shippingAddress: o.shippingAddress || shippingAddress,
           totalAmount: o.totalAmount,
           paymentTerms: o.paymentStatus || "Pending",
-          status: o.status || "Confirmed",
+          status: (o.status || "Confirmed").toLowerCase(),
           customerPoNumber: o.customerPoNumber || customerPoNumber,
           customerPoAttachment: o.customerPoAttachment || customerPoAttachment,
           dpPaid: o.dpPaid ?? dpPaid,
           dpPercent: o.dpPercent ?? dpPercent,
           dpAmount: o.dpAmount ?? calculatedDp,
+          invoiceDocType: o.invoiceDocType || (dpPaid ? invoiceDocType : undefined),
+          invoiceDocAttachment: o.invoiceDocAttachment || (dpPaid ? invoiceDocAttachment : undefined),
+          invoiceDocNumber: o.invoiceDocNumber || (dpPaid ? invoiceDocNumber : undefined),
           editable: true,
           items: itemsForDisplay,
         },
         ...orders,
       ]);
+      fetchApprovals();
       loadCatalog();
     } catch (err) {
       console.warn("Failed to create sales order via API", err);
@@ -719,6 +1101,15 @@ export default function SalesOrdersPage() {
     setNewCustomerId("");
     setCustomerPoNumber("");
     setCustomerPoAttachment("");
+    setUploadedPoFileName(null);
+    setUploadedPoFileSize(null);
+    if (poFileInputRef.current) poFileInputRef.current.value = "";
+    setInvoiceDocType("CI");
+    setInvoiceDocNumber("");
+    setInvoiceDocAttachment("");
+    setUploadedInvoiceDocFileName(null);
+    setUploadedInvoiceDocFileSize(null);
+    if (invoiceDocFileInputRef.current) invoiceDocFileInputRef.current.value = "";
     setDpPaid(false);
     setDpPercent(30);
     setDpAmount("0");
@@ -806,9 +1197,41 @@ export default function SalesOrdersPage() {
         <div>
           <span className="text-xs font-semibold text-foreground block">{so.customerName}</span>
           {so.customerPoNumber && (
-            <span className="inline-block px-1.5 py-0.2 rounded bg-blue-50 text-brand-primary text-[10px] font-mono border border-blue-200 mt-0.5">
-              PO Pembeli: {so.customerPoNumber}
-            </span>
+            <div className="flex items-center gap-1 mt-0.5">
+              <span className="inline-block px-1.5 py-0.2 rounded bg-blue-50 text-brand-primary text-[10px] font-mono border border-blue-200">
+                PO Pembeli: {so.customerPoNumber}
+              </span>
+              {so.customerPoAttachment && (
+                <button
+                  type="button"
+                  title="Unduh Lampiran Dokumen"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDownloadAttachment(so);
+                  }}
+                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-[10px] font-medium border border-emerald-200 transition-colors"
+                >
+                  <Paperclip className="h-3 w-3" />
+                  <span>File</span>
+                </button>
+              )}
+            </div>
+          )}
+          {!so.customerPoNumber && so.customerPoAttachment && (
+            <div className="mt-0.5">
+              <button
+                type="button"
+                title="Unduh Lampiran Dokumen"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDownloadAttachment(so);
+                }}
+                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-[10px] font-medium border border-emerald-200 transition-colors"
+              >
+                <Paperclip className="h-3 w-3" />
+                <span>Lampiran PO</span>
+              </button>
+            </div>
           )}
           {so.shippingCourier && (
             <span className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
@@ -864,6 +1287,17 @@ export default function SalesOrdersPage() {
                 Menunggu DP {pct}% {so.dpAmount ? `(Rp ${Math.round(so.dpAmount).toLocaleString("id-ID")})` : ""}
               </span>
             )}
+            {so.invoiceDocAttachment ? (
+              <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 text-[9px] font-bold border border-blue-200 flex items-center gap-1">
+                <FileCheck className="h-2.5 w-2.5 text-blue-600" />
+                {so.invoiceDocType || "CI/PI"} Terlampir
+              </span>
+            ) : (so.status === "confirmed" || so.status === "approved") ? (
+              <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 text-[9px] font-bold border border-amber-300 flex items-center gap-1">
+                <AlertTriangle className="h-2.5 w-2.5 text-amber-600" />
+                Wajib Upload CI/PI
+              </span>
+            ) : null}
           </div>
         );
       },
@@ -884,7 +1318,8 @@ export default function SalesOrdersPage() {
             currentUser?.email,
             so.createdByEmail,
             activeApprovals[so.id],
-            so.status
+            so.status,
+            { roleName, mayApproveModule: mayApprove }
           );
 
         return (
@@ -898,6 +1333,18 @@ export default function SalesOrdersPage() {
             >
               <Eye className="h-4 w-4" />
             </Button>
+
+            {(so.status === "confirmed" || so.status === "approved") && !so.invoiceDocAttachment && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50/70 border-amber-300 hover:bg-amber-100"
+                title="Wajib upload dokumen CI/PI sebelum dapat diproses ke PR"
+                onClick={() => openPostApprovalUpload(so)}
+              >
+                <Upload className="h-3 w-3" /> Upload CI/PI
+              </Button>
+            )}
 
             {isDraft && so.editable && (
               <>
@@ -1093,7 +1540,7 @@ export default function SalesOrdersPage() {
       {/* Order Source Detail Dialog */}
       <Dialog open={!!selectedOrder} onOpenChange={(open) => !open && setSelectedOrder(null)}>
         {selectedOrder && (
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <div className="flex items-center justify-between pr-6">
                 <div>
@@ -1225,14 +1672,19 @@ export default function SalesOrdersPage() {
                     {selectedOrder.customerPoNumber || "-"}
                   </span>
                   {selectedOrder.customerPoAttachment && (
-                    <a
-                      href={selectedOrder.customerPoAttachment}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[10px] text-brand-primary underline block truncate"
+                    <button
+                      type="button"
+                      disabled={isDownloadingPoDoc}
+                      onClick={() => handleDownloadAttachment(selectedOrder)}
+                      className="inline-flex items-center gap-1 mt-1 text-[11px] font-medium text-brand-primary hover:underline hover:text-brand-primary/80 disabled:opacity-50"
                     >
-                      Lampiran Dokumen
-                    </a>
+                      {isDownloadingPoDoc ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Download className="h-3 w-3" />
+                      )}
+                      <span>Unduh Dokumen PO</span>
+                    </button>
                   )}
                 </div>
                 <div>
@@ -1266,6 +1718,182 @@ export default function SalesOrdersPage() {
                   )}
                 </div>
               </div>
+
+              {/* CI / PI Invoice Document Box */}
+              <div className="rounded-xl border border-border bg-slate-50/70 p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                  <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <FileCheck className="h-4 w-4 text-brand-primary" />
+                    Dokumen Faktur (Commercial / Proforma Invoice)
+                  </span>
+                  {selectedOrder.invoiceDocAttachment ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
+                      {selectedOrder.invoiceDocType || "CI/PI"} Terlampir
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                      Belum Ada Dokumen
+                    </span>
+                  )}
+                </div>
+
+                {selectedOrder.invoiceDocAttachment ? (
+                  <div className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-white text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className="h-4 w-4 text-brand-primary shrink-0" />
+                      <div className="min-w-0">
+                        <span className="font-semibold text-foreground block truncate text-xs">
+                          {selectedOrder.invoiceDocType || "Invoice"}: {selectedOrder.invoiceDocNumber ? `Nomor ${selectedOrder.invoiceDocNumber}` : selectedOrder.invoiceDocAttachment.split("/").pop()}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground block">
+                          Tersimpan di Cloudflare R2
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[11px] gap-1 px-2.5 text-brand-primary border-brand-primary/40 hover:bg-brand-tint"
+                      onClick={() => handleDownloadInvoiceAttachment(selectedOrder)}
+                    >
+                      <Download className="h-3 w-3" /> Unduh Dokumen
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between p-2.5 rounded-lg border border-amber-200 bg-amber-50/70 text-xs">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                      <span className="text-[11px] text-amber-900">
+                        Dokumen CI/PI wajib diunggah sebelum Sales Order ini dapat digunakan untuk pengadaan barang di PR.
+                      </span>
+                    </div>
+                    {(selectedOrder.status === "confirmed" || selectedOrder.status === "approved") && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="gradient"
+                        className="h-7 text-[11px] gap-1 px-2.5 shrink-0"
+                        onClick={() => openPostApprovalUpload(selectedOrder)}
+                      >
+                        <Upload className="h-3 w-3" /> Upload CI/PI
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Document Preview Box (When customerPoAttachment exists) */}
+              {selectedOrder.customerPoAttachment && (
+                <div className="rounded-xl border border-border bg-slate-50/70 p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                    <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <FileText className="h-4 w-4 text-brand-primary" />
+                      Preview Dokumen Lampiran PO (Cloudflare R2)
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {previewUrl && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-[11px] gap-1 px-2 text-foreground bg-white"
+                          onClick={() => window.open(previewUrl, "_blank")}
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          Buka di Tab Baru
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isDownloadingPoDoc}
+                        className="h-7 text-[11px] gap-1 px-2 text-brand-primary border-brand-primary/30 hover:bg-brand-tint bg-white"
+                        onClick={() => handleDownloadAttachment(selectedOrder)}
+                      >
+                        {isDownloadingPoDoc ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Download className="h-3 w-3" />
+                        )}
+                        Unduh File
+                      </Button>
+                    </div>
+                  </div>
+
+                  {previewLoading && (
+                    <div className="flex flex-col items-center justify-center p-8 text-muted-foreground gap-2">
+                      <Loader2 className="h-6 w-6 animate-spin text-brand-primary" />
+                      <span className="text-xs font-medium">Memuat preview dokumen dari Cloudflare R2...</span>
+                    </div>
+                  )}
+
+                  {previewError && (
+                    <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
+                      <span>{previewError}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-[11px] text-rose-800 hover:bg-rose-100"
+                        onClick={() => handleDownloadAttachment(selectedOrder)}
+                      >
+                        Coba Unduh Langsung
+                      </Button>
+                    </div>
+                  )}
+
+                  {!previewLoading && !previewError && previewUrl && (
+                    <div className="space-y-2">
+                      {previewFileType === "image" && (
+                        <div className="flex items-center justify-center bg-slate-900/5 rounded-lg border border-border p-3 overflow-hidden">
+                          <img
+                            src={previewUrl}
+                            alt="Lampiran PO Customer"
+                            className="max-h-96 w-auto object-contain rounded-md shadow-sm"
+                          />
+                        </div>
+                      )}
+
+                      {previewFileType === "pdf" && (
+                        <div className="w-full rounded-lg border border-border overflow-hidden bg-white shadow-sm">
+                          <iframe
+                            src={previewUrl}
+                            title="Preview Dokumen PO"
+                            className="w-full h-[480px] border-0"
+                          />
+                        </div>
+                      )}
+
+                      {previewFileType === "other" && (
+                        <div className="flex items-center justify-between p-3.5 rounded-lg border border-border bg-white text-xs">
+                          <div className="flex items-center gap-2.5">
+                            <FileSpreadsheet className="h-6 w-6 text-emerald-600 shrink-0" />
+                            <div>
+                              <span className="font-semibold text-foreground block">
+                                {selectedOrder.customerPoAttachment.split("/").pop()}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground">
+                                Format dokumen ini (Excel/Word/Data) dapat dibuka setelah diunduh ke perangkat Anda.
+                              </span>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="gradient"
+                            onClick={() => handleDownloadAttachment(selectedOrder)}
+                            className="h-7 text-xs shrink-0"
+                          >
+                            <Download className="h-3.5 w-3.5 mr-1" /> Unduh Dokumen
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Kesiapan, DP, PPN, penolakan, revisi */}
               {selectedOrder.source !== "marketplace" && selectedOrder.source !== "pos" && (
@@ -1382,6 +2010,11 @@ export default function SalesOrdersPage() {
                 creatorName={selectedOrder.createdByEmail}
                 createdAt={selectedOrder.orderDate}
                 currentStatus={selectedOrder.status}
+                onRequestLoaded={(req) => {
+                  if (req) {
+                    setActiveApprovals((prev) => ({ ...prev, [selectedOrder.id]: req }));
+                  }
+                }}
               />
 
               {readyToShipError && <div role="alert" className="text-xs text-rose-700">{readyToShipError}</div>}
@@ -1423,7 +2056,8 @@ export default function SalesOrdersPage() {
                       currentUser?.email,
                       selectedOrder.createdByEmail,
                       activeApprovals[selectedOrder.id],
-                      selectedOrder.status
+                      selectedOrder.status,
+                      { roleName, mayApproveModule: mayApprove }
                     ) && (
                       <>
                         <Button
@@ -1459,12 +2093,37 @@ export default function SalesOrdersPage() {
                       Create Delivery
                     </Button>
                   )}
+                  {(selectedOrder.status === "confirmed" || selectedOrder.status === "approved") && !selectedOrder.invoiceDocAttachment && (
+                    <Button
+                      type="button"
+                      variant="gradient"
+                      size="sm"
+                      className="gap-1 font-semibold"
+                      onClick={() => openPostApprovalUpload(selectedOrder)}
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      Upload Dokumen CI / PI
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="border-brand-primary/30 text-brand-primary hover:bg-brand-tint gap-1 font-semibold"
+                    disabled={!isEligibleForPR(selectedOrder)}
+                    title={
+                      selectedOrder.status === "pending_approval"
+                        ? "Menunggu Approval Manajemen terlebih dahulu"
+                        : !selectedOrder.invoiceDocAttachment && !selectedOrder.customerPoAttachment
+                        ? "Wajib upload dokumen CI/PI terlebih dahulu"
+                        : "Buat PR Pengadaan untuk Sales Order ini"
+                    }
+                    className={`gap-1 font-semibold ${
+                      isEligibleForPR(selectedOrder)
+                        ? "border-brand-primary/30 text-brand-primary hover:bg-brand-tint"
+                        : "opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 border-slate-200"
+                    }`}
                     onClick={() => {
+                      if (!isEligibleForPR(selectedOrder)) return;
                       window.location.href = `/procurement/purchase-requests?fromSoId=${selectedOrder.id}&fromSoNo=${selectedOrder.orderNumber}`;
                     }}
                   >
@@ -1886,6 +2545,134 @@ export default function SalesOrdersPage() {
                   Tandai uang muka (DP {dpPercent}%) sudah dibayarkan oleh customer
                 </span>
               </label>
+
+              {dpPaid ? (
+                <div className="mt-3 p-3 rounded-lg border border-brand-primary/20 bg-brand-tint/10 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <FileCheck className="h-4 w-4 text-brand-primary" />
+                      Dokumen Faktur DP (Wajib CI atau PI)
+                    </span>
+                    <span className="text-[10px] bg-brand-primary text-white font-semibold px-2 py-0.5 rounded-full">
+                      Wajib Dilampirkan
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
+                        Jenis Dokumen
+                      </label>
+                      <div className="flex items-center gap-3 text-xs">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="invoiceDocType"
+                            value="CI"
+                            checked={invoiceDocType === "CI"}
+                            onChange={() => setInvoiceDocType("CI")}
+                            className="accent-brand-primary"
+                          />
+                          <span className="font-medium">Commercial Invoice (CI)</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="invoiceDocType"
+                            value="PI"
+                            checked={invoiceDocType === "PI"}
+                            onChange={() => setInvoiceDocType("PI")}
+                            className="accent-brand-primary"
+                          />
+                          <span className="font-medium">Proforma Invoice (PI)</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
+                        Nomor Dokumen {invoiceDocType} (Opsional)
+                      </label>
+                      <Input
+                        placeholder={`Contoh: ${invoiceDocType}-2026/001`}
+                        value={invoiceDocNumber}
+                        onChange={(e) => setInvoiceDocNumber(e.target.value)}
+                        className="h-8 text-xs bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <input
+                      ref={invoiceDocFileInputRef}
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx"
+                      onChange={handleInvoiceDocUpload}
+                      disabled={isUploadingInvoiceDoc}
+                    />
+
+                    {invoiceDocAttachment ? (
+                      <div className="flex items-center justify-between p-2 rounded-lg border border-emerald-200 bg-emerald-50/70 text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                          <div className="min-w-0 truncate">
+                            <span className="font-semibold text-emerald-950 block truncate text-[11px]">
+                              {uploadedInvoiceDocFileName || invoiceDocAttachment.split("/").pop()}
+                            </span>
+                            {uploadedInvoiceDocFileSize != null && (
+                              <span className="text-[10px] text-emerald-700 block">
+                                {(uploadedInvoiceDocFileSize / 1024).toFixed(1)} KB &bull; Tersimpan di Cloudflare R2
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleRemoveInvoiceDoc}
+                          className="h-6 px-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-100/50 text-[11px] shrink-0"
+                        >
+                          <X className="h-3.5 w-3.5 mr-0.5" /> Hapus
+                        </Button>
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => !isUploadingInvoiceDoc && invoiceDocFileInputRef.current?.click()}
+                        className={`flex items-center justify-center gap-2 p-2.5 rounded-lg border border-dashed cursor-pointer transition-colors text-xs ${
+                          isUploadingInvoiceDoc
+                            ? "border-brand-primary bg-brand-tint/20 text-brand-primary cursor-wait"
+                            : "border-brand-primary/50 hover:border-brand-primary hover:bg-brand-tint/10 bg-white text-brand-primary font-medium"
+                        }`}
+                      >
+                        {isUploadingInvoiceDoc ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin text-brand-primary" />
+                            <span className="text-xs font-semibold">Mengunggah {invoiceDocType} ke Cloudflare R2...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="h-4 w-4 text-brand-primary" />
+                            <span className="text-xs font-semibold">Pencet Tombol untuk Upload Dokumen {invoiceDocType}</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Dokumen {invoiceDocType} ini akan dilampirkan bersama pengajuan pesanan dan dapat diakses saat proses persetujuan (Approval).
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-2.5 p-2.5 rounded-lg border border-amber-200 bg-amber-50/70 text-amber-900 text-[11px] flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold block">Pengajuan Approval Tanpa DP</span>
+                    Karena uang muka (DP) belum dibayarkan, Sales Order ini akan diajukan ke Approval terlebih dahulu. Dokumen Commercial Invoice (CI) atau Proforma Invoice (PI) wajib diunggah setelah disetujui (Approved) sebelum dapat digunakan untuk pengadaan barang di PR.
+                  </div>
+                </div>
+              )}
             </div>
             <DialogFooter className="gap-2 sm:gap-0">
               <Button type="button" variant="outline" size="sm" onClick={() => setIsCreateOpen(false)}>
@@ -2016,6 +2803,170 @@ export default function SalesOrdersPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload Dokumen CI / PI Pasca-Approval Dialog */}
+      <Dialog open={isPostApprovalUploadOpen} onOpenChange={setIsPostApprovalUploadOpen}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileCheck className="h-5 w-5 text-brand-primary" />
+              Upload Dokumen CI / PI
+            </DialogTitle>
+          </DialogHeader>
+          {postApprovalOrder && (
+            <form onSubmit={handleSavePostApprovalDoc} className="space-y-4">
+              <div className="p-3 rounded-lg border border-border bg-slate-50/70 text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Nomor Order:</span>
+                  <span className="font-mono font-semibold">{postApprovalOrder.orderNumber}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Pelanggan:</span>
+                  <span className="font-semibold">{postApprovalOrder.customerName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Total Nilai:</span>
+                  <MoneyDisplay amount={postApprovalOrder.totalAmount} className="font-semibold" />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-semibold text-foreground block mb-1.5">
+                    Pilih Jenis Dokumen Invoice <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="flex items-center gap-4 text-xs">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="postDocType"
+                        value="CI"
+                        checked={postDocType === "CI"}
+                        onChange={() => setPostDocType("CI")}
+                        className="accent-brand-primary"
+                      />
+                      <span className="font-medium">Commercial Invoice (CI)</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="postDocType"
+                        value="PI"
+                        checked={postDocType === "PI"}
+                        onChange={() => setPostDocType("PI")}
+                        className="accent-brand-primary"
+                      />
+                      <span className="font-medium">Proforma Invoice (PI)</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-foreground block mb-1">
+                    Nomor Dokumen {postDocType} (Opsional)
+                  </label>
+                  <Input
+                    placeholder={`Contoh: ${postDocType}-2026/001`}
+                    value={postDocNumber}
+                    onChange={(e) => setPostDocNumber(e.target.value)}
+                    className="h-8 text-xs bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-foreground flex items-center justify-between mb-1">
+                    <span>File Dokumen {postDocType} <span className="text-rose-500">*</span></span>
+                    <span className="text-[10px] text-muted-foreground">Maks 10 MB</span>
+                  </label>
+                  <input
+                    ref={postDocFileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx"
+                    onChange={handlePostDocUpload}
+                    disabled={isUploadingPostDoc}
+                  />
+
+                  {postDocAttachment ? (
+                    <div className="flex items-center justify-between p-2 rounded-lg border border-emerald-200 bg-emerald-50/70 text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                        <div className="min-w-0 truncate">
+                          <span className="font-semibold text-emerald-950 block truncate text-[11px]">
+                            {postDocFileName || postDocAttachment.split("/").pop()}
+                          </span>
+                          {postDocFileSize != null && (
+                            <span className="text-[10px] text-emerald-700 block">
+                              {(postDocFileSize / 1024).toFixed(1)} KB &bull; Tersimpan di Cloudflare R2
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleRemovePostDoc}
+                        className="h-6 px-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-100/50 text-[11px] shrink-0"
+                      >
+                        <X className="h-3.5 w-3.5 mr-0.5" /> Hapus
+                      </Button>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => !isUploadingPostDoc && postDocFileInputRef.current?.click()}
+                      className={`flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed cursor-pointer transition-colors text-xs ${
+                        isUploadingPostDoc
+                          ? "border-brand-primary bg-brand-tint/20 text-brand-primary cursor-wait"
+                          : "border-brand-primary/50 hover:border-brand-primary hover:bg-brand-tint/10 bg-white text-brand-primary font-medium"
+                      }`}
+                    >
+                      {isUploadingPostDoc ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin text-brand-primary" />
+                          <span className="text-xs font-semibold">Mengunggah ke Cloudflare R2...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-4 w-4 text-brand-primary" />
+                          <span className="text-xs font-semibold">Pencet Tombol untuk Upload Dokumen {postDocType}</span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-lg border border-blue-200 bg-blue-50/70 text-blue-900 text-[11px] flex items-start gap-2">
+                <FileCheck className="h-4 w-4 text-brand-primary shrink-0 mt-0.5" />
+                <div>
+                  Setelah dokumen {postDocType} ini disimpan, Sales Order akan memiliki kelengkapan berkas faktur dan tombol pembuatan Purchase Requisition (PR) akan terbuka.
+                </div>
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsPostApprovalUploadOpen(false)}
+                  disabled={isSubmittingPostDoc}
+                >
+                  Batal
+                </Button>
+                <Button
+                  type="submit"
+                  variant="gradient"
+                  size="sm"
+                  disabled={!postDocAttachment || isSubmittingPostDoc || isUploadingPostDoc}
+                >
+                  {isSubmittingPostDoc ? "Menyimpan..." : "Simpan & Buka Akses PR"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>

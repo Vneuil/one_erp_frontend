@@ -1,4 +1,4 @@
-import { apiClient, ApiResponse } from "./client";
+import { apiClient, apiClientDownload, ApiResponse } from "./client";
 
 export interface SalesOrderLine {
   id: string;
@@ -34,6 +34,9 @@ export interface SalesOrderItem {
   dpPaid?: boolean;
   dpPercent?: number;
   dpAmount?: number;
+  invoiceDocType?: string;
+  invoiceDocAttachment?: string;
+  invoiceDocNumber?: string;
   shippingAddress?: string;
   shippingCourier?: string;
   deliveryDate?: string;
@@ -73,6 +76,9 @@ export interface UpdateSalesOrderInput {
   dpPaid?: boolean;
   dpPercent?: number;
   dpAmount?: number;
+  invoiceDocType?: string;
+  invoiceDocAttachment?: string;
+  invoiceDocNumber?: string;
   shippingAddress?: string;
   shippingCourier?: string;
   deliveryDate?: string;
@@ -98,6 +104,9 @@ export interface CreateSalesOrderInput {
   dpPaid?: boolean;
   dpPercent?: number;
   dpAmount?: number;
+  invoiceDocType?: string;
+  invoiceDocAttachment?: string;
+  invoiceDocNumber?: string;
   shippingAddress?: string;
   shippingCourier?: string;
   deliveryDate?: string;
@@ -324,6 +333,50 @@ export const salesApi = {
       method: "POST",
       body: JSON.stringify(data),
     });
+  },
+
+  uploadAttachment: async (
+    file: File
+  ): Promise<ApiResponse<{ key: string; filename: string; size: number; contentType: string }>> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiClient<{ key: string; filename: string; size: number; contentType: string }>(
+      "/sales/orders/upload-attachment",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+  },
+
+  downloadAttachment: async (
+    orderId: string
+  ): Promise<{ blob: Blob; filename: string | null } | ApiResponse<unknown>> => {
+    return apiClientDownload(`/sales/orders/${orderId}/attachment`);
+  },
+
+  downloadAttachmentByKey: async (
+    key: string
+  ): Promise<{ blob: Blob; filename: string | null } | ApiResponse<unknown>> => {
+    return apiClientDownload("/sales/orders/attachment/download", {
+      params: { key },
+    });
+  },
+
+  attachInvoiceDocument: async (
+    orderId: string,
+    data: { invoiceDocType: string; invoiceDocNumber?: string; invoiceDocAttachment: string }
+  ): Promise<ApiResponse<SalesOrderItem>> => {
+    return apiClient<SalesOrderItem>(`/sales/orders/${orderId}/invoice-document`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  downloadInvoiceAttachment: async (
+    orderId: string
+  ): Promise<{ blob: Blob; filename: string | null } | ApiResponse<unknown>> => {
+    return apiClientDownload(`/sales/orders/${orderId}/invoice-attachment`);
   },
 
   updateOrder: async (id: string, data: UpdateSalesOrderInput): Promise<ApiResponse<SalesOrderItem>> => {

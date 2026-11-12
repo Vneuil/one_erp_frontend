@@ -12,10 +12,10 @@ const routeModules: Record<string, string[]> = {
   "/tools/chat": ["collaboration"], "/tools/drive": ["collaboration"],
   "/tools/meetings": ["docflow"], "/tools/forms": ["docflow"], "/tools/signatures": ["docflow"], "/tools/exports": ["collaboration"],
   "/settings/users": ["users"], "/settings/activity-log": ["activity-logs"],
-  "/settings/approval-workflows": ["approval"], "/settings/currencies": ["currencies"],
-  "/settings/integration": ["integration"], "/approvals": ["approval"],
+  "/settings/approval-workflows": ["rbac"], "/settings/currencies": ["finance"],
+  "/settings/integration": ["integration"],
 };
-const exempt = ["/dashboard", "/profile", "/billing/subscription", "/settings/roles", "/settings/permissions", "/settings/tenants", "/settings/company", "/ai/assistant", "/settings/ai"];
+const exempt = ["/dashboard", "/profile", "/approvals", "/billing/subscription", "/settings/roles", "/settings/permissions", "/settings/tenants", "/settings/company", "/ai/assistant", "/settings/ai"];
 export function canViewRoute(href: string, permissions: PermissionItem[] | null): boolean {
   if (permissions === null || exempt.includes(href)) return true;
   const modules = routeModules[href] ?? [href.split("/")[1]];

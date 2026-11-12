@@ -12,6 +12,7 @@ export interface ApprovalTimelineProps {
   createdAt?: string;
   currentStatus: string;
   rejectionReason?: string;
+  onRequestLoaded?: (request: ApprovalRequest | null) => void;
 }
 
 export function canUserApprove(
@@ -19,9 +20,17 @@ export function canUserApprove(
   userEmail?: string,
   creatorEmail?: string,
   approvalRequest?: ApprovalRequest | null,
-  currentStatus?: string
+  currentStatus?: string,
+  options?: {
+    roleName?: string | null;
+    mayApproveModule?: boolean;
+  }
 ): boolean {
-  if (!userRole) return false;
+  const userRoles = [userRole, options?.roleName]
+    .filter((r): r is string => Boolean(r && r.trim()))
+    .map((r) => r.trim().toLowerCase());
+  if (userRoles.length === 0) return false;
+
   const status = (currentStatus || "").toLowerCase();
   const isPending =
     status === "pending_approval" ||
@@ -41,20 +50,23 @@ export function canUserApprove(
     if (approvalRequest.status !== "pending") return false;
     const currentStep = approvalRequest.steps.find((s) => s.levelOrder === approvalRequest.currentLevel);
     if (!currentStep) return false;
-    return currentStep.approverRole.toLowerCase() === userRole.toLowerCase();
+    return userRoles.includes(currentStep.approverRole.trim().toLowerCase());
   }
 
-  // Fallback for documents awaiting approval without a workflow:
+  // Fallback for documents awaiting approval without a dynamic workflow
+  // (for example SOs awaiting approval because DP was not paid):
   if (status === "pending_supervisor") {
-    return userRole.toLowerCase() === "manager" || userRole.toLowerCase() === "supervisor";
+    return userRoles.includes("manager") || userRoles.includes("supervisor");
   }
   if (status === "pending_owner") {
-    return userRole.toLowerCase() === "admin";
+    return userRoles.includes("admin");
   }
 
-  // In pending_approval or submitted without an approval workflow:
-  // Only admin has authority as fallback; Manager cannot approve without workflow assignment
-  return userRole.toLowerCase() === "admin";
+  if (options?.mayApproveModule !== undefined) {
+    return options.mayApproveModule;
+  }
+
+  return userRoles.includes("admin") || userRoles.includes("manager");
 }
 
 export function ApprovalTimeline({
@@ -64,9 +76,15 @@ export function ApprovalTimeline({
   createdAt,
   currentStatus,
   rejectionReason,
+  onRequestLoaded,
 }: ApprovalTimelineProps) {
   const [request, setRequest] = React.useState<ApprovalRequest | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
+  const onRequestLoadedRef = React.useRef(onRequestLoaded);
+
+  React.useEffect(() => {
+    onRequestLoadedRef.current = onRequestLoaded;
+  }, [onRequestLoaded]);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -76,7 +94,11 @@ export function ApprovalTimeline({
     approvalApi
       .getActiveRequestForDocument(documentType, documentId)
       .then((res) => {
-        if (isMounted) setRequest(res.data || null);
+        if (isMounted) {
+          const loaded = res.data || null;
+          setRequest(loaded);
+          onRequestLoadedRef.current?.(loaded);
+        }
       })
       .catch((err) => {
         console.warn("Failed to load approval request for timeline", err);

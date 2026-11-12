@@ -12,6 +12,14 @@ import {
   Truck,
   Download,
   Loader2,
+  CheckCircle2,
+  Clock,
+  Check,
+  X,
+  Send,
+  FileText,
+  ExternalLink,
+  ClipboardCheck,
 } from "lucide-react";
 import {
   BarChart,
@@ -33,6 +41,10 @@ import { salesApi, SalesOrderItem } from "@/lib/api/sales";
 import { inventoryApi, StockLevelItem } from "@/lib/api/inventory";
 import { financeApi, ReceivableItem } from "@/lib/api/finance";
 import { reportsApi, SalesPerformance } from "@/lib/api/reports";
+import { approvalApi, ApprovalRequest } from "@/lib/api/approval";
+import { procurementApi, PurchaseOrderItem, PurchaseRequestItem } from "@/lib/api/procurement";
+import { useConfirm, useAlert, usePrompt } from "@/components/shared/confirm-modal";
+import { useAppStore } from "@/stores/app-store";
 
 import { useNavigationAccess } from "@/providers/navigation-access";
 import { fetchAllPages } from "@/lib/api/pagination";
@@ -82,7 +94,37 @@ const dashboardCopy = {
     "errorStock": "Gagal memuat status stok",
     "errorFinance": "Gagal memuat data piutang",
     "errorReports": "Gagal memuat performa penjualan",
-    "retryBtn": "Coba lagi"
+    "retryBtn": "Coba lagi",
+    "approvalTitle": "Approval",
+    "approvalSubtitle": "Pusat persetujuan dokumen transaksi dan pengajuan draf.",
+    "approvalPendingTab": "Persetujuan Tertunda",
+    "approvalDraftTab": "Draf Belum Terkirim",
+    "viewAllApprovals": "Pusat Persetujuan →",
+    "docNumberCol": "Nomor Dokumen",
+    "docTypeCol": "Tipe",
+    "partyCol": "Pengaju / Pihak",
+    "dateCol": "Tanggal",
+    "amountCol": "Total Nilai",
+    "statusCol": "Status",
+    "actionCol": "Aksi",
+    "statusPendingLevel": "Menunggu Level",
+    "statusDraft": "Draf (Belum Terkirim)",
+    "approveBtn": "Setujui",
+    "rejectBtn": "Tolak",
+    "submitDraftBtn": "Kirim Approval",
+    "viewBtn": "Lihat",
+    "noPendingApprovals": "Tidak ada dokumen yang menunggu persetujuan Anda.",
+    "noPendingApprovalsDesc": "Semua dokumen telah diproses atau saat ini belum ada persetujuan yang ditugaskan ke akun Anda.",
+    "noDrafts": "Tidak ada draf dokumen yang belum dikirim.",
+    "noDraftsDesc": "Semua pesanan penjualan, pembelian, atau permintaan pembelian Anda telah diajukan.",
+    "confirmApproveTitle": "Setujui Dokumen",
+    "confirmApproveMsg": "Apakah Anda yakin ingin menyetujui dokumen ini?",
+    "rejectPromptTitle": "Tolak Dokumen",
+    "rejectPromptMsg": "Masukkan alasan penolakan:",
+    "confirmSubmitTitle": "Kirim untuk Persetujuan",
+    "confirmSubmitMsg": "Kirim dokumen untuk proses persetujuan (approval)?",
+    "errorApprovalAction": "Gagal memproses persetujuan dokumen",
+    "errorSubmit": "Gagal mengirim dokumen untuk approval"
   },
   "en": {
     "text0": "Operations Dashboard",
@@ -127,13 +169,86 @@ const dashboardCopy = {
     "errorStock": "Failed to load stock levels",
     "errorFinance": "Failed to load receivables",
     "errorReports": "Failed to load sales performance",
-    "retryBtn": "Retry"
+    "retryBtn": "Retry",
+    "approvalTitle": "Approval",
+    "approvalSubtitle": "Transaction document approval center and draft submissions.",
+    "approvalPendingTab": "Pending Approvals",
+    "approvalDraftTab": "Unsubmitted Drafts",
+    "viewAllApprovals": "Approval Center →",
+    "docNumberCol": "Document No.",
+    "docTypeCol": "Type",
+    "partyCol": "Requester / Party",
+    "dateCol": "Date",
+    "amountCol": "Total Amount",
+    "statusCol": "Status",
+    "actionCol": "Actions",
+    "statusPendingLevel": "Pending Level",
+    "statusDraft": "Draft (Unsubmitted)",
+    "approveBtn": "Approve",
+    "rejectBtn": "Reject",
+    "submitDraftBtn": "Submit Approval",
+    "viewBtn": "View",
+    "noPendingApprovals": "No documents awaiting your approval.",
+    "noPendingApprovalsDesc": "All documents have been acted on or none are currently assigned to your account.",
+    "noDrafts": "No unsubmitted draft documents.",
+    "noDraftsDesc": "All of your sales orders, purchase orders, or purchase requests have been submitted.",
+    "confirmApproveTitle": "Approve Document",
+    "confirmApproveMsg": "Are you sure you want to approve this document?",
+    "rejectPromptTitle": "Reject Document",
+    "rejectPromptMsg": "Enter rejection reason:",
+    "confirmSubmitTitle": "Submit for Approval",
+    "confirmSubmitMsg": "Submit document for approval process?",
+    "errorApprovalAction": "Failed to process approval",
+    "errorSubmit": "Failed to submit document for approval"
   }
 };
 
 const OPEN_ORDER_STATUSES = ["draft", "pending", "confirmed", "processing"];
 
+const DOCUMENT_TYPE_LABELS: Record<
+  string,
+  { id: string; en: string; badge: string; badgeClass: string }
+> = {
+  sales_order: {
+    id: "Pesanan Penjualan",
+    en: "Sales Order",
+    badge: "SO",
+    badgeClass: "bg-blue-50 text-blue-700 border-blue-200",
+  },
+  purchase_order: {
+    id: "Pesanan Pembelian",
+    en: "Purchase Order",
+    badge: "PO",
+    badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  },
+  purchase_request: {
+    id: "Permintaan Pembelian",
+    en: "Purchase Request",
+    badge: "PR",
+    badgeClass: "bg-purple-50 text-purple-700 border-purple-200",
+  },
+};
+
+interface UnifiedDraftDoc {
+  id: string;
+  documentType: "sales_order" | "purchase_order" | "purchase_request";
+  documentNumber: string;
+  partyName: string;
+  amount?: number;
+  itemCount?: number;
+  date?: string;
+  createdByEmail?: string;
+  viewHref: string;
+}
+
+const TARGET_DOC_TYPES = ["sales_order", "purchase_order", "purchase_request"];
+
 export default function DashboardPage() {
+  const confirm = useConfirm();
+  const alert = useAlert();
+  const prompt = usePrompt();
+  const { currentUser } = useAppStore();
+
   const { canView } = useNavigationAccess();
   const showSales = canView("/sales/sales-orders");
   const showStock = canView("/inventory/stock");
@@ -148,6 +263,13 @@ export default function DashboardPage() {
   const [receivables, setReceivables] = React.useState<ReceivableItem[]>([]);
   const [performance, setPerformance] = React.useState<SalesPerformance | null>(null);
 
+  const [pendingApprovals, setPendingApprovals] = React.useState<ApprovalRequest[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = React.useState<PurchaseOrderItem[]>([]);
+  const [purchaseRequests, setPurchaseRequests] = React.useState<PurchaseRequestItem[]>([]);
+  const [actingApprovalId, setActingApprovalId] = React.useState<string | null>(null);
+  const [actingDraftId, setActingDraftId] = React.useState<string | null>(null);
+  const [selectedTab, setSelectedTab] = React.useState<"approvals" | "drafts" | null>(null);
+
   const [ordersError, setOrdersError] = React.useState(false);
   const [stockError, setStockError] = React.useState(false);
   const [financeError, setFinanceError] = React.useState(false);
@@ -155,21 +277,27 @@ export default function DashboardPage() {
 
   React.useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setOrdersError(false);
-    setStockError(false);
-    setFinanceError(false);
-    setReportsError(false);
 
-    Promise.allSettled([
-      showSales ? fetchAllPages(salesApi.listOrders) : Promise.resolve([]),
-      showStock ? fetchAllPages(inventoryApi.listStockLevels) : Promise.resolve([]),
-      showFinance ? fetchAllPages(financeApi.listReceivables) : Promise.resolve([]),
-      showReports ? reportsApi.getSalesPerformance().then((res) => {
-        if (!res.success || !res.data) throw new Error(res.message);
-        return res.data;
-      }) : Promise.resolve(null),
-    ]).then(([ordersRes, stockRes, finRes, repRes]) => {
+    const loadData = async () => {
+      setLoading(true);
+      setOrdersError(false);
+      setStockError(false);
+      setFinanceError(false);
+      setReportsError(false);
+
+      const [ordersRes, stockRes, finRes, repRes, appRes, poRes, prRes] = await Promise.allSettled([
+        showSales ? fetchAllPages(salesApi.listOrders) : Promise.resolve([]),
+        showStock ? fetchAllPages(inventoryApi.listStockLevels) : Promise.resolve([]),
+        showFinance ? fetchAllPages(financeApi.listReceivables) : Promise.resolve([]),
+        showReports ? reportsApi.getSalesPerformance().then((res) => {
+          if (!res.success || !res.data) throw new Error(res.message);
+          return res.data;
+        }) : Promise.resolve(null),
+        approvalApi.listMyPendingApprovals().then((res) => res.data || []).catch(() => []),
+        fetchAllPages(procurementApi.listPurchaseOrders).catch(() => []),
+        fetchAllPages(procurementApi.listPurchaseRequests).catch(() => []),
+      ]);
+
       if (cancelled) return;
       if (ordersRes.status === "fulfilled") {
         setOrders(ordersRes.value);
@@ -194,12 +322,223 @@ export default function DashboardPage() {
       } else {
         setReportsError(true);
       }
-    }).finally(() => {
-      if (!cancelled) setLoading(false);
-    });
+
+      if (appRes.status === "fulfilled") {
+        setPendingApprovals(appRes.value);
+      }
+
+      if (poRes.status === "fulfilled") {
+        setPurchaseOrders(poRes.value);
+      }
+
+      if (prRes.status === "fulfilled") {
+        setPurchaseRequests(prRes.value);
+      }
+      setLoading(false);
+    };
+
+    loadData();
 
     return () => { cancelled = true; };
   }, [attempt, showSales, showStock, showFinance, showReports]);
+
+  const myPendingApprovals = React.useMemo(() => {
+    return pendingApprovals
+      .filter((req) => TARGET_DOC_TYPES.includes((req.documentType || "").toLowerCase()))
+      .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+  }, [pendingApprovals]);
+
+  const allDraftDocs = React.useMemo<UnifiedDraftDoc[]>(() => {
+    const draftSOs: UnifiedDraftDoc[] = orders
+      .filter((o) => (o.status || "").toLowerCase() === "draft")
+      .map((o) => ({
+        id: o.id,
+        documentType: "sales_order",
+        documentNumber: o.orderNumber,
+        partyName: o.customerName || "-",
+        amount: o.totalAmount,
+        itemCount: o.lines?.length,
+        date: o.orderDate || o.createdAt,
+        createdByEmail: o.createdByEmail,
+        viewHref: "/sales/sales-orders",
+      }));
+
+    const draftPOs: UnifiedDraftDoc[] = purchaseOrders
+      .filter((po) => (po.status || "").toLowerCase() === "draft")
+      .map((po) => ({
+        id: po.id,
+        documentType: "purchase_order",
+        documentNumber: po.orderNo,
+        partyName: po.supplierName || "-",
+        amount: po.totalAmount,
+        itemCount: po.lines?.length,
+        date: po.orderDate || po.createdAt,
+        createdByEmail: po.createdByEmail,
+        viewHref: "/procurement/purchase-orders",
+      }));
+
+    const draftPRs: UnifiedDraftDoc[] = purchaseRequests
+      .filter((pr) => (pr.status || "").toLowerCase() === "draft")
+      .map((pr) => ({
+        id: pr.id,
+        documentType: "purchase_request",
+        documentNumber: pr.requestNo,
+        partyName: pr.department || pr.requestedBy || "-",
+        amount: undefined,
+        itemCount: pr.lines?.length || 0,
+        date: pr.neededByDate || pr.createdAt,
+        createdByEmail: pr.requestedBy,
+        viewHref: "/procurement/purchase-requests",
+      }));
+
+    return [...draftSOs, ...draftPOs, ...draftPRs];
+  }, [orders, purchaseOrders, purchaseRequests]);
+
+  const userEmail = (currentUser?.email || "").toLowerCase().trim();
+  const userName = (currentUser?.name || "").toLowerCase().trim();
+
+  const myDrafts = React.useMemo(() => {
+    return allDraftDocs
+      .filter((doc) => {
+        const creator = (doc.createdByEmail || "").toLowerCase().trim();
+        // If user info is not yet available, show all drafts
+        if (!userEmail && !userName) return true;
+        // If creator was not saved on the document (seed/legacy data), include it
+        if (!creator) return true;
+        // Match by current user email or name
+        if (userEmail && creator === userEmail) return true;
+        if (userName && creator === userName) return true;
+        return false;
+      })
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  }, [allDraftDocs, userEmail, userName]);
+
+  // Tab selection logic: No hardcoded role names!
+  // If user has pending approvals, default to "approvals".
+  // If user has 0 pending approvals, default to "drafts".
+  const activeTab = selectedTab ?? (myPendingApprovals.length > 0 ? "approvals" : "drafts");
+
+  const formatDocDate = (dateStr?: string) => {
+    if (!dateStr) return "-";
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return new Intl.DateTimeFormat(isIndonesian ? "id-ID" : "en-US", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }).format(d);
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const handleApprove = async (req: ApprovalRequest) => {
+    const typeConfig = DOCUMENT_TYPE_LABELS[req.documentType] || {
+      id: req.documentType,
+      en: req.documentType,
+      badge: req.documentType.toUpperCase(),
+      badgeClass: "bg-slate-100 text-slate-700 border-slate-300",
+    };
+    const docLabel = isIndonesian ? typeConfig.id : typeConfig.en;
+    const ok = await confirm({
+      title: copy.confirmApproveTitle,
+      message: `${copy.confirmApproveMsg} (${docLabel} ${req.documentNumber})`,
+      confirmText: copy.approveBtn,
+      variant: "default",
+    });
+    if (!ok) return;
+
+    setActingApprovalId(req.id);
+    try {
+      const res = await approvalApi.approveStep(req.id);
+      if (!res.success) throw new Error(res.message || "Failed to approve");
+      setAttempt((n) => n + 1);
+    } catch (err) {
+      await alert({
+        title: copy.confirmApproveTitle,
+        message: err instanceof Error ? err.message : copy.errorApprovalAction,
+        variant: "destructive",
+      });
+    } finally {
+      setActingApprovalId(null);
+    }
+  };
+
+  const handleReject = async (req: ApprovalRequest) => {
+    const typeConfig = DOCUMENT_TYPE_LABELS[req.documentType] || {
+      id: req.documentType,
+      en: req.documentType,
+      badge: req.documentType.toUpperCase(),
+      badgeClass: "bg-slate-100 text-slate-700 border-slate-300",
+    };
+    const docLabel = isIndonesian ? typeConfig.id : typeConfig.en;
+    const comments = await prompt({
+      title: copy.rejectPromptTitle,
+      message: `${copy.rejectPromptMsg} (${docLabel} ${req.documentNumber})`,
+      placeholder: isIndonesian ? "Tuliskan alasan penolakan (opsional)..." : "Reason for rejection (optional)...",
+      confirmText: copy.rejectBtn,
+      cancelText: isIndonesian ? "Batal" : "Cancel",
+      variant: "destructive",
+      inputType: "textarea",
+    });
+    if (comments === null) return;
+
+    setActingApprovalId(req.id);
+    try {
+      const res = await approvalApi.rejectStep(req.id, comments.trim());
+      if (!res.success) throw new Error(res.message || "Failed to reject");
+      setAttempt((n) => n + 1);
+    } catch (err) {
+      await alert({
+        title: copy.rejectPromptTitle,
+        message: err instanceof Error ? err.message : copy.errorApprovalAction,
+        variant: "destructive",
+      });
+    } finally {
+      setActingApprovalId(null);
+    }
+  };
+
+  const handleSubmitDraft = async (doc: UnifiedDraftDoc) => {
+    const typeConfig = DOCUMENT_TYPE_LABELS[doc.documentType] || {
+      id: doc.documentType,
+      en: doc.documentType,
+      badge: doc.documentType.toUpperCase(),
+      badgeClass: "bg-slate-100 text-slate-700 border-slate-300",
+    };
+    const docLabel = isIndonesian ? typeConfig.id : typeConfig.en;
+    const ok = await confirm({
+      title: copy.confirmSubmitTitle,
+      message: `${copy.confirmSubmitMsg} (${docLabel} ${doc.documentNumber})`,
+      confirmText: copy.submitDraftBtn,
+      variant: "default",
+    });
+    if (!ok) return;
+
+    setActingDraftId(doc.id);
+    try {
+      if (doc.documentType === "sales_order") {
+        const res = await salesApi.submitOrder(doc.id);
+        if (!res.success) throw new Error(res.message);
+      } else if (doc.documentType === "purchase_order") {
+        const res = await procurementApi.submitPurchaseOrder(doc.id);
+        if (!res.success) throw new Error(res.message);
+      } else if (doc.documentType === "purchase_request") {
+        const res = await procurementApi.submitPurchaseRequest(doc.id);
+        if (!res.success) throw new Error(res.message);
+      }
+      setAttempt((n) => n + 1);
+    } catch (err) {
+      await alert({
+        title: copy.confirmSubmitTitle,
+        message: err instanceof Error ? err.message : copy.errorSubmit,
+        variant: "destructive",
+      });
+    } finally {
+      setActingDraftId(null);
+    }
+  };
 
   const openOrders = orders.filter((o) => OPEN_ORDER_STATUSES.includes(o.status?.toLowerCase()));
   const openOrdersValue = openOrders.reduce((sum, o) => sum + o.totalAmount, 0);
@@ -522,6 +861,268 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Row 3: Approval Table (SO, PO, PR requiring user approval or unsubmitted drafts) */}
+      <Card className="border-border shadow-2xs">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-brand-tint text-brand-primary flex items-center justify-center shrink-0">
+                <ClipboardCheck className="h-4 w-4" />
+              </div>
+              <div>
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <span>{copy.approvalTitle}</span>
+                  {activeTab === "approvals" ? (
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                      {myPendingApprovals.length} {copy.approvalPendingTab}
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                      {myDrafts.length} {copy.approvalDraftTab}
+                    </span>
+                  )}
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  {copy.approvalSubtitle}
+                </CardDescription>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
+            {/* View Switching Pills: Allows toggling between Pending Approvals and Unsubmitted Drafts */}
+            <div className="inline-flex items-center p-1 rounded-lg bg-slate-100 border border-slate-200/80 text-xs">
+              <button
+                type="button"
+                onClick={() => setSelectedTab("approvals")}
+                className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer text-xs flex items-center gap-1.5 ${
+                  activeTab === "approvals"
+                    ? "bg-white text-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <span>{copy.approvalPendingTab}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  activeTab === "approvals" ? "bg-amber-100 text-amber-800" : "bg-slate-200 text-slate-600"
+                }`}>
+                  {myPendingApprovals.length}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedTab("drafts")}
+                className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer text-xs flex items-center gap-1.5 ${
+                  activeTab === "drafts"
+                    ? "bg-white text-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <span>{copy.approvalDraftTab}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  activeTab === "drafts" ? "bg-brand-tint text-brand-primary" : "bg-slate-200 text-slate-600"
+                }`}>
+                  {myDrafts.length}
+                </span>
+              </button>
+            </div>
+
+            <Button asChild variant="ghost" size="sm" className="text-xs text-brand-primary h-8">
+              <Link href="/approvals">{copy.viewAllApprovals}</Link>
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            {activeTab === "approvals" ? (
+              myPendingApprovals.length === 0 ? (
+                <div className="py-12 px-4 text-center space-y-2">
+                  <CheckCircle2 className="h-8 w-8 text-emerald-500/60 mx-auto" />
+                  <p className="text-xs font-semibold text-foreground">{copy.noPendingApprovals}</p>
+                  <p className="text-[11px] text-muted-foreground">{copy.noPendingApprovalsDesc}</p>
+                </div>
+              ) : (
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50/80 border-y border-border text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    <tr>
+                      <th className="py-3 px-4">{copy.docNumberCol}</th>
+                      <th className="py-3 px-4">{copy.docTypeCol}</th>
+                      <th className="py-3 px-4">{copy.partyCol}</th>
+                      <th className="py-3 px-4">{copy.dateCol}</th>
+                      <th className="py-3 px-4 text-right">{copy.amountCol}</th>
+                      <th className="py-3 px-4 text-center">{copy.statusCol}</th>
+                      <th className="py-3 px-4 text-right">{copy.actionCol}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {myPendingApprovals.map((req) => {
+                      const typeConfig = DOCUMENT_TYPE_LABELS[req.documentType] || {
+                        id: req.documentType,
+                        en: req.documentType,
+                        badge: req.documentType.toUpperCase(),
+                        badgeClass: "bg-slate-100 text-slate-700 border-slate-300",
+                      };
+                      const currentStep = req.steps?.find((s) => s.levelOrder === req.currentLevel);
+                      const viewHref =
+                        req.documentType === "sales_order"
+                          ? "/sales/sales-orders"
+                          : req.documentType === "purchase_order"
+                          ? "/procurement/purchase-orders"
+                          : "/procurement/purchase-requests";
+
+                      return (
+                        <tr key={req.id} className="hover:bg-brand-tint/20 transition-colors">
+                          <td className="py-3 px-4 font-mono font-bold text-foreground">
+                            <Link href={viewHref} className="hover:text-brand-primary hover:underline">
+                              {req.documentNumber}
+                            </Link>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${typeConfig.badgeClass}`}>
+                              {typeConfig.badge} · {isIndonesian ? typeConfig.id : typeConfig.en}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-muted-foreground">
+                            {req.requesterName || "-"}
+                          </td>
+                          <td className="py-3 px-4 text-muted-foreground whitespace-nowrap">
+                            {formatDocDate(req.createdAt)}
+                          </td>
+                          <td className="py-3 px-4 text-right font-bold text-foreground whitespace-nowrap">
+                            <MoneyDisplay amount={req.amount} />
+                          </td>
+                          <td className="py-3 px-4 text-center whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                              <Clock className="h-3 w-3" />
+                              {copy.statusPendingLevel} {req.currentLevel}
+                              {currentStep?.approverRole ? ` (${currentStep.approverRole})` : ""}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={actingApprovalId === req.id}
+                                onClick={() => handleReject(req)}
+                                className="h-7 px-2.5 text-xs font-semibold border-rose-300 text-rose-700 hover:bg-rose-50 cursor-pointer"
+                              >
+                                <X className="h-3 w-3 mr-1" />
+                                {copy.rejectBtn}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="gradient"
+                                disabled={actingApprovalId === req.id}
+                                onClick={() => handleApprove(req)}
+                                className="h-7 px-2.5 text-xs font-semibold cursor-pointer"
+                              >
+                                <Check className="h-3 w-3 mr-1" />
+                                {copy.approveBtn}
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )
+            ) : (
+              myDrafts.length === 0 ? (
+                <div className="py-12 px-4 text-center space-y-2">
+                  <FileText className="h-8 w-8 text-muted-foreground/40 mx-auto" />
+                  <p className="text-xs font-semibold text-foreground">{copy.noDrafts}</p>
+                  <p className="text-[11px] text-muted-foreground">{copy.noDraftsDesc}</p>
+                </div>
+              ) : (
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50/80 border-y border-border text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    <tr>
+                      <th className="py-3 px-4">{copy.docNumberCol}</th>
+                      <th className="py-3 px-4">{copy.docTypeCol}</th>
+                      <th className="py-3 px-4">{copy.partyCol}</th>
+                      <th className="py-3 px-4">{copy.dateCol}</th>
+                      <th className="py-3 px-4 text-right">{copy.amountCol}</th>
+                      <th className="py-3 px-4 text-center">{copy.statusCol}</th>
+                      <th className="py-3 px-4 text-right">{copy.actionCol}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {myDrafts.map((doc) => {
+                      const typeConfig = DOCUMENT_TYPE_LABELS[doc.documentType] || {
+                        id: doc.documentType,
+                        en: doc.documentType,
+                        badge: doc.documentType.toUpperCase(),
+                        badgeClass: "bg-slate-100 text-slate-700 border-slate-300",
+                      };
+
+                      return (
+                        <tr key={`${doc.documentType}-${doc.id}`} className="hover:bg-brand-tint/20 transition-colors">
+                          <td className="py-3 px-4 font-mono font-bold text-foreground">
+                            <Link href={doc.viewHref} className="hover:text-brand-primary hover:underline">
+                              {doc.documentNumber}
+                            </Link>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${typeConfig.badgeClass}`}>
+                              {typeConfig.badge} · {isIndonesian ? typeConfig.id : typeConfig.en}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-muted-foreground">
+                            {doc.partyName}
+                          </td>
+                          <td className="py-3 px-4 text-muted-foreground whitespace-nowrap">
+                            {formatDocDate(doc.date)}
+                          </td>
+                          <td className="py-3 px-4 text-right font-bold text-foreground whitespace-nowrap">
+                            {doc.amount !== undefined ? (
+                              <MoneyDisplay amount={doc.amount} />
+                            ) : (
+                              <span className="text-muted-foreground font-normal">{doc.itemCount ?? 0} item</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center whitespace-nowrap">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-300">
+                              {copy.statusDraft}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                asChild
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2.5 text-xs font-semibold cursor-pointer"
+                              >
+                                <Link href={doc.viewHref}>
+                                  <ExternalLink className="h-3 w-3 mr-1" />
+                                  {copy.viewBtn}
+                                </Link>
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="gradient"
+                                disabled={actingDraftId === doc.id}
+                                onClick={() => handleSubmitDraft(doc)}
+                                className="h-7 px-2.5 text-xs font-semibold cursor-pointer"
+                              >
+                                <Send className="h-3 w-3 mr-1" />
+                                {copy.submitDraftBtn}
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Two Columns: Recent Sales Orders and Critical Stock Alerts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

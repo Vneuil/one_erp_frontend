@@ -10,6 +10,7 @@ export interface Workflow {
   documentType: string;
   name: string;
   minAmount: number;
+  maxAmount?: number | null;
   isActive: boolean;
   levels: WorkflowLevel[];
   createdAt: string;
@@ -19,6 +20,7 @@ export interface CreateWorkflowInput {
   documentType: string;
   name: string;
   minAmount: number;
+  maxAmount?: number | null;
   levels: WorkflowLevel[];
 }
 
@@ -26,6 +28,7 @@ export interface UpdateWorkflowInput {
   documentType: string;
   name: string;
   minAmount: number;
+  maxAmount?: number | null;
   isActive?: boolean;
   levels: WorkflowLevel[];
 }
@@ -70,7 +73,7 @@ export const approvalApi = {
   listMyPendingApprovals: async (): Promise<ApiResponse<ApprovalRequest[]>> =>
     apiClient<ApprovalRequest[]>("/approval/requests/pending"),
 
-  listRequests: async (params?: { page?: number; perPage?: number; documentType?: string }): Promise<ApiResponse<ApprovalRequest[]>> =>
+  listRequests: async (params?: { page?: number; perPage?: number; documentType?: string; status?: string }): Promise<ApiResponse<ApprovalRequest[]>> =>
     apiClient<ApprovalRequest[]>("/approval/requests", { params }),
 
   getActiveRequestForDocument: async (documentType: string, documentId: string): Promise<ApiResponse<ApprovalRequest | null>> =>
