@@ -195,7 +195,7 @@ export default function SalesmenPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Salesman Directory"
+        title="Master Salesman"
         description="Master data tenaga penjual: wilayah, kontak, dan persentase komisi."
       >
         <Button onClick={() => setIsAddOpen(true)} variant="gradient" size="sm" className="h-9 gap-1.5 text-xs font-semibold">

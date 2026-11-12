@@ -200,8 +200,8 @@ export default function InvoicesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Sales Invoices & Billing"
-        description="Monitor customer commercial tax invoices, due dates, and settlement status."
+        title="Nota / Invoice"
+        description="Pantau faktur pajak pelanggan, jatuh tempo, dan status pelunasan."
       >
         <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs" onClick={handleExport}>
           <Download className="h-3.5 w-3.5" /> Export

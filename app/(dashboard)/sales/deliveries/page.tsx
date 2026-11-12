@@ -230,8 +230,8 @@ export default function DeliveriesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Delivery Orders & Shipping"
-        description="Manage warehouse outbound dispatches, waybills, and customer proof of deliveries."
+        title="Pengiriman Barang"
+        description="Kelola pengiriman keluar gudang, surat jalan, dan bukti terima pelanggan."
       >
         <Button
           variant="gradient"

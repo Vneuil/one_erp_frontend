@@ -6,6 +6,7 @@ import { apiClient } from "@/lib/api/client";
 import { rbacApi, type PermissionItem } from "@/lib/api/rbac";
 import { useAppStore, type UserInfo, type CompanyInfo } from "@/stores/app-store";
 import { useTranslation } from "@/lib/i18n/translations";
+import { isSuperAdmin } from "@/lib/roles";
 import { filterNavigation, canViewRoute, canApproveModule, canViewPricesModule } from "@/lib/navigation-access";
 
 const AccessContext = React.createContext<{ navigation: NavGroup[]; canView: (href: string) => boolean; canApprove: (module: string) => boolean; canViewPrices: (module: string) => boolean }>({ navigation: [], canView: () => false, canApprove: () => false, canViewPrices: () => false });
@@ -39,7 +40,7 @@ export function NavigationAccessProvider({ children }: { children: React.ReactNo
     return () => { cancelled = true; };
   }, [token, attempt, setUser, setCompany]);
   const value = React.useMemo(() => ({
-    navigation: filterNavigation(navigationConfig, permissions),
+    navigation: filterNavigation(navigationConfig, permissions).map((g) => ({ ...g, items: g.items.map((it) => it.items ? { ...it, items: it.items.filter((sub) => !sub.superAdminOnly || isSuperAdmin(account.role)) } : it) })),
     canView: (href: string) => canViewRoute(href, permissions),
     canApprove: (module: string) => canApproveModule(module, account, permissions),
     canViewPrices: (module: string) => canViewPricesModule(module, account, permissions),

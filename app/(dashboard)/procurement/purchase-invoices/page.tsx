@@ -210,8 +210,8 @@ export default function PurchaseInvoicesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Vendor Invoices (AP)"
-        description="Verify 3-way matching between Purchase Order, Goods Receipt, and Vendor Invoices."
+        title="Faktur Pembelian"
+        description="Pencocokan 3 arah antara Pesanan Pembelian, Penerimaan Barang, dan faktur vendor."
       >
         <Button
           variant="gradient"

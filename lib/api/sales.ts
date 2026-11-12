@@ -37,8 +37,33 @@ export interface SalesOrderItem {
   shippingAddress?: string;
   shippingCourier?: string;
   deliveryDate?: string;
+  packagingAvailability?: PackagingAvailability;
+  coaStatus?: CoaStatus;
+  productionStatus?: ProductionStatus;
+  /** PPN switched off for this order (e.g. export). */
+  vatExempt?: boolean;
+  revision?: number;
+  rejectionReason?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
   lines?: SalesOrderLine[];
   createdAt?: string;
+}
+
+export type PackagingAvailability = "pending" | "available" | "partial" | "unavailable";
+export type CoaStatus = "not_required" | "pending" | "ready";
+export type ProductionStatus = "not_started" | "in_production" | "completed";
+
+export interface SalesOrderRevision {
+  id: string;
+  salesOrderId: string;
+  revision: number;
+  changedBy: string;
+  reason: string;
+  totalAmount: number;
+  /** JSON of the previous line items. */
+  linesJson: string;
+  createdAt: string;
 }
 
 export interface UpdateSalesOrderInput {
@@ -51,6 +76,12 @@ export interface UpdateSalesOrderInput {
   shippingAddress?: string;
   shippingCourier?: string;
   deliveryDate?: string;
+  packagingAvailability?: PackagingAvailability;
+  coaStatus?: CoaStatus;
+  productionStatus?: ProductionStatus;
+  vatExempt?: boolean;
+  /** Required by the server when line items change on a submitted order. */
+  revisionReason?: string;
   lines: SalesOrderLineInput[];
 }
 
@@ -70,6 +101,10 @@ export interface CreateSalesOrderInput {
   shippingAddress?: string;
   shippingCourier?: string;
   deliveryDate?: string;
+  packagingAvailability?: PackagingAvailability;
+  coaStatus?: CoaStatus;
+  productionStatus?: ProductionStatus;
+  vatExempt?: boolean;
   lines?: SalesOrderLineInput[];
 }
 
@@ -298,6 +333,9 @@ export const salesApi = {
     });
   },
 
+  listOrderRevisions: async (id: string): Promise<ApiResponse<SalesOrderRevision[]>> =>
+    apiClient<SalesOrderRevision[]>(`/sales/orders/${id}/revisions`),
+
   submitOrder: async (id: string): Promise<ApiResponse<SalesOrderItem>> => {
     return apiClient<SalesOrderItem>(`/sales/orders/${id}/submit`, {
       method: "POST",
@@ -386,4 +424,75 @@ export const salesApi = {
   createReturn: async (data: CreateSalesReturnInput): Promise<ApiResponse<SalesReturnItem>> => {
     return apiClient<SalesReturnItem>("/sales/returns", { method: "POST", body: JSON.stringify(data) });
   },
+};
+
+// ---- PI / CI (Proforma / Commercial Invoice) - superadmin only ----
+
+export type TradeKind = "PI" | "CI";
+
+export interface TradeInvoiceLine {
+  id?: string;
+  productId?: string;
+  description: string;
+  unit: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal?: number;
+}
+
+export interface TradeInvoice {
+  id: string;
+  kind: TradeKind;
+  number: string;
+  salesOrderId?: string;
+  quotationId?: string;
+  parentId?: string;
+  customerName: string;
+  billingAddress?: string;
+  shippingAddress?: string;
+  currency: string;
+  issueDate: string;
+  paymentTerm?: string;
+  incoterm?: string;
+  notes?: string;
+  vatExempt: boolean;
+  vatRate: number;
+  subtotal: number;
+  vatAmount: number;
+  total: number;
+  status: "draft" | "issued" | "cancelled";
+  issuedBy?: string;
+  issuedAt?: string;
+  createdBy?: string;
+  lines: TradeInvoiceLine[];
+  createdAt?: string;
+}
+
+export interface CreateTradeInvoiceInput {
+  kind: TradeKind;
+  /** Exactly one source. */
+  salesOrderId?: string;
+  quotationId?: string;
+  parentId?: string;
+  customerName?: string;
+  billingAddress?: string;
+  shippingAddress?: string;
+  currency?: string;
+  paymentTerm?: string;
+  incoterm?: string;
+  notes?: string;
+  vatExempt?: boolean;
+  lines?: TradeInvoiceLine[];
+}
+
+export const tradeInvoicesApi = {
+  list: (params?: { kind?: TradeKind; page?: number; perPage?: number; search?: string }): Promise<ApiResponse<TradeInvoice[]>> =>
+    apiClient<TradeInvoice[]>("/sales/trade-invoices", { params }),
+  get: (id: string): Promise<ApiResponse<TradeInvoice>> => apiClient<TradeInvoice>(`/sales/trade-invoices/${id}`),
+  create: (data: CreateTradeInvoiceInput): Promise<ApiResponse<TradeInvoice>> =>
+    apiClient<TradeInvoice>("/sales/trade-invoices", { method: "POST", body: JSON.stringify(data) }),
+  issue: (id: string): Promise<ApiResponse<TradeInvoice>> =>
+    apiClient<TradeInvoice>(`/sales/trade-invoices/${id}/issue`, { method: "POST" }),
+  cancel: (id: string): Promise<ApiResponse<TradeInvoice>> =>
+    apiClient<TradeInvoice>(`/sales/trade-invoices/${id}/cancel`, { method: "POST" }),
 };

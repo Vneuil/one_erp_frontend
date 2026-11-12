@@ -1,5 +1,6 @@
 "use client";
 
+import { SHOW_PRICE_IN_PRODUCT_MASTER } from "@/lib/roles";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -264,11 +265,13 @@ export default function NewProductPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base font-bold">Pricing & Safety Inventory</CardTitle>
-            <CardDescription>Default cost valuation and selling rate</CardDescription>
+            <CardTitle className="text-base font-bold">{SHOW_PRICE_IN_PRODUCT_MASTER ? "Pricing & Safety Inventory" : "Safety Stock"}</CardTitle>
+            <CardDescription>{SHOW_PRICE_IN_PRODUCT_MASTER ? "Default cost valuation and selling rate" : "Harga diisi langsung di Sales Order"}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {SHOW_PRICE_IN_PRODUCT_MASTER && (
+                <>
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-foreground">Standard Cost Price (IDR)</label>
                 <Input
@@ -288,6 +291,9 @@ export default function NewProductPage() {
                   min={0}
                 />
               </div>
+
+                </>
+              )}
 
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-foreground">Safety / Min Stock Alert</label>

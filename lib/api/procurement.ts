@@ -113,6 +113,9 @@ export interface GoodsReceiptLineInput {
   weightTare?: number;
   weightNet?: number;
   bagWeights?: string;
+  /** Manual correction (kg, signed) on top of the per-sak total; reason is mandatory when non-zero. */
+  weightAdjustment?: number;
+  adjustmentReason?: string;
 }
 
 export interface GoodsReceiptLineItem extends GoodsReceiptLineInput {

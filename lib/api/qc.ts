@@ -78,6 +78,8 @@ export interface QCInspectionItem {
   iteration: number;
   overallStatus: InspectionStatus;
   notes?: string;
+  sugarCondition?: string;
+  packageCondition?: string;
   isVoided: boolean;
   voidReason?: string;
   voidedBy?: string;
@@ -103,6 +105,8 @@ export interface CreateQCInspectionInput {
   productId: string;
   testingTool?: string;
   notes?: string;
+  sugarCondition?: string;
+  packageCondition?: string;
   items: CreateQCInspectionItemInput[];
 }
 

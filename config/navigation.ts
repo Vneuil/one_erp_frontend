@@ -18,6 +18,8 @@ export interface NavSubItem {
   title: string;
   href: string;
   badge?: string;
+  /** Only visible to superadmin (account role admin). */
+  superAdminOnly?: boolean;
 }
 
 export interface NavItem {
@@ -63,11 +65,11 @@ export const navigationConfig: NavGroup[] = [
         title: "Master Data",
         icon: Database,
         items: [
-          { title: "Produk", href: "/master-data/products" },
+          { title: "Master Produk", href: "/master-data/products" },
           { title: "Kategori & Satuan", href: "/master-data/categories-units" },
-          { title: "Pelanggan", href: "/master-data/customers" },
-          { title: "Supplier", href: "/master-data/suppliers" },
-          { title: "Gudang", href: "/master-data/warehouses" },
+          { title: "Master Pelanggan", href: "/master-data/customers" },
+          { title: "Master Vendor", href: "/master-data/suppliers" },
+          { title: "Master Gudang", href: "/master-data/warehouses" },
           { title: "Term of Payment (TOP)", href: "/master-data/pricing-terms" },
           { title: "Hierarki Approval", href: "/settings/approval-workflows" },
         ],
@@ -76,9 +78,9 @@ export const navigationConfig: NavGroup[] = [
         title: "Pembelian",
         icon: Receipt,
         items: [
-          { title: "Permintaan Pembelian (PR)", href: "/procurement/purchase-requests" },
-          { title: "Order Pembelian (PO)", href: "/procurement/purchase-orders" },
-          { title: "Penerimaan Barang (GRN)", href: "/procurement/receipts" },
+          { title: "Permintaan Pembelian", href: "/procurement/purchase-requests" },
+          { title: "Pesanan Pembelian", href: "/procurement/purchase-orders" },
+          { title: "Penerimaan Barang", href: "/procurement/receipts" },
           { title: "Tanda Terima Nota", href: "/procurement/invoice-receipts" },
           { title: "Retur Pembelian", href: "/procurement/purchase-returns" },
           { title: "Pelunasan Hutang", href: "/procurement/down-payments" },
@@ -89,7 +91,8 @@ export const navigationConfig: NavGroup[] = [
         title: "Penjualan",
         icon: ShoppingCart,
         items: [
-          { title: "Order Penjualan", href: "/sales/sales-orders" },
+          { title: "Pesanan Penjualan", href: "/sales/sales-orders" },
+          { title: "Proforma / Commercial Invoice (PI/CI)", href: "/sales/trade-invoices", superAdminOnly: true },
           { title: "Nota / Invoice", href: "/sales/invoices" },
           { title: "Retur Penjualan", href: "/sales/returns" },
           { title: "Pelunasan Piutang", href: "/sales/down-payments" },
@@ -127,6 +130,8 @@ export const navigationConfig: NavGroup[] = [
         items: [
           { title: "Inspeksi Mutu", href: "/qc/inspections" },
           { title: "Parameter Mutu", href: "/qc/parameters" },
+          { title: "Sertifikasi", href: "/qc/certifications" },
+          { title: "Penelusuran Lot", href: "/qc/lot-trace" },
           { title: "Personal Hygiene (CPH)", href: "/qc/hygiene" },
           { title: "Sarana Pra-Operasi (SSO)", href: "/qc/preop" },
           { title: "Laporan Mutu (QC)", href: "/qc/reports" },

@@ -1,216 +1,229 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Download, Mail, Phone, MapPin, Pencil, Trash2 } from "lucide-react";
+import { Plus, Download, Mail, Phone, Pencil, Trash2, Power } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, Column } from "@/components/data-table/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
-
-interface Supplier {
-  id: string;
-  code: string;
-  batchCode?: string;
-  name: string;
-  category: string;
-  contactPerson: string;
-  email: string;
-  phone: string;
-  city: string;
-  npwp: string;
-  nik: string;
-  paymentTerms: string;
-  status: string;
-}
-
-import { suppliersApi, SupplierItem } from "@/lib/api/suppliers";
+import { suppliersApi, SupplierItem, VendorTypeOption } from "@/lib/api/suppliers";
+import { pricingApi, PaymentTermItem } from "@/lib/api/pricing";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { downloadCsv } from "@/lib/utils/csv";
 import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
+import { useRole } from "@/lib/hooks/use-role";
+
+const DEFAULT_CITY = "Semarang";
+const FALLBACK_TYPES: VendorTypeOption[] = [
+  { code: "PRD", label: "Produk / Bahan Baku" },
+  { code: "PCK", label: "Kemasan (Packaging)" },
+  { code: "ATK", label: "Alat Tulis Kantor" },
+];
+
+interface FormState {
+  code: string;
+  vendorType: string;
+  batchCode: string;
+  name: string;
+  contactPerson: string;
+  email: string;
+  phone: string;
+  category: string;
+  address: string;
+  city: string;
+  province: string;
+  postalCode: string;
+  paymentTerm: string;
+  npwp: string;
+  nik: string;
+}
+
+const emptyForm = (vendorType: string): FormState => ({
+  code: "",
+  vendorType,
+  batchCode: "",
+  name: "",
+  contactPerson: "",
+  email: "",
+  phone: "",
+  category: "Raw Materials",
+  address: "",
+  city: DEFAULT_CITY,
+  province: "",
+  postalCode: "",
+  paymentTerm: "",
+  npwp: "",
+  nik: "",
+});
+
+const fromItem = (s: SupplierItem): FormState => ({
+  code: s.code,
+  vendorType: s.vendorType || "",
+  batchCode: s.batchCode || "",
+  name: s.name,
+  contactPerson: s.contactPerson || "",
+  email: s.email || "",
+  phone: s.phone || "",
+  category: s.category || "",
+  address: s.address || "",
+  city: s.city || DEFAULT_CITY,
+  province: s.province || "",
+  postalCode: s.postalCode || "",
+  paymentTerm: s.paymentTerm || "",
+  npwp: s.npwp || "",
+  nik: s.nik || "",
+});
+
+const selectClass =
+  "flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30 focus-visible:border-brand-primary shadow-xs";
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <label className="font-semibold text-foreground flex items-center justify-between">
+        <span>{label}</span>
+        {hint && <span className="text-[10px] text-brand-primary font-normal">{hint}</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
 
 export default function SuppliersPage() {
   const confirm = useConfirm();
   const alert = useAlert();
-  const [suppliers, setSuppliers] = React.useState<Supplier[]>([]);
+  const { canManageMasterData } = useRole();
+
+  const [suppliers, setSuppliers] = React.useState<SupplierItem[]>([]);
+  const [vendorTypes, setVendorTypes] = React.useState<VendorTypeOption[]>(FALLBACK_TYPES);
+  const [paymentTerms, setPaymentTerms] = React.useState<PaymentTermItem[]>([]);
   const [loadError, setLoadError] = React.useState<string | null>(null);
-  const [notice, setNotice] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
-  const [isAddOpen, setIsAddOpen] = React.useState(false);
-  const [formData, setFormData] = React.useState({
-    code: "",
-    batchCode: "",
-    name: "",
-    contactPerson: "",
-    email: "",
-    phone: "",
-    category: "Raw Materials",
-    city: "Cikarang",
-    npwp: "",
-    nik: "",
-  });
 
-  const [isEditOpen, setIsEditOpen] = React.useState(false);
+  const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
-  const [editFormData, setEditFormData] = React.useState({
-    code: "",
-    batchCode: "",
-    name: "",
-    contactPerson: "",
-    email: "",
-    phone: "",
-    category: "",
-    city: "",
-    npwp: "",
-    nik: "",
-  });
+  const [form, setForm] = React.useState<FormState>(emptyForm("PRD"));
+  const [saving, setSaving] = React.useState(false);
 
-  const fetchSuppliers = () => {
+  const set = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
+
+  const fetchSuppliers = React.useCallback(() => {
     suppliersApi
-      .list()
-      .then((res) => {
-                  const mapped: Supplier[] = (res.data || []).map((s: SupplierItem) => ({
-            id: s.id,
-            code: s.code,
-            batchCode: s.batchCode || "",
-            name: s.name,
-            contactPerson: s.contactPerson || "-",
-            email: s.email || "-",
-            phone: s.phone || "-",
-            category: s.category || "-",
-            paymentTerms: "-",
-            city: s.address || "-",
-            npwp: s.npwp || "",
-            nik: s.nik || "",
-            status: s.status?.toLowerCase() === "active" ? "active" : "inactive",
-          }));
-          setSuppliers(mapped);
-      })
+      .list({ perPage: 200 })
+      .then((res) => setSuppliers(res.data || []))
       .catch((err) => {
         console.error("Failed to load supplier", err);
-        setLoadError("Gagal memuat data supplier dari server.");
+        setLoadError("Gagal memuat data vendor dari server.");
       })
       .finally(() => setIsLoading(false));
-  };
+  }, []);
 
   React.useEffect(() => {
     fetchSuppliers();
-  }, []);
+    suppliersApi.types().then((r) => r.data?.length && setVendorTypes(r.data)).catch(() => undefined);
+    pricingApi.listPaymentTerms().then((r) => setPaymentTerms(r.data || [])).catch(() => undefined);
+  }, [fetchSuppliers]);
 
-  const handleCreateSupplier = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await suppliersApi.create({
-        code: formData.code,
-        batchCode: formData.batchCode.trim().toUpperCase(),
-        name: formData.name,
-        contactPerson: formData.contactPerson,
-        email: formData.email,
-        phone: formData.phone,
-        address: formData.city,
-        npwp: formData.npwp,
-        nik: formData.nik,
-        category: formData.category,
-      });
-      setIsAddOpen(false);
-      fetchSuppliers();
-    } catch (err) {
-      alert("Gagal menambahkan supplier: " + (err instanceof Error ? err.message : "Kesalahan server"));
-    }
+  const openCreate = () => {
+    setEditingId(null);
+    setForm(emptyForm(vendorTypes[0]?.code ?? "PRD"));
+    setDialogOpen(true);
   };
 
-  const openEditSupplier = (s: Supplier) => {
+  const openEdit = (s: SupplierItem) => {
     setEditingId(s.id);
-    setEditFormData({
-      code: s.code,
-      batchCode: s.batchCode || "",
-      name: s.name,
-      contactPerson: s.contactPerson,
-      email: s.email,
-      phone: s.phone,
-      category: s.category,
-      city: s.city,
-      npwp: s.npwp,
-      nik: s.nik,
-    });
-    setIsEditOpen(true);
+    setForm(fromItem(s));
+    setDialogOpen(true);
   };
 
-  const handleUpdateSupplier = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingId) return;
+    setSaving(true);
+    const payload = {
+      vendorType: form.vendorType,
+      batchCode: form.batchCode.trim().toUpperCase(),
+      name: form.name,
+      contactPerson: form.contactPerson,
+      email: form.email,
+      phone: form.phone,
+      address: form.address,
+      city: form.city.trim() || DEFAULT_CITY,
+      province: form.province,
+      postalCode: form.postalCode,
+      paymentTerm: form.paymentTerm,
+      npwp: form.npwp,
+      nik: form.nik,
+      category: form.category,
+    };
     try {
-      const res = await suppliersApi.update(editingId, {
-        code: editFormData.code,
-        batchCode: editFormData.batchCode.trim().toUpperCase(),
-        name: editFormData.name,
-        contactPerson: editFormData.contactPerson,
-        email: editFormData.email,
-        phone: editFormData.phone,
-        address: editFormData.city,
-        npwp: editFormData.npwp,
-        nik: editFormData.nik,
-        category: editFormData.category,
-      });
-      const updated = res.data;
-      setSuppliers((prev) =>
-        prev.map((s) =>
-          s.id === editingId
-            ? {
-                ...s,
-                code: updated?.code ?? editFormData.code,
-                batchCode: updated?.batchCode ?? editFormData.batchCode,
-                name: updated?.name ?? editFormData.name,
-                contactPerson: updated?.contactPerson ?? editFormData.contactPerson,
-                email: updated?.email ?? editFormData.email,
-                phone: updated?.phone ?? editFormData.phone,
-                category: updated?.category ?? editFormData.category,
-                city: updated?.address ?? editFormData.city,
-                npwp: updated?.npwp ?? editFormData.npwp,
-                nik: updated?.nik ?? editFormData.nik,
-              }
-            : s
-        )
-      );
-      setIsEditOpen(false);
+      if (editingId) {
+        // The code is sent too: changing it (e.g. PCK-001 -> VD-PCK-001) is now saved.
+        const res = await suppliersApi.update(editingId, { ...payload, code: form.code });
+        setSuppliers((prev) => prev.map((s) => (s.id === editingId ? { ...s, ...res.data } : s)));
+      } else {
+        await suppliersApi.create({ ...payload, code: form.code.trim() || undefined });
+        fetchSuppliers();
+      }
+      setDialogOpen(false);
       setEditingId(null);
     } catch (err) {
-      alert("Gagal memperbarui supplier: " + (err instanceof Error ? err.message : "Kesalahan server"));
+      await alert({
+        title: editingId ? "Gagal Memperbarui Vendor" : "Gagal Menambahkan Vendor",
+        message: err instanceof Error ? err.message : "Kesalahan server",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleDeleteSupplier = async (id: string) => {
+  const handleToggleStatus = async (s: SupplierItem) => {
+    const activating = s.status?.toLowerCase() !== "active";
     const ok = await confirm({
-      title: "Hapus Supplier",
-      message: "Yakin ingin menghapus supplier ini?",
+      title: activating ? "Aktifkan Vendor" : "Nonaktifkan Vendor",
+      message: activating
+        ? `Aktifkan kembali ${s.name}?`
+        : `Nonaktifkan ${s.name}? Vendor tidak bisa dipilih untuk PR/PO baru, riwayat transaksi tetap tersimpan.`,
+      confirmText: activating ? "Aktifkan" : "Nonaktifkan",
+    });
+    if (!ok) return;
+    try {
+      const res = await suppliersApi.setStatus(s.id, activating ? "Active" : "Inactive");
+      setSuppliers((prev) => prev.map((x) => (x.id === s.id ? { ...x, ...res.data } : x)));
+    } catch (err) {
+      await alert({ title: "Gagal Mengubah Status", message: err instanceof Error ? err.message : "Kesalahan server", variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async (s: SupplierItem) => {
+    const ok = await confirm({
+      title: "Hapus Vendor",
+      message: `Hapus ${s.name} secara permanen? Disarankan menggunakan Nonaktifkan bila vendor pernah bertransaksi.`,
       variant: "destructive",
       confirmText: "Hapus",
     });
     if (!ok) return;
     try {
-      await suppliersApi.delete(id);
-      setSuppliers((prev) => prev.filter((s) => s.id !== id));
+      await suppliersApi.delete(s.id);
+      setSuppliers((prev) => prev.filter((x) => x.id !== s.id));
     } catch (err) {
-      await alert({
-        title: "Gagal Menghapus Supplier",
-        message: err instanceof Error ? err.message : "Kesalahan server",
-        variant: "destructive",
-      });
+      await alert({ title: "Gagal Menghapus Vendor", message: err instanceof Error ? err.message : "Kesalahan server", variant: "destructive" });
     }
   };
 
   const handleExport = () => {
     downloadCsv(
-      "suppliers.csv",
-      ["Code", "Name", "Category", "Contact Person", "Email", "Phone", "City", "Payment Terms", "Status"],
-      suppliers.map((s) => [s.code, s.name, s.category, s.contactPerson, s.email, s.phone, s.city, s.paymentTerms, s.status])
+      "vendor.csv",
+      ["Kode", "Nama", "Tipe", "Kategori", "Contact Person", "Email", "Telepon", "Kota", "Payment Term", "Status"],
+      suppliers.map((s) => [s.code, s.name, s.vendorType ?? "", s.category, s.contactPerson, s.email, s.phone, s.city ?? "", s.paymentTerm ?? "", s.status])
     );
   };
 
-  const columns: Column<Supplier>[] = [
+  const columns: Column<SupplierItem>[] = [
     {
       key: "code",
-      header: "Vendor Code",
+      header: "Kode Vendor",
       sortable: true,
       render: (s) => (
         <div>
@@ -225,7 +238,7 @@ export default function SuppliersPage() {
     },
     {
       key: "name",
-      header: "Vendor / Supplier Name",
+      header: "Nama Vendor",
       sortable: true,
       render: (s) => (
         <div>
@@ -236,313 +249,194 @@ export default function SuppliersPage() {
     },
     {
       key: "contact",
-      header: "Contact Details",
+      header: "Kontak",
       render: (s) => (
         <div className="space-y-0.5 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1.5"><Mail className="h-3 w-3" /> {s.email}</div>
-          <div className="flex items-center gap-1.5"><Phone className="h-3 w-3" /> {s.phone}</div>
+          <div className="flex items-center gap-1.5"><Mail className="h-3 w-3" /> {s.email || "-"}</div>
+          <div className="flex items-center gap-1.5"><Phone className="h-3 w-3" /> {s.phone || "-"}</div>
         </div>
       ),
     },
     {
-      key: "paymentTerms",
-      header: "Payment Terms",
-      render: (s) => <span className="text-xs font-medium text-foreground">{s.paymentTerms}</span>,
+      key: "paymentTerm",
+      header: "Payment Term",
+      render: (s) => <span className="text-xs font-medium text-foreground">{s.paymentTerm || "-"}</span>,
     },
     {
       key: "city",
-      header: "City",
-      render: (s) => <span className="text-xs text-muted-foreground">{s.city}</span>,
+      header: "Kota",
+      render: (s) => <span className="text-xs text-muted-foreground">{s.city || DEFAULT_CITY}</span>,
     },
     {
       key: "status",
       header: "Status",
-      render: (s) => <StatusBadge status={s.status} />,
+      render: (s) => <StatusBadge status={s.status?.toLowerCase() === "active" ? "active" : "inactive"} />,
     },
     {
       key: "id",
       header: "Aksi",
-      render: (s) => (
-        <div className="flex flex-wrap gap-1.5">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => openEditSupplier(s)}
-            className="h-7 px-2 text-[11px] gap-1"
-          >
-            <Pencil className="h-3 w-3" />
-            <span>Edit</span>
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleDeleteSupplier(s.id)}
-            className="h-7 px-2 text-[11px] gap-1 border-rose-200 text-rose-700 hover:bg-rose-50"
-          >
-            <Trash2 className="h-3 w-3" />
-            <span>Hapus</span>
-          </Button>
-        </div>
-      ),
+      render: (s) => {
+        const active = s.status?.toLowerCase() === "active";
+        return (
+          <div className="flex flex-wrap gap-1.5">
+            <Button size="sm" variant="outline" onClick={() => openEdit(s)} className="h-7 px-2 text-[11px] gap-1">
+              <Pencil className="h-3 w-3" /> <span>Edit</span>
+            </Button>
+            {canManageMasterData && (
+              <>
+                <Button size="sm" variant="outline" onClick={() => handleToggleStatus(s)} className="h-7 px-2 text-[11px] gap-1">
+                  <Power className="h-3 w-3" /> <span>{active ? "Nonaktifkan" : "Aktifkan"}</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleDelete(s)}
+                  className="h-7 px-2 text-[11px] gap-1 border-rose-200 text-rose-700 hover:bg-rose-50"
+                >
+                  <Trash2 className="h-3 w-3" /> <span>Hapus</span>
+                </Button>
+              </>
+            )}
+          </div>
+        );
+      },
     },
   ];
+
+  const codePreview = `VD-${form.vendorType || "XXX"}-###`;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Supplier & Vendor Directory"
-        description="Manage approved suppliers, procurement contracts, and accounts payable terms."
+        title="Master Vendor"
+        description="Kelola vendor/pemasok, payment term, dan status aktif. Kode vendor: VD-PRD / VD-PCK / VD-ATK."
       >
         <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs" onClick={handleExport}>
-          <Download className="h-3.5 w-3.5" /> Export
+          <Download className="h-3.5 w-3.5" /> Ekspor
         </Button>
-        <Button
-          onClick={() => setIsAddOpen(true)}
-          variant="gradient"
-          size="sm"
-          className="h-9 gap-1.5 text-xs font-semibold"
-        >
-          <Plus className="h-3.5 w-3.5" /> Add Vendor
+        <Button onClick={openCreate} variant="gradient" size="sm" className="h-9 gap-1.5 text-xs font-semibold">
+          <Plus className="h-3.5 w-3.5" /> Tambah Vendor
         </Button>
       </PageHeader>
 
       {loadError && (
-          <div role="alert" className="m-3 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">
-            {loadError}
-          </div>
-        )}
-        {notice && (
-          <div role="alert" className="m-3 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">
-            {notice}
-          </div>
-        )}
-        {isLoading ? (
-          <div className="py-10 text-center text-xs text-muted-foreground">Memuat data...</div>
-        ) : (
-          <DataTable
-        columns={columns}
-        data={suppliers}
-        isLoading={isLoading}
-        searchKey="name"
-        searchPlaceholder="Search vendor by name or category..."
-      />
-        )}
+        <div role="alert" className="m-3 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">
+          {loadError}
+        </div>
+      )}
+      {isLoading ? (
+        <div className="py-10 text-center text-xs text-muted-foreground">Memuat data...</div>
+      ) : (
+        <DataTable
+          columns={columns}
+          data={suppliers}
+          isLoading={isLoading}
+          searchKey="name"
+          searchPlaceholder="Cari vendor berdasarkan nama atau kategori..."
+        />
+      )}
 
-      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Tambah Pemasok (Vendor) Baru</DialogTitle>
+            <DialogTitle>{editingId ? "Edit Vendor" : "Tambah Vendor Baru"}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleCreateSupplier} className="space-y-4 text-xs">
-            <div className="space-y-1">
-              <label className="font-semibold text-foreground">Kode Vendor</label>
-              <Input
-                value={formData.code}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                placeholder="Kosongkan untuk dibuat otomatis"
-              />
+          <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Tipe Vendor *" hint="menentukan kode">
+                <select
+                  className={selectClass}
+                  value={form.vendorType}
+                  onChange={(e) => set({ vendorType: e.target.value })}
+                  required={!editingId}
+                >
+                  {editingId && <option value="">-</option>}
+                  {vendorTypes.map((t) => (
+                    <option key={t.code} value={t.code}>
+                      {t.code} — {t.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Kode Vendor" hint={editingId ? "format VD-XXX-NNN" : "kosongkan = otomatis"}>
+                <Input
+                  value={form.code}
+                  onChange={(e) => set({ code: e.target.value.toUpperCase() })}
+                  placeholder={codePreview}
+                  className="font-mono"
+                  required={!!editingId}
+                />
+              </Field>
             </div>
-            <div className="space-y-1">
-              <label className="font-semibold text-foreground flex items-center justify-between">
-                <span>Kode Traceability Supplier</span>
-                <span className="text-[10px] text-brand-primary font-normal">2 Huruf (cth: PW)</span>
-              </label>
+            <Field label="Kode Traceability Supplier" hint="2 huruf (cth: PW)">
               <Input
-                value={formData.batchCode}
-                onChange={(e) => setFormData({ ...formData, batchCode: e.target.value.toUpperCase() })}
+                value={form.batchCode}
+                onChange={(e) => set({ batchCode: e.target.value.toUpperCase() })}
                 maxLength={4}
                 placeholder="e.g. PW"
                 className="font-mono uppercase font-bold"
               />
-            </div>
-            <div className="space-y-1">
-              <label className="font-semibold text-foreground">Nama Vendor / Perusahaan *</label>
-              <Input
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g. PT Indo Steel Perkasa"
-                required
-              />
+            </Field>
+            <Field label="Nama Vendor / Perusahaan *">
+              <Input value={form.name} onChange={(e) => set({ name: e.target.value })} required />
+            </Field>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field label="Contact Person">
+                <Input value={form.contactPerson} onChange={(e) => set({ contactPerson: e.target.value })} />
+              </Field>
+              <Field label="Kategori">
+                <Input value={form.category} onChange={(e) => set({ category: e.target.value })} />
+              </Field>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Contact Person</label>
-                <Input
-                  value={formData.contactPerson}
-                  onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
-                  placeholder="Ir. Bambang"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Kategori</label>
-                <Input
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  placeholder="Raw Materials"
-                />
-              </div>
+              <Field label="Email">
+                <Input type="email" value={form.email} onChange={(e) => set({ email: e.target.value })} />
+              </Field>
+              <Field label="Telepon">
+                <Input value={form.phone} onChange={(e) => set({ phone: e.target.value })} />
+              </Field>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Email</label>
-                <Input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="order@vendor.com"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Telepon</label>
-                <Input
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="+62 21 8899 0011"
-                />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label className="font-semibold text-foreground">Kota / Lokasi</label>
-              <Input
-                value={formData.city}
-                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                placeholder="Cilegon"
-              />
+            <Field label="Payment Term">
+              <select className={selectClass} value={form.paymentTerm} onChange={(e) => set({ paymentTerm: e.target.value })}>
+                <option value="">— Pilih payment term —</option>
+                {paymentTerms.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name} ({p.days} hari)
+                  </option>
+                ))}
+              </select>
+              {paymentTerms.length === 0 && (
+                <p className="text-[10px] text-muted-foreground">Belum ada Payment Term. Tambahkan di Master Data › Harga &amp; Termin.</p>
+              )}
+            </Field>
+            <Field label="Alamat (jalan, nomor, RT/RW, kelurahan)">
+              <Input value={form.address} onChange={(e) => set({ address: e.target.value })} placeholder="Jl. ..." />
+            </Field>
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Kota">
+                <Input value={form.city} onChange={(e) => set({ city: e.target.value })} />
+              </Field>
+              <Field label="Provinsi">
+                <Input value={form.province} onChange={(e) => set({ province: e.target.value })} placeholder="Jawa Tengah" />
+              </Field>
+              <Field label="Kode Pos">
+                <Input value={form.postalCode} onChange={(e) => set({ postalCode: e.target.value })} inputMode="numeric" maxLength={10} />
+              </Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">NPWP</label>
-                <Input
-                  value={formData.npwp}
-                  onChange={(e) => setFormData({ ...formData, npwp: e.target.value })}
-                  placeholder="15 atau 16 digit"
-                  inputMode="numeric"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">NIK</label>
-                <Input
-                  value={formData.nik}
-                  onChange={(e) => setFormData({ ...formData, nik: e.target.value })}
-                  placeholder="16 digit (jika tanpa NPWP)"
-                  inputMode="numeric"
-                />
-              </div>
+              <Field label="NPWP">
+                <Input value={form.npwp} onChange={(e) => set({ npwp: e.target.value })} placeholder="15 atau 16 digit" inputMode="numeric" />
+              </Field>
+              <Field label="NIK">
+                <Input value={form.nik} onChange={(e) => set({ nik: e.target.value })} placeholder="16 digit (jika tanpa NPWP)" inputMode="numeric" />
+              </Field>
             </div>
             <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsAddOpen(false)}>
+              <Button type="button" variant="outline" size="sm" onClick={() => setDialogOpen(false)}>
                 Batal
               </Button>
-              <Button type="submit" variant="gradient" size="sm" className="font-semibold">
-                Simpan Vendor
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Edit Pemasok (Vendor)</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleUpdateSupplier} className="space-y-4 text-xs">
-            <div className="space-y-1">
-              <label className="font-semibold text-foreground">Kode Vendor</label>
-              <Input
-                value={editFormData.code}
-                onChange={(e) => setEditFormData({ ...editFormData, code: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="font-semibold text-foreground flex items-center justify-between">
-                <span>Kode Traceability Supplier</span>
-                <span className="text-[10px] text-brand-primary font-normal">2 Huruf (cth: PW)</span>
-              </label>
-              <Input
-                value={editFormData.batchCode}
-                onChange={(e) => setEditFormData({ ...editFormData, batchCode: e.target.value.toUpperCase() })}
-                maxLength={4}
-                placeholder="e.g. PW"
-                className="font-mono uppercase font-bold"
-                required
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="font-semibold text-foreground">Nama Vendor / Perusahaan *</label>
-              <Input
-                value={editFormData.name}
-                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Contact Person</label>
-                <Input
-                  value={editFormData.contactPerson}
-                  onChange={(e) => setEditFormData({ ...editFormData, contactPerson: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Kategori</label>
-                <Input
-                  value={editFormData.category}
-                  onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Email</label>
-                <Input
-                  type="email"
-                  value={editFormData.email}
-                  onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Telepon</label>
-                <Input
-                  value={editFormData.phone}
-                  onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label className="font-semibold text-foreground">Kota / Lokasi</label>
-              <Input
-                value={editFormData.city}
-                onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">NPWP</label>
-                <Input
-                  value={editFormData.npwp}
-                  onChange={(e) => setEditFormData({ ...editFormData, npwp: e.target.value })}
-                  placeholder="15 atau 16 digit"
-                  inputMode="numeric"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">NIK</label>
-                <Input
-                  value={editFormData.nik}
-                  onChange={(e) => setEditFormData({ ...editFormData, nik: e.target.value })}
-                  placeholder="16 digit (jika tanpa NPWP)"
-                  inputMode="numeric"
-                />
-              </div>
-            </div>
-            <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsEditOpen(false)}>
-                Batal
-              </Button>
-              <Button type="submit" variant="gradient" size="sm" className="font-semibold">
-                Simpan Perubahan
+              <Button type="submit" variant="gradient" size="sm" className="font-semibold" disabled={saving}>
+                {editingId ? "Simpan Perubahan" : "Simpan Vendor"}
               </Button>
             </DialogFooter>
           </form>

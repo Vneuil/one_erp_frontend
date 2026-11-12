@@ -1,5 +1,6 @@
 "use client";
 
+import { SHOW_PRICE_IN_PRODUCT_MASTER } from "@/lib/roles";
 import * as React from "react";
 import Link from "next/link";
 import { Plus, Download, Eye, Edit, Trash2 } from "lucide-react";
@@ -84,7 +85,7 @@ export default function ProductsPage() {
     const pricesAllowed = canViewPrices("products");
     downloadCsv(
       "products.csv",
-      ["SKU", "Name", "Grade", "Organic", "Category", "Unit", "Stock", "Safety Stock", "Cost Price", "Selling Price", "Status"],
+      ["SKU", "Name", "Grade", "Organic", "Category", "Unit", "Stock", "Safety Stock", ...(SHOW_PRICE_IN_PRODUCT_MASTER ? ["Cost Price", "Selling Price"] : []), "Status"],
       products.map((p) => [
         p.sku,
         p.name,
@@ -94,8 +95,7 @@ export default function ProductsPage() {
         p.unit,
         p.stock,
         p.safetyStock ?? "-",
-        pricesAllowed ? p.costPrice : "***",
-        pricesAllowed ? p.sellingPrice : "***",
+        ...(SHOW_PRICE_IN_PRODUCT_MASTER ? [pricesAllowed ? p.costPrice : "***", pricesAllowed ? p.sellingPrice : "***"] : []),
         p.status,
       ])
     );
@@ -165,6 +165,8 @@ export default function ProductsPage() {
         </div>
       ),
     },
+    ...((SHOW_PRICE_IN_PRODUCT_MASTER
+      ? [
     {
       key: "costPrice",
       header: "Cost Price",
@@ -196,6 +198,8 @@ export default function ProductsPage() {
         );
       },
     },
+        ]
+      : []) as Column<Product>[]),
     {
       key: "status",
       header: "Status",
@@ -233,8 +237,8 @@ export default function ProductsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Products Catalog"
-        description="Manage master catalog of raw materials, assemblies, and finished products."
+        title="Master Produk"
+        description="Kelola katalog bahan baku, rakitan, dan produk jadi. Harga tidak diinput di sini, melainkan langsung di Pesanan Penjualan."
       >
         <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs" onClick={handleExport}>
           <Download className="h-3.5 w-3.5" />

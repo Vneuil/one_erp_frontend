@@ -50,7 +50,7 @@ export default function WarehousesPage() {
 
   const handleAddWarehouse = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!code || !name) return;
+    if (!name) return;
     setIsSubmitting(true);
     setFormError(null);
     try {
@@ -129,8 +129,8 @@ export default function WarehousesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Warehouses & Locations"
-        description="Configure physical storage facilities and distribution centers."
+        title="Master Gudang"
+        description="Atur gudang dan lokasi penyimpanan. Kode gudang: GDG 01, GDG 02, ..."
       >
         <Button
           variant="gradient"
@@ -202,8 +202,8 @@ export default function WarehousesPage() {
               </div>
             )}
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-foreground">Code *</label>
-              <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="WH-JKT" required />
+              <label className="text-xs font-medium text-foreground">Kode (kosongkan = otomatis)</label>
+              <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="GDG 01" />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-foreground">Name *</label>

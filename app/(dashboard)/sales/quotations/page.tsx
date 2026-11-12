@@ -247,8 +247,8 @@ export default function QuotationsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Sales Quotations & Bids"
-        description="Issue formal commercial offers, price negotiations, and quote conversions to orders."
+        title="Penawaran Penjualan"
+        description="Terbitkan penawaran resmi, negosiasi harga, dan konversi penawaran menjadi pesanan."
       >
         <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs" onClick={handleExport}>
           <Download className="h-3.5 w-3.5" /> Export

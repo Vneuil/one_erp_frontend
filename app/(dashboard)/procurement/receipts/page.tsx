@@ -43,6 +43,8 @@ interface LineWeightEntry {
   tare: number;
   net: number;
   bagWeightsText: string;
+  adjustment: number;
+  adjustmentReason: string;
 }
 
 export default function ReceiptsPage() {
@@ -57,8 +59,6 @@ export default function ReceiptsPage() {
   const [poId, setPoId] = React.useState("");
   const [warehouseId, setWarehouseId] = React.useState("");
   const [deliveryNoteNo, setDeliveryNoteNo] = React.useState("");
-  const [sugarCondition, setSugarCondition] = React.useState("Kering, Bersih & Wangi Khas Kelapa");
-  const [packageCondition, setPackageCondition] = React.useState("Karung Baik & Bersih (Tidak Sobek)");
   const [plasticTare, setPlasticTare] = React.useState(0.15);
   const [notes, setNotes] = React.useState("");
   const [lineWeights, setLineWeights] = React.useState<Record<string, LineWeightEntry>>({});
@@ -125,6 +125,8 @@ export default function ReceiptsPage() {
           tare: 0,
           net: remaining,
           bagWeightsText: "",
+          adjustment: 0,
+          adjustmentReason: "",
         };
       }
     }
@@ -140,7 +142,7 @@ export default function ReceiptsPage() {
     setLineWeights((prev) => {
       const current = prev[productId];
       if (!current) return prev;
-      const updatedNet = parsed.length > 0 ? parseFloat(sumNet.toFixed(2)) : current.net;
+      const updatedNet = parsed.length > 0 ? parseFloat((sumNet + current.adjustment).toFixed(2)) : current.net;
       const updatedGross = parseFloat((updatedNet + current.tare).toFixed(2));
       return {
         ...prev,
@@ -151,6 +153,25 @@ export default function ReceiptsPage() {
           gross: updatedGross,
         },
       };
+    });
+  };
+
+  // Manual adjustment (kg, signed) on top of the per-sak total. Net is recomputed from the sacks.
+  const handleAdjustmentChange = (productId: string, patch: { adjustment?: number; adjustmentReason?: string }) => {
+    setLineWeights((prev) => {
+      const current = prev[productId];
+      if (!current) return prev;
+      const next = { ...current, ...patch };
+      const bags = current.bagWeightsText
+        .split(/[\s,;\n]+/)
+        .map((t) => parseFloat(t))
+        .filter((n) => !isNaN(n) && n > 0);
+      if (bags.length > 0 && patch.adjustment !== undefined) {
+        const sum = bags.reduce((a, b) => a + b, 0);
+        next.net = Math.max(0, parseFloat((sum + next.adjustment).toFixed(2)));
+        next.gross = parseFloat((next.net + next.tare).toFixed(2));
+      }
+      return { ...prev, [productId]: next };
     });
   };
 
@@ -253,8 +274,8 @@ export default function ReceiptsPage() {
             <div>
               <div><strong>Supplier / Petani:</strong> <span style="font-weight: bold;">${gr.vendorName}</span></div>
               <div><strong>Gudang Penerima:</strong> ${gr.warehouse}</div>
-              <div><strong>Kondisi Fisik Gula:</strong> ${gr.sugarCondition || "Baik"}</div>
-              <div><strong>Kondisi Karung/Kemasan:</strong> ${gr.packageCondition || "Baik & Utuh"}</div>
+              <div><strong>Kondisi Fisik Gula:</strong> ${gr.sugarCondition || "Lihat hasil QC"}</div>
+              <div><strong>Kondisi Karung/Kemasan:</strong> ${gr.packageCondition || "Lihat hasil QC"}</div>
             </div>
           </div>
 
@@ -385,9 +406,9 @@ export default function ReceiptsPage() {
             </tr>
             <tr>
               <td><strong>Kondisi Gula:</strong></td>
-              <td>${gr.sugarCondition || "Baik / Kering"}</td>
+              <td>${gr.sugarCondition || "Lihat hasil QC"}</td>
               <td><strong>Kondisi Kemasan:</strong></td>
-              <td>${gr.packageCondition || "Baik & Utuh"}</td>
+              <td>${gr.packageCondition || "Lihat hasil QC"}</td>
             </tr>
             <tr>
               <td><strong>Gudang Penerima:</strong></td>
@@ -497,8 +518,16 @@ export default function ReceiptsPage() {
           weightTare: data.tare,
           weightNet: data.net,
           bagWeights: data.bagWeightsText,
+          weightAdjustment: data.adjustment || undefined,
+          adjustmentReason: data.adjustment ? data.adjustmentReason.trim() : undefined,
         });
       }
+    }
+
+    const missingReason = Object.values(lineWeights).find((l) => l.adjustment !== 0 && !l.adjustmentReason.trim());
+    if (missingReason) {
+      setFormError(`Adjustment manual untuk ${missingReason.productName} wajib disertai alasan (untuk audit organik).`);
+      return;
     }
 
     if (remainingLines.length === 0) {
@@ -513,8 +542,6 @@ export default function ReceiptsPage() {
         purchaseOrderId: selectedPo.id,
         warehouseId,
         deliveryNoteNo: deliveryNoteNo.trim(),
-        sugarCondition,
-        packageCondition,
         plasticTare,
         notes: notes.trim(),
         lines: remainingLines,
@@ -619,8 +646,8 @@ export default function ReceiptsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Laporan Barang Masuk & Timbangan Gudang (GD-007-LBM)"
-        description="Pencatatan penimbangan aktual karung bahan baku gula kelapa & kemasan, verifikasi surat jalan, dan cetak Nota Tanda Terima resmi."
+        title="Penerimaan Barang"
+        description="Laporan Barang Masuk (GD-007-LBM): timbangan per sak, verifikasi surat jalan, dan cetak tanda terima. Kondisi fisik dicatat QC."
       >
         <Button
           variant="gradient"
@@ -729,31 +756,8 @@ export default function ReceiptsPage() {
                 </select>
               </div>
 
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-700">Kondisi Fisik Gula</label>
-                <select
-                  value={sugarCondition}
-                  onChange={(e) => setSugarCondition(e.target.value)}
-                  className="flex h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-foreground shadow-xs"
-                >
-                  <option value="Kering, Bersih & Wangi Khas Kelapa">Kering, Bersih & Wangi Khas Kelapa (Standar)</option>
-                  <option value="Sedikit Lembap (Butuh Oven)">Sedikit Lembap (Kadar Air &gt; 2% - Butuh Oven)</option>
-                  <option value="Basah / Menggumpal">Basah / Menggumpal (Perlu Karantina QC)</option>
-                  <option value="Baik & Kering (Gula Cetak)">Baik & Kering (Gula Cetak)</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-700">Kondisi Kemasan / Karung</label>
-                <select
-                  value={packageCondition}
-                  onChange={(e) => setPackageCondition(e.target.value)}
-                  className="flex h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-foreground shadow-xs"
-                >
-                  <option value="Karung Baik & Bersih (Tidak Sobek)">Karung Baik & Bersih (Tidak Sobek / Double Inner)</option>
-                  <option value="Beberapa Karung Sobek Ringan">Beberapa Karung Sobek Ringan</option>
-                  <option value="Kemasan Rusak / Kotor">Kemasan Rusak / Kotor (Evaluasi Supplier)</option>
-                </select>
+              <div className="sm:col-span-2 text-[11px] text-muted-foreground bg-slate-50 border border-slate-200 rounded-md px-2.5 py-2">
+                Kondisi fisik gula &amp; kemasan dicatat oleh <strong>QC</strong> pada menu Inspeksi QC (target: Penerimaan Barang).
               </div>
             </div>
 
@@ -853,6 +857,48 @@ export default function ReceiptsPage() {
                             placeholder="Contoh: 10.05, 10.00, 9.95, 10.10, 10.00, 9.90, 10.05, 10.00 ..."
                             className="w-full text-xs font-mono p-2 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-primary"
                           />
+                          {parsedBags.length > 0 && (
+                            <div className="mt-2 max-h-40 overflow-y-auto rounded border border-slate-200">
+                              <table className="w-full text-[11px]">
+                                <thead className="bg-slate-50 text-slate-600 sticky top-0">
+                                  <tr><th className="px-2 py-1 text-left w-16">Sak #</th><th className="px-2 py-1 text-right">Berat (kg)</th></tr>
+                                </thead>
+                                <tbody>
+                                  {parsedBags.map((w, i) => (
+                                    <tr key={i} className="border-t border-slate-100">
+                                      <td className="px-2 py-0.5 font-mono">{i + 1}</td>
+                                      <td className="px-2 py-0.5 text-right font-mono">{w.toFixed(2)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                                <tfoot className="bg-slate-50 font-semibold">
+                                  <tr><td className="px-2 py-1">Total {parsedBags.length} sak</td><td className="px-2 py-1 text-right font-mono">{parsedBags.reduce((a, b) => a + b, 0).toFixed(2)}</td></tr>
+                                </tfoot>
+                              </table>
+                            </div>
+                          )}
+                          <div className="grid grid-cols-3 gap-2 mt-2">
+                            <div>
+                              <label className="text-[11px] font-semibold text-slate-600">Adjustment manual (kg, +/-)</label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={line.adjustment || ""}
+                                onChange={(e) => handleAdjustmentChange(prodId, { adjustment: parseFloat(e.target.value) || 0 })}
+                                placeholder="0.00"
+                                className="h-8 text-xs font-mono"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="text-[11px] font-semibold text-slate-600">Alasan adjustment {line.adjustment !== 0 && "*"}</label>
+                              <Input
+                                value={line.adjustmentReason}
+                                onChange={(e) => handleAdjustmentChange(prodId, { adjustmentReason: e.target.value })}
+                                placeholder="Wajib diisi bila ada adjustment (audit organik)"
+                                className="h-8 text-xs"
+                              />
+                            </div>
+                          </div>
                         </div>
                       </div>
                     );

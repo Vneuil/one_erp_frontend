@@ -1013,8 +1013,8 @@ export default function PurchaseRequestsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Internal Purchase Requests (PR)"
-        description="Internal requisition tickets submitted by production, maintenance, or warehouse teams."
+        title="Permintaan Pembelian"
+        description="Permintaan internal dari tim produksi, perawatan, atau gudang."
       >
         <Button
           variant="gradient"

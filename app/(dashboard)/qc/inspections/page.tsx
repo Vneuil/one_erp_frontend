@@ -51,6 +51,8 @@ export default function QCInspectionsPage() {
   const [batchNo, setBatchNo] = React.useState("");
   const [testingTool, setTestingTool] = React.useState("");
   const [notes, setNotes] = React.useState("");
+  const [sugarCondition, setSugarCondition] = React.useState("");
+  const [packageCondition, setPackageCondition] = React.useState("");
 
   // Items values: map parameterId -> { numericValue: number | undefined, booleanValue: boolean | undefined }
   const [itemValues, setItemValues] = React.useState<
@@ -75,6 +77,8 @@ export default function QCInspectionsPage() {
     setBatchNo(activeOrders[0] ? `${activeOrders[0].orderNumber || "BATCH"}-01` : "");
     setTestingTool("");
     setNotes("");
+    setSugarCondition("");
+    setPackageCondition("");
     setFormError(null);
 
     // Default select all mandatory gate parameters
@@ -133,6 +137,8 @@ export default function QCInspectionsPage() {
       productId,
       testingTool: testingTool.trim(),
       notes: notes.trim(),
+      sugarCondition: targetType === "goods_receipt" ? sugarCondition : undefined,
+      packageCondition: targetType === "goods_receipt" ? packageCondition : undefined,
       items: itemsPayload,
     };
 
@@ -620,6 +626,38 @@ export default function QCInspectionsPage() {
               </div>
             </div>
 
+            {targetType === "goods_receipt" && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">Kondisi Fisik Gula</label>
+                  <select
+                    value={sugarCondition}
+                    onChange={(e) => setSugarCondition(e.target.value)}
+                    className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm"
+                  >
+                    <option value="">— Pilih kondisi —</option>
+                    <option value="Kering, Bersih & Wangi Khas Kelapa">Kering, Bersih &amp; Wangi Khas Kelapa (Standar)</option>
+                    <option value="Sedikit Lembap (Butuh Oven)">Sedikit Lembap (Butuh Oven)</option>
+                    <option value="Basah / Menggumpal">Basah / Menggumpal (Karantina QC)</option>
+                    <option value="Baik & Kering (Gula Cetak)">Baik &amp; Kering (Gula Cetak)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">Kondisi Kemasan / Karung</label>
+                  <select
+                    value={packageCondition}
+                    onChange={(e) => setPackageCondition(e.target.value)}
+                    className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm"
+                  >
+                    <option value="">— Pilih kondisi —</option>
+                    <option value="Karung Baik & Bersih (Tidak Sobek)">Karung Baik &amp; Bersih (Tidak Sobek)</option>
+                    <option value="Beberapa Karung Sobek Ringan">Beberapa Karung Sobek Ringan</option>
+                    <option value="Kemasan Rusak / Kotor">Kemasan Rusak / Kotor (Evaluasi Supplier)</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-medium text-foreground mb-1">Catatan Tambahan Pemeriksaan</label>
               <Input
@@ -670,6 +708,13 @@ export default function QCInspectionsPage() {
                   <div className="font-medium text-foreground mt-0.5">{viewItem.testingTool || "-"}</div>
                 </div>
               </div>
+
+              {(viewItem.sugarCondition || viewItem.packageCondition) && (
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div><span className="text-muted-foreground">Kondisi Gula:</span><div className="font-medium text-foreground mt-0.5">{viewItem.sugarCondition || "-"}</div></div>
+                  <div><span className="text-muted-foreground">Kondisi Kemasan:</span><div className="font-medium text-foreground mt-0.5">{viewItem.packageCondition || "-"}</div></div>
+                </div>
+              )}
 
               <div>
                 <div className="text-xs font-semibold text-foreground mb-2">Daftar Parameter yang Diuji</div>

@@ -1,463 +1,440 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Download, Mail, Phone, MapPin, Pencil, Trash2 } from "lucide-react";
+import { Plus, Download, Mail, Phone, Pencil, Trash2, Power, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, Column } from "@/components/data-table/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { MoneyDisplay } from "@/components/shared/money-display";
-
-interface Customer {
-  id: string;
-  code: string;
-  name: string;
-  contactPerson: string;
-  email: string;
-  phone: string;
-  city: string;
-  npwp: string;
-  nik: string;
-  creditLimit: number;
-  status: string;
-}
-
-import { customersApi, CustomerItem } from "@/lib/api/customers";
+import { customersApi, CustomerItem, CustomerAddress, CustomerType } from "@/lib/api/customers";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { downloadCsv } from "@/lib/utils/csv";
 import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
+import { useRole } from "@/lib/hooks/use-role";
+
+const DEFAULT_CITY = "Semarang";
+
+interface FormState {
+  code: string;
+  customerType: CustomerType;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  province: string;
+  postalCode: string;
+  npwp: string;
+  nik: string;
+  contactPerson: string;
+  contactPhone: string;
+  contactMobile: string;
+  contactWhatsapp: string;
+  shippingAddresses: CustomerAddress[];
+}
+
+const blankAddress = (): CustomerAddress => ({ label: "", address: "", city: DEFAULT_CITY, isDefault: false });
+
+const emptyForm = (): FormState => ({
+  code: "",
+  customerType: "B2B",
+  name: "",
+  email: "",
+  phone: "",
+  address: "",
+  city: DEFAULT_CITY,
+  province: "",
+  postalCode: "",
+  npwp: "",
+  nik: "",
+  contactPerson: "",
+  contactPhone: "",
+  contactMobile: "",
+  contactWhatsapp: "",
+  shippingAddresses: [],
+});
+
+const fromItem = (c: CustomerItem): FormState => ({
+  code: c.code,
+  customerType: c.customerType || "B2B",
+  name: c.name,
+  email: c.email || "",
+  phone: c.phone || "",
+  address: c.address || "",
+  city: c.city || DEFAULT_CITY,
+  province: c.province || "",
+  postalCode: c.postalCode || "",
+  npwp: c.npwp || "",
+  nik: c.nik || "",
+  contactPerson: c.contactPerson || "",
+  contactPhone: c.contactPhone || "",
+  contactMobile: c.contactMobile || "",
+  contactWhatsapp: c.contactWhatsapp || "",
+  shippingAddresses: c.shippingAddresses || [],
+});
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <label className="font-semibold text-foreground flex items-center justify-between">
+        <span>{label}</span>
+        {hint && <span className="text-[10px] text-brand-primary font-normal">{hint}</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
 
 export default function CustomersPage() {
   const confirm = useConfirm();
   const alert = useAlert();
-  const [customers, setCustomers] = React.useState<Customer[]>([]);
+  const { canManageMasterData } = useRole();
+
+  const [customers, setCustomers] = React.useState<CustomerItem[]>([]);
   const [loadError, setLoadError] = React.useState<string | null>(null);
-  const [notice, setNotice] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
-  const [isAddOpen, setIsAddOpen] = React.useState(false);
-  const [formData, setFormData] = React.useState({
-    code: "",
-    name: "",
-    contactPerson: "",
-    email: "",
-    phone: "",
-    city: "",
-    creditLimit: 0,
-    npwp: "",
-    nik: "",
-  });
-
-  const [isEditOpen, setIsEditOpen] = React.useState(false);
+  const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
-  const [editFormData, setEditFormData] = React.useState({
-    code: "",
-    name: "",
-    contactPerson: "",
-    email: "",
-    phone: "",
-    city: "",
-    npwp: "",
-    nik: "",
-  });
+  const [form, setForm] = React.useState<FormState>(emptyForm());
+  const [saving, setSaving] = React.useState(false);
 
-  const fetchCustomers = () => {
+  const set = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
+  const isB2B = form.customerType === "B2B";
+
+  const fetchCustomers = React.useCallback(() => {
     customersApi
-      .list()
-      .then((res) => {
-                  const mapped: Customer[] = (res.data || []).map((c: CustomerItem) => ({
-            id: c.id,
-            code: c.code,
-            name: c.name,
-            contactPerson: c.segment || "-",
-            email: c.email || "-",
-            phone: c.phone || "-",
-            city: c.address || "-",
-            npwp: c.npwp || "",
-            nik: c.nik || "",
-            creditLimit: 0,
-            status: c.status?.toLowerCase() === "active" ? "active" : "inactive",
-          }));
-          setCustomers(mapped);
-      })
+      .list({ perPage: 200 })
+      .then((res) => setCustomers(res.data || []))
       .catch((err) => {
         console.error("Failed to load pelanggan", err);
         setLoadError("Gagal memuat data pelanggan dari server.");
       })
       .finally(() => setIsLoading(false));
-  };
+  }, []);
 
   React.useEffect(() => {
     fetchCustomers();
-  }, []);
+  }, [fetchCustomers]);
 
-  const handleCreateCustomer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await customersApi.create({
-        code: formData.code,
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        address: formData.city,
-        npwp: formData.npwp,
-        nik: formData.nik,
-        segment: formData.contactPerson || "Enterprise B2B",
-      });
-      setIsAddOpen(false);
-      fetchCustomers();
-    } catch (err) {
-      alert("Gagal menambahkan pelanggan: " + (err instanceof Error ? err.message : "Kesalahan server"));
-    }
+  const openCreate = () => {
+    setEditingId(null);
+    setForm(emptyForm());
+    setDialogOpen(true);
   };
 
-  const openEditCustomer = (c: Customer) => {
+  const openEdit = (c: CustomerItem) => {
     setEditingId(c.id);
-    setEditFormData({
-      code: c.code,
-      name: c.name,
-      contactPerson: c.contactPerson,
-      email: c.email,
-      phone: c.phone,
-      city: c.city,
-      npwp: c.npwp,
-      nik: c.nik,
-    });
-    setIsEditOpen(true);
+    setForm(fromItem(c));
+    setDialogOpen(true);
   };
 
-  const handleUpdateCustomer = async (e: React.FormEvent) => {
+  const setAddress = (i: number, patch: Partial<CustomerAddress>) =>
+    setForm((f) => ({
+      ...f,
+      shippingAddresses: f.shippingAddresses.map((a, idx) => {
+        if (idx === i) return { ...a, ...patch };
+        return patch.isDefault ? { ...a, isDefault: false } : a;
+      }),
+    }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingId) return;
+    if (isB2B && !form.contactPerson.trim()) {
+      await alert({ title: "Data belum lengkap", message: "Pelanggan B2B wajib mengisi nama Contact Person.", variant: "destructive" });
+      return;
+    }
+    if (isB2B && !(form.contactPhone.trim() || form.contactMobile.trim() || form.contactWhatsapp.trim())) {
+      await alert({ title: "Data belum lengkap", message: "Isi minimal satu: No. Telp, No. HP, atau WhatsApp.", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    const payload = {
+      customerType: form.customerType,
+      name: form.name,
+      email: form.email,
+      phone: form.phone,
+      address: form.address,
+      city: form.city.trim() || DEFAULT_CITY,
+      province: form.province,
+      postalCode: form.postalCode,
+      npwp: form.npwp,
+      nik: form.nik,
+      contactPerson: form.contactPerson,
+      contactPhone: form.contactPhone,
+      contactMobile: form.contactMobile,
+      contactWhatsapp: form.contactWhatsapp,
+      shippingAddresses: form.shippingAddresses.filter((a) => a.address.trim()),
+    };
     try {
-      const res = await customersApi.update(editingId, {
-        code: editFormData.code,
-        name: editFormData.name,
-        email: editFormData.email,
-        phone: editFormData.phone,
-        address: editFormData.city,
-        npwp: editFormData.npwp,
-        nik: editFormData.nik,
-        segment: editFormData.contactPerson || "Enterprise B2B",
-      });
-      const updated = res.data;
-      setCustomers((prev) =>
-        prev.map((c) =>
-          c.id === editingId
-            ? {
-                ...c,
-                code: updated?.code ?? editFormData.code,
-                name: updated?.name ?? editFormData.name,
-                contactPerson: editFormData.contactPerson || c.contactPerson,
-                email: updated?.email ?? editFormData.email,
-                phone: updated?.phone ?? editFormData.phone,
-                city: updated?.address ?? editFormData.city,
-                npwp: updated?.npwp ?? editFormData.npwp,
-                nik: updated?.nik ?? editFormData.nik,
-              }
-            : c
-        )
-      );
-      setIsEditOpen(false);
+      if (editingId) {
+        const res = await customersApi.update(editingId, payload);
+        setCustomers((prev) => prev.map((c) => (c.id === editingId ? { ...c, ...res.data } : c)));
+      } else {
+        await customersApi.create({ ...payload, code: form.code.trim() || undefined });
+        fetchCustomers();
+      }
+      setDialogOpen(false);
       setEditingId(null);
     } catch (err) {
-      alert("Gagal memperbarui pelanggan: " + (err instanceof Error ? err.message : "Kesalahan server"));
+      await alert({
+        title: editingId ? "Gagal Memperbarui Pelanggan" : "Gagal Menambahkan Pelanggan",
+        message: err instanceof Error ? err.message : "Kesalahan server",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleDeleteCustomer = async (id: string) => {
+  const handleToggleStatus = async (c: CustomerItem) => {
+    const activating = c.status?.toLowerCase() !== "active";
+    const ok = await confirm({
+      title: activating ? "Aktifkan Pelanggan" : "Nonaktifkan Pelanggan",
+      message: activating ? `Aktifkan kembali ${c.name}?` : `Nonaktifkan ${c.name}? Riwayat transaksi tetap tersimpan.`,
+      confirmText: activating ? "Aktifkan" : "Nonaktifkan",
+    });
+    if (!ok) return;
+    try {
+      const res = await customersApi.setStatus(c.id, activating ? "Active" : "Inactive");
+      setCustomers((prev) => prev.map((x) => (x.id === c.id ? { ...x, ...res.data } : x)));
+    } catch (err) {
+      await alert({ title: "Gagal Mengubah Status", message: err instanceof Error ? err.message : "Kesalahan server", variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async (c: CustomerItem) => {
     const ok = await confirm({
       title: "Hapus Pelanggan",
-      message: "Yakin ingin menghapus pelanggan ini?",
+      message: `Hapus ${c.name} secara permanen? Gunakan Nonaktifkan bila pelanggan pernah bertransaksi.`,
       variant: "destructive",
       confirmText: "Hapus",
     });
     if (!ok) return;
     try {
-      await customersApi.delete(id);
-      setCustomers((prev) => prev.filter((c) => c.id !== id));
+      await customersApi.delete(c.id);
+      setCustomers((prev) => prev.filter((x) => x.id !== c.id));
     } catch (err) {
-      await alert({
-        title: "Gagal Menghapus Pelanggan",
-        message: err instanceof Error ? err.message : "Kesalahan server",
-        variant: "destructive",
-      });
+      await alert({ title: "Gagal Menghapus Pelanggan", message: err instanceof Error ? err.message : "Kesalahan server", variant: "destructive" });
     }
   };
 
   const handleExport = () => {
     downloadCsv(
-      "customers.csv",
-      ["Code", "Name", "Contact Person", "Email", "Phone", "City", "Credit Limit", "Status"],
-      customers.map((c) => [c.code, c.name, c.contactPerson, c.email, c.phone, c.city, c.status])
+      "pelanggan.csv",
+      ["Kode", "Tipe", "Nama", "Contact Person", "Email", "Telepon", "HP", "WhatsApp", "Kota", "Status"],
+      customers.map((c) => [c.code, c.customerType, c.name, c.contactPerson ?? "", c.email, c.contactPhone ?? c.phone, c.contactMobile ?? "", c.contactWhatsapp ?? "", c.city ?? "", c.status])
     );
   };
 
-  const columns: Column<Customer>[] = [
+  const columns: Column<CustomerItem>[] = [
     {
       key: "code",
-      header: "Customer Code",
+      header: "Kode",
       sortable: true,
       render: (c) => <span className="font-mono text-xs font-bold text-brand-primary">{c.code}</span>,
     },
     {
       key: "name",
-      header: "Customer Name",
+      header: "Nama Pelanggan",
       sortable: true,
       render: (c) => (
         <div>
           <p className="font-semibold text-xs text-foreground">{c.name}</p>
-          <span className="text-[11px] text-muted-foreground">{c.contactPerson}</span>
+          <span className="text-[11px] text-muted-foreground">
+            {c.customerType === "B2C" ? "Perorangan (B2C)" : "Perusahaan (B2B)"}
+          </span>
         </div>
       ),
     },
     {
-      key: "email",
-      header: "Contact Info",
+      key: "contact",
+      header: "Kontak",
       render: (c) => (
         <div className="space-y-0.5 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1.5"><Mail className="h-3 w-3" /> {c.email}</div>
-          <div className="flex items-center gap-1.5"><Phone className="h-3 w-3" /> {c.phone}</div>
+          {c.contactPerson && <div className="font-medium text-foreground">{c.contactPerson}</div>}
+          <div className="flex items-center gap-1.5"><Mail className="h-3 w-3" /> {c.email || "-"}</div>
+          <div className="flex items-center gap-1.5"><Phone className="h-3 w-3" /> {c.contactMobile || c.contactPhone || c.phone || "-"}</div>
         </div>
       ),
     },
     {
       key: "city",
-      header: "City / Region",
-      render: (c) => (
-        <span className="text-xs text-foreground flex items-center gap-1">
-          <MapPin className="h-3 w-3 text-muted-foreground" /> {c.city}
-        </span>
-      ),
+      header: "Kota",
+      render: (c) => <span className="text-xs text-muted-foreground">{c.city || DEFAULT_CITY}</span>,
+    },
+    {
+      key: "shipping",
+      header: "Alamat Kirim",
+      render: (c) => <span className="text-xs text-muted-foreground">{c.shippingAddresses?.length ?? 0} alamat</span>,
     },
     {
       key: "status",
       header: "Status",
-      render: (c) => <StatusBadge status={c.status} />,
+      render: (c) => <StatusBadge status={c.status?.toLowerCase() === "active" ? "active" : "inactive"} />,
     },
     {
       key: "id",
       header: "Aksi",
-      render: (c) => (
-        <div className="flex flex-wrap gap-1.5">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => openEditCustomer(c)}
-            className="h-7 px-2 text-[11px] gap-1"
-          >
-            <Pencil className="h-3 w-3" />
-            <span>Edit</span>
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleDeleteCustomer(c.id)}
-            className="h-7 px-2 text-[11px] gap-1 border-rose-200 text-rose-700 hover:bg-rose-50"
-          >
-            <Trash2 className="h-3 w-3" />
-            <span>Hapus</span>
-          </Button>
-        </div>
-      ),
+      render: (c) => {
+        const active = c.status?.toLowerCase() === "active";
+        return (
+          <div className="flex flex-wrap gap-1.5">
+            <Button size="sm" variant="outline" onClick={() => openEdit(c)} className="h-7 px-2 text-[11px] gap-1">
+              <Pencil className="h-3 w-3" /> <span>Edit</span>
+            </Button>
+            {canManageMasterData && (
+              <>
+                <Button size="sm" variant="outline" onClick={() => handleToggleStatus(c)} className="h-7 px-2 text-[11px] gap-1">
+                  <Power className="h-3 w-3" /> <span>{active ? "Nonaktifkan" : "Aktifkan"}</span>
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => handleDelete(c)} className="h-7 px-2 text-[11px] gap-1 border-rose-200 text-rose-700 hover:bg-rose-50">
+                  <Trash2 className="h-3 w-3" /> <span>Hapus</span>
+                </Button>
+              </>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Customer Directory"
-        description="Master record of business clients, accounts receivable terms, and billing information."
-      >
+      <PageHeader title="Master Pelanggan" description="Kelola pelanggan B2B (perusahaan) dan B2C (perorangan), kontak, dan alamat pengiriman.">
         <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs" onClick={handleExport}>
-          <Download className="h-3.5 w-3.5" /> Export
+          <Download className="h-3.5 w-3.5" /> Ekspor
         </Button>
-        <Button
-          onClick={() => setIsAddOpen(true)}
-          variant="gradient"
-          size="sm"
-          className="h-9 gap-1.5 text-xs font-semibold"
-        >
-          <Plus className="h-3.5 w-3.5" /> Add Customer
+        <Button onClick={openCreate} variant="gradient" size="sm" className="h-9 gap-1.5 text-xs font-semibold">
+          <Plus className="h-3.5 w-3.5" /> Tambah Pelanggan
         </Button>
       </PageHeader>
 
       {loadError && (
-          <div role="alert" className="m-3 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">
-            {loadError}
-          </div>
-        )}
-        {notice && (
-          <div role="alert" className="m-3 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">
-            {notice}
-          </div>
-        )}
-        {isLoading ? (
-          <div className="py-10 text-center text-xs text-muted-foreground">Memuat data...</div>
-        ) : (
-          <DataTable
-        columns={columns}
-        data={customers}
-        isLoading={isLoading}
-        searchKey="name"
-        searchPlaceholder="Search customer by name or code..."
-      />
-        )}
+        <div role="alert" className="m-3 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">
+          {loadError}
+        </div>
+      )}
+      {isLoading ? (
+        <div className="py-10 text-center text-xs text-muted-foreground">Memuat data...</div>
+      ) : (
+        <DataTable columns={columns} data={customers} isLoading={isLoading} searchKey="name" searchPlaceholder="Cari pelanggan berdasarkan nama atau kode..." />
+      )}
 
-      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Tambah Pelanggan Baru</DialogTitle>
+            <DialogTitle>{editingId ? "Edit Pelanggan" : "Tambah Pelanggan Baru"}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleCreateCustomer} className="space-y-4 text-xs">
-            <div className="space-y-1">
-              <label className="font-semibold text-foreground">Kode Pelanggan</label>
-              <Input
-                value={formData.code}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                placeholder="Kosongkan untuk dibuat otomatis"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="font-semibold text-foreground">Nama Perusahaan / Klien *</label>
-              <Input
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g. PT Maju Bersama Makmur"
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Email</label>
-                <Input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="purchasing@company.com"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Telepon</label>
-                <Input
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="+62 21 8972100"
-                />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label className="font-semibold text-foreground">Kota / Lokasi</label>
-              <Input
-                value={formData.city}
-                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                placeholder="Jakarta Barat"
-              />
-            </div>
+          <form onSubmit={handleSubmit} className="space-y-4 text-xs">
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">NPWP</label>
-                <Input
-                  value={formData.npwp}
-                  onChange={(e) => setFormData({ ...formData, npwp: e.target.value })}
-                  placeholder="15 atau 16 digit"
-                  inputMode="numeric"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">NIK</label>
-                <Input
-                  value={formData.nik}
-                  onChange={(e) => setFormData({ ...formData, nik: e.target.value })}
-                  placeholder="16 digit (jika tanpa NPWP)"
-                  inputMode="numeric"
-                />
-              </div>
+              <Field label="Tipe Pelanggan *" hint="B2B-0001 / B2C-0001">
+                <div className="flex gap-2">
+                  {(["B2B", "B2C"] as CustomerType[]).map((t) => (
+                    <Button
+                      key={t}
+                      type="button"
+                      size="sm"
+                      variant={form.customerType === t ? "gradient" : "outline"}
+                      disabled={!!editingId}
+                      onClick={() => set({ customerType: t })}
+                      className="flex-1"
+                    >
+                      {t === "B2B" ? "B2B · Perusahaan" : "B2C · Perorangan"}
+                    </Button>
+                  ))}
+                </div>
+              </Field>
+              <Field label="Kode" hint={editingId ? undefined : "kosongkan = otomatis"}>
+                <Input value={form.code} disabled={!!editingId} onChange={(e) => set({ code: e.target.value.toUpperCase() })} placeholder={`${form.customerType}-####`} className="font-mono" />
+              </Field>
             </div>
-            <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsAddOpen(false)}>
-                Batal
-              </Button>
-              <Button type="submit" variant="gradient" size="sm" className="font-semibold">
-                Simpan Pelanggan
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+            <Field label={isB2B ? "Nama Perusahaan *" : "Nama Lengkap *"}>
+              <Input value={form.name} onChange={(e) => set({ name: e.target.value })} required />
+            </Field>
 
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Edit Pelanggan</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleUpdateCustomer} className="space-y-4 text-xs">
-            <div className="space-y-1">
-              <label className="font-semibold text-foreground">Kode Pelanggan</label>
-              <Input
-                value={editFormData.code}
-                onChange={(e) => setEditFormData({ ...editFormData, code: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="font-semibold text-foreground">Nama Perusahaan / Klien *</label>
-              <Input
-                value={editFormData.name}
-                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Email</label>
-                <Input
-                  type="email"
-                  value={editFormData.email}
-                  onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Telepon</label>
-                <Input
-                  value={editFormData.phone}
-                  onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label className="font-semibold text-foreground">Kota / Lokasi</label>
-              <Input
-                value={editFormData.city}
-                onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
-              />
-            </div>
+            {isB2B && (
+              <fieldset className="rounded-lg border border-border p-3 space-y-3">
+                <legend className="px-1 font-semibold text-foreground">Contact Person (wajib B2B)</legend>
+                <Field label="Nama CP *">
+                  <Input value={form.contactPerson} onChange={(e) => set({ contactPerson: e.target.value })} />
+                </Field>
+                <div className="grid grid-cols-3 gap-3">
+                  <Field label="No. Telp">
+                    <Input value={form.contactPhone} onChange={(e) => set({ contactPhone: e.target.value })} inputMode="tel" />
+                  </Field>
+                  <Field label="No. HP">
+                    <Input value={form.contactMobile} onChange={(e) => set({ contactMobile: e.target.value })} inputMode="tel" />
+                  </Field>
+                  <Field label="WhatsApp">
+                    <Input value={form.contactWhatsapp} onChange={(e) => set({ contactWhatsapp: e.target.value })} inputMode="tel" />
+                  </Field>
+                </div>
+                <p className="text-[10px] text-muted-foreground">Isi minimal satu nomor.</p>
+              </fieldset>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">NPWP</label>
-                <Input
-                  value={editFormData.npwp}
-                  onChange={(e) => setEditFormData({ ...editFormData, npwp: e.target.value })}
-                  placeholder="15 atau 16 digit"
-                  inputMode="numeric"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">NIK</label>
-                <Input
-                  value={editFormData.nik}
-                  onChange={(e) => setEditFormData({ ...editFormData, nik: e.target.value })}
-                  placeholder="16 digit (jika tanpa NPWP)"
-                  inputMode="numeric"
-                />
-              </div>
+              <Field label="Email">
+                <Input type="email" value={form.email} onChange={(e) => set({ email: e.target.value })} />
+              </Field>
+              {!isB2B && (
+                <Field label="Telepon / HP">
+                  <Input value={form.phone} onChange={(e) => set({ phone: e.target.value })} inputMode="tel" />
+                </Field>
+              )}
             </div>
-            <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsEditOpen(false)}>
-                Batal
+
+            <fieldset className="rounded-lg border border-border p-3 space-y-3">
+              <legend className="px-1 font-semibold text-foreground">Alamat {isB2B ? "Kantor" : ""}</legend>
+              <Field label="Jalan / Detail Alamat">
+                <Input value={form.address} onChange={(e) => set({ address: e.target.value })} />
+              </Field>
+              <div className="grid grid-cols-3 gap-3">
+                <Field label="Kota"><Input value={form.city} onChange={(e) => set({ city: e.target.value })} /></Field>
+                <Field label="Provinsi"><Input value={form.province} onChange={(e) => set({ province: e.target.value })} /></Field>
+                <Field label="Kode Pos"><Input value={form.postalCode} onChange={(e) => set({ postalCode: e.target.value })} inputMode="numeric" maxLength={10} /></Field>
+              </div>
+            </fieldset>
+
+            <fieldset className="rounded-lg border border-border p-3 space-y-3">
+              <legend className="px-1 font-semibold text-foreground">Alamat Kirim (gudang / produksi)</legend>
+              <p className="text-[10px] text-muted-foreground">
+                Bila berbeda dari alamat kantor. Alamat ini muncul sebagai pilihan saat membuat Sales Order.
+              </p>
+              {form.shippingAddresses.map((a, i) => (
+                <div key={i} className="rounded-md bg-muted/40 p-2 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Input placeholder="Label (cth: Gudang Cikarang)" value={a.label} onChange={(e) => setAddress(i, { label: e.target.value })} />
+                    <label className="flex items-center gap-1 whitespace-nowrap">
+                      <input type="checkbox" checked={a.isDefault} onChange={(e) => setAddress(i, { isDefault: e.target.checked })} /> Utama
+                    </label>
+                    <Button type="button" size="sm" variant="outline" aria-label="Hapus alamat" onClick={() => set({ shippingAddresses: form.shippingAddresses.filter((_, idx) => idx !== i) })}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  <Input placeholder="Alamat lengkap" value={a.address} onChange={(e) => setAddress(i, { address: e.target.value })} />
+                  <div className="grid grid-cols-3 gap-2">
+                    <Input placeholder="Kota" value={a.city ?? ""} onChange={(e) => setAddress(i, { city: e.target.value })} />
+                    <Input placeholder="Penerima" value={a.recipientName ?? ""} onChange={(e) => setAddress(i, { recipientName: e.target.value })} />
+                    <Input placeholder="Telepon penerima" value={a.phone ?? ""} onChange={(e) => setAddress(i, { phone: e.target.value })} />
+                  </div>
+                </div>
+              ))}
+              <Button type="button" size="sm" variant="outline" onClick={() => set({ shippingAddresses: [...form.shippingAddresses, blankAddress()] })} className="gap-1">
+                <Plus className="h-3 w-3" /> Tambah Alamat Kirim
               </Button>
-              <Button type="submit" variant="gradient" size="sm" className="font-semibold">
-                Simpan Perubahan
+            </fieldset>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="NPWP"><Input value={form.npwp} onChange={(e) => set({ npwp: e.target.value })} inputMode="numeric" placeholder="15 atau 16 digit" /></Field>
+              <Field label="NIK"><Input value={form.nik} onChange={(e) => set({ nik: e.target.value })} inputMode="numeric" placeholder="16 digit" /></Field>
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Batal</Button>
+              <Button type="submit" variant="gradient" size="sm" className="font-semibold" disabled={saving}>
+                {editingId ? "Simpan Perubahan" : "Simpan Pelanggan"}
               </Button>
             </DialogFooter>
           </form>

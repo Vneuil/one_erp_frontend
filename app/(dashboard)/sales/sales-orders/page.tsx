@@ -74,6 +74,13 @@ interface SalesOrder {
   dpPercent?: number;
   dpAmount?: number;
   shippingAddress?: string;
+  packagingAvailability?: PackagingAvailability;
+  coaStatus?: CoaStatus;
+  productionStatus?: ProductionStatus;
+  vatExempt?: boolean;
+  revision?: number;
+  rejectionReason?: string;
+  rejectedBy?: string;
   totalAmount: number;
   paymentTerms: string;
   status: string;
@@ -86,7 +93,8 @@ interface SalesOrder {
   editable: boolean;
 }
 
-import { salesApi, SalesOrderItem as ApiSO, SalesOrderLineInput } from "@/lib/api/sales";
+import { salesApi, SalesOrderItem as ApiSO, SalesOrderLineInput, SalesOrderRevision, PackagingAvailability, CoaStatus, ProductionStatus } from "@/lib/api/sales";
+import { useRole } from "@/lib/hooks/use-role";
 import { useIsOwnDocument } from "@/lib/hooks/use-own-document";
 import { marketplaceApi } from "@/lib/api/marketplace";
 import { productsApi, ProductItem } from "@/lib/api/products";
@@ -102,6 +110,7 @@ export default function SalesOrdersPage() {
   const mayApprove = canApprove("sales");
   const isOwn = useIsOwnDocument();
   const currentUser = useAppStore((s) => s.currentUser);
+  const { canEditPrices } = useRole();
   const confirm = useConfirm();
   const alert = useAlert();
   const prompt = usePrompt();
@@ -132,6 +141,11 @@ export default function SalesOrdersPage() {
   const [orderLines, setOrderLines] = React.useState<SalesOrderLineInput[]>([]);
   const [lineProductId, setLineProductId] = React.useState("");
   const [lineQty, setLineQty] = React.useState("1");
+  const [linePrice, setLinePrice] = React.useState("");
+  const [packagingAvailability, setPackagingAvailability] = React.useState<PackagingAvailability>("pending");
+  const [coaStatus, setCoaStatus] = React.useState<CoaStatus>("pending");
+  const [productionStatus, setProductionStatus] = React.useState<ProductionStatus>("not_started");
+  const [selectedShipAddrId, setSelectedShipAddrId] = React.useState("");
   const [warehouseStock, setWarehouseStock] = React.useState<{ warehouseId: string; items: StockLevelItem[]; error: boolean } | null>(null);
   const [stockReload, setStockReload] = React.useState(0);
   const stockLoading = !!newWarehouseId && warehouseStock?.warehouseId !== newWarehouseId;
@@ -217,7 +231,8 @@ export default function SalesOrdersPage() {
     inventoryApi
       .listWarehouses({ perPage: 50 })
       .then((res) => {
-        const list = res.data || [];
+        // Inactive warehouses (e.g. a closed Jakarta WH) must never be selectable.
+        const list = (res.data || []).filter((w) => w.isActive !== false);
         setWarehouses(list);
         if (list.length > 0) setNewWarehouseId((prev) => prev || list[0].id);
       })
@@ -263,10 +278,12 @@ export default function SalesOrdersPage() {
       if (existing) {
         return prev.map((l) => (l.productId === lineProductId ? { ...l, quantity: l.quantity + qty } : l));
       }
-      return [...prev, { productId: product.id, quantity: qty, unitPrice: product.sellingPrice }];
+      // Prices are no longer taken from Master Produk: superadmin/admin type them here.
+      return [...prev, { productId: product.id, quantity: qty, unitPrice: canEditPrices ? Math.max(0, Number(linePrice) || 0) : 0 }];
     });
     setLineProductId("");
     setLineQty("1");
+    setLinePrice("");
   };
 
   const handleRemoveLine = (productId: string) => {
@@ -281,16 +298,57 @@ export default function SalesOrdersPage() {
   const [editLines, setEditLines] = React.useState<SalesOrderLineInput[]>([]);
   const [isEditSubmitting, setIsEditSubmitting] = React.useState(false);
   const [editError, setEditError] = React.useState<string | null>(null);
+  const [editReason, setEditReason] = React.useState("");
+  const [revisions, setRevisions] = React.useState<SalesOrderRevision[]>([]);
+  const [isUpdatingReadiness, setIsUpdatingReadiness] = React.useState(false);
   const editTotalAmount = editLines.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0);
   const updateEditLine = (index: number, patch: Partial<SalesOrderLineInput>) =>
     setEditLines((current) => current.map((line, i) => (i === index ? { ...line, ...patch } : line)));
+
+  React.useEffect(() => {
+    if (!selectedOrder || !selectedOrder.revision) return;
+    let cancelled = false;
+    salesApi
+      .listOrderRevisions(selectedOrder.id)
+      .then((r) => !cancelled && setRevisions(r.data || []))
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [selectedOrder]);
 
   const handleOpenEditOrder = (so: SalesOrder) => {
     setEditingOrder(so);
     setEditCustomerName(so.customerName);
     setEditLines(so.items.map((item) => ({ productId: item.productId, quantity: item.qty, unitPrice: item.unitPrice })));
     setEditError(null);
+    setEditReason("");
     setIsEditOpen(true);
+  };
+
+  // DP can arrive after the order was created: tick it here (Detail -> "Tandai DP Diterima").
+  const patchOrder = async (so: SalesOrder, patch: Partial<Parameters<typeof salesApi.updateOrder>[1]>) => {
+    setIsUpdatingReadiness(true);
+    try {
+      await salesApi.updateOrder(so.id, {
+        customerName: so.customerName,
+        lines: so.items.map((i) => ({ productId: i.productId, quantity: i.qty, unitPrice: i.unitPrice })),
+        ...patch,
+      });
+      fetchOrders();
+      setSelectedOrder((prev) => (prev && prev.id === so.id ? { ...prev, ...(patch as Partial<SalesOrder>) } : prev));
+    } catch (err) {
+      await alert({ title: "Gagal Memperbarui SO", message: err instanceof Error ? err.message : "Kesalahan server", variant: "destructive" });
+    } finally {
+      setIsUpdatingReadiness(false);
+    }
+  };
+
+  const handleMarkDpReceived = async (so: SalesOrder) => {
+    const ok = await confirm({
+      title: "Tandai DP Diterima",
+      message: `Konfirmasi DP untuk ${so.orderNumber} sudah diterima?`,
+      confirmText: "DP Diterima",
+    });
+    if (ok) await patchOrder(so, { dpPaid: true });
   };
 
   const handleUpdateOrder = async (e: React.FormEvent) => {
@@ -310,6 +368,7 @@ export default function SalesOrdersPage() {
     try {
       await salesApi.updateOrder(editingOrder.id, {
         customerName: editCustomerName.trim(),
+        revisionReason: editReason.trim() || undefined,
         lines: editLines,
       });
       fetchOrders();
@@ -358,6 +417,13 @@ export default function SalesOrdersPage() {
             dpPaid: o.dpPaid,
             dpPercent: o.dpPercent,
             dpAmount: o.dpAmount,
+            packagingAvailability: o.packagingAvailability,
+            coaStatus: o.coaStatus,
+            productionStatus: o.productionStatus,
+            vatExempt: o.vatExempt,
+            revision: o.revision,
+            rejectionReason: o.rejectionReason,
+            rejectedBy: o.rejectedBy,
             totalAmount: o.totalAmount,
             paymentTerms: o.paymentStatus || "Paid",
             status: o.status.toLowerCase(),
@@ -606,6 +672,10 @@ export default function SalesOrdersPage() {
         shippingAddress: shippingAddress || undefined,
         shippingCourier: shippingCourier || undefined,
         deliveryDate: newDeliveryDate || undefined,
+        packagingAvailability,
+        coaStatus,
+        productionStatus,
+        vatExempt: !applyPpn,
         status: "draft",
         lines: orderLines,
       });
@@ -658,6 +728,11 @@ export default function SalesOrdersPage() {
     setOrderLines([]);
     setDiscountPercent("0");
     setApplyPpn(true);
+    setPackagingAvailability("pending");
+    setCoaStatus("pending");
+    setProductionStatus("not_started");
+    setSelectedShipAddrId("");
+    setLinePrice("");
   };
 
   const handleSyncMarketplace = async () => {
@@ -878,8 +953,8 @@ export default function SalesOrdersPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Omnichannel Sales Orders"
-        description="Unified order processing across Marketplaces (TikTok Shop, Shopee, Blibli, Lazada, Tokopedia), POS retail outlets, approved Quotations, and manual entries."
+        title="Pesanan Penjualan"
+        description="Pemrosesan pesanan terpadu dari marketplace, POS, penawaran yang disetujui, dan input manual."
       >
         <Button
           variant="outline"
@@ -1192,6 +1267,61 @@ export default function SalesOrdersPage() {
                 </div>
               </div>
 
+              {/* Kesiapan, DP, PPN, penolakan, revisi */}
+              {selectedOrder.source !== "marketplace" && selectedOrder.source !== "pos" && (
+                <div className="space-y-2 rounded-xl border border-border p-3 bg-slate-50/60 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <label className="space-y-1">
+                      <span className="text-muted-foreground text-[11px] block">Ketersediaan Kemasan</span>
+                      <select disabled={isUpdatingReadiness} value={selectedOrder.packagingAvailability || "pending"} onChange={(e) => patchOrder(selectedOrder, { packagingAvailability: e.target.value as PackagingAvailability })} className="h-8 w-full rounded-lg border border-border bg-white px-2 text-xs">
+                        <option value="pending">Belum dicek</option><option value="available">Tersedia</option><option value="partial">Sebagian</option><option value="unavailable">Tidak tersedia</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-muted-foreground text-[11px] block">COA</span>
+                      <select disabled={isUpdatingReadiness} value={selectedOrder.coaStatus || "pending"} onChange={(e) => patchOrder(selectedOrder, { coaStatus: e.target.value as CoaStatus })} className="h-8 w-full rounded-lg border border-border bg-white px-2 text-xs">
+                        <option value="pending">Menunggu</option><option value="ready">Siap</option><option value="not_required">Tidak diperlukan</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-muted-foreground text-[11px] block">Status Produksi</span>
+                      <select disabled={isUpdatingReadiness} value={selectedOrder.productionStatus || "not_started"} onChange={(e) => patchOrder(selectedOrder, { productionStatus: e.target.value as ProductionStatus })} className="h-8 w-full rounded-lg border border-border bg-white px-2 text-xs">
+                        <option value="not_started">Belum mulai</option><option value="in_production">Sedang produksi</option><option value="completed">Selesai</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className={selectedOrder.vatExempt ? "px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 text-[10px] font-bold" : "px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-bold"}>
+                      {selectedOrder.vatExempt ? "PPN nonaktif (ekspor)" : "PPN 11%"}
+                    </span>
+                    {!selectedOrder.dpPaid && !["rejected", "cancelled"].includes(selectedOrder.status) && (
+                      <Button type="button" size="sm" variant="outline" className="h-7 text-[11px]" disabled={isUpdatingReadiness} onClick={() => handleMarkDpReceived(selectedOrder)}>
+                        Tandai DP Diterima
+                      </Button>
+                    )}
+                  </div>
+                  {selectedOrder.status === "rejected" && (
+                    <div className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-rose-800">
+                      <strong>Ditolak</strong>{selectedOrder.rejectedBy ? ` oleh ${selectedOrder.rejectedBy}` : ""}: {selectedOrder.rejectionReason || "tanpa alasan tercatat"}
+                      <span className="block text-[10px] text-rose-700/80">Data penolakan tetap tersimpan untuk dianalisis. Perbaiki lewat Edit, atau buat SO baru.</span>
+                    </div>
+                  )}
+                  {revisions.filter((r) => r.salesOrderId === selectedOrder.id).length > 0 && (
+                    <div>
+                      <div className="font-semibold text-foreground mb-1">Riwayat Revisi ({revisions.filter((r) => r.salesOrderId === selectedOrder.id).length})</div>
+                      <ul className="space-y-1">
+                        {revisions.filter((r) => r.salesOrderId === selectedOrder.id).map((r) => (
+                          <li key={r.id} className="rounded border border-border bg-white p-2">
+                            <span className="font-mono font-semibold">Rev {r.revision}</span> · {r.changedBy || "-"} · total sebelumnya Rp {r.totalAmount.toLocaleString("id-ID")}
+                            {r.reason && <span className="block text-muted-foreground">Alasan: {r.reason}</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Items Line Table */}
               <div className="space-y-2">
                 <h4 className="text-xs font-bold text-foreground">Ordered Line Items</h4>
@@ -1371,7 +1501,14 @@ export default function SalesOrdersPage() {
               <select
                 id="sales-order-customer"
                 value={newCustomerId}
-                onChange={(e) => setNewCustomerId(e.target.value)}
+                onChange={(e) => {
+                  setNewCustomerId(e.target.value);
+                  const c = customers.find((x) => x.id === e.target.value);
+                  const def = c?.shippingAddresses?.find((a) => a.isDefault) || c?.shippingAddresses?.[0];
+                  const text = def ? [def.address, def.city, def.province, def.postalCode].filter(Boolean).join(", ") : c ? [c.address, c.city, c.province, c.postalCode].filter(Boolean).join(", ") : "";
+                  setShippingAddress(text);
+                  setSelectedShipAddrId("");
+                }}
                 required
                 disabled={customersLoading || customersError || customers.length === 0}
                 className="flex h-10 w-full min-w-0 rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30 disabled:opacity-50"
@@ -1440,7 +1577,19 @@ export default function SalesOrdersPage() {
                                   )}
                                 </div>
                               </td>
-                              <td className="py-2 px-3 text-center whitespace-nowrap">{l.quantity}x</td>
+                              <td className="py-2 px-3 text-center whitespace-nowrap">
+                                {l.quantity}x
+                                {canEditPrices && (
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    aria-label="Harga satuan"
+                                    value={l.unitPrice}
+                                    onChange={(e) => setOrderLines((prev) => prev.map((x) => (x.productId === l.productId ? { ...x, unitPrice: Math.max(0, Number(e.target.value) || 0) } : x)))}
+                                    className="mt-1 h-7 w-28 text-xs"
+                                  />
+                                )}
+                              </td>
                               <td className="py-2 px-3 text-right font-semibold whitespace-nowrap">
                                 Rp {(l.quantity * l.unitPrice).toLocaleString("id-ID")}
                               </td>
@@ -1492,7 +1641,7 @@ export default function SalesOrdersPage() {
                     onChange={(e) => setApplyPpn(e.target.checked)}
                     className="h-3.5 w-3.5 accent-brand-primary"
                   />
-                  <span className="text-foreground font-medium">Kena PPN 11%</span>
+                  <span className="text-foreground font-medium">Kena PPN 11% <span className="text-muted-foreground font-normal">(nonaktifkan untuk ekspor)</span></span>
                 </label>
                 <div className="flex items-center gap-1.5">
                   <span className="text-foreground font-medium">Diskon</span>
@@ -1526,14 +1675,30 @@ export default function SalesOrdersPage() {
                 <Input
                   type="number"
                   min={1}
+                  aria-label="Kuantitas"
+                  placeholder="Qty"
                   value={lineQty}
                   onChange={(e) => setLineQty(e.target.value)}
-                  className="w-16 shrink-0"
+                  className="w-28 shrink-0"
                 />
+                {canEditPrices && (
+                  <Input
+                    type="number"
+                    min={0}
+                    aria-label="Harga satuan"
+                    placeholder="Harga satuan (Rp)"
+                    value={linePrice}
+                    onChange={(e) => setLinePrice(e.target.value)}
+                    className="col-span-2 w-full sm:w-40 shrink-0"
+                  />
+                )}
                 <Button type="button" variant="outline" size="sm" disabled={!lineProductId || stockLoading} onClick={handleAddLine} className="h-10 text-xs shrink-0">
                   Tambah
                 </Button>
               </div>
+              {!canEditPrices && (
+                <p className="text-xs text-muted-foreground">Harga diisi oleh superadmin / admin pada Sales Order ini.</p>
+              )}
               {stockError ? (
                 <p role="alert" className="text-xs text-amber-600">Info stok gudang tidak dapat dimuat, Anda tetap dapat menambahkan produk untuk kebutuhan pengadaan.</p>
               ) : !stockLoading && newWarehouseId && warehouseProducts.length === 0 ? (
@@ -1541,15 +1706,47 @@ export default function SalesOrdersPage() {
               ) : null}
             </div>
 
+            {/* Kesiapan pemenuhan: kemasan, COA, produksi */}
+            <div className="p-3 rounded-xl border border-border bg-slate-50/70 space-y-2.5">
+              <h4 className="text-xs font-bold text-foreground">Kesiapan Pesanan</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground">Ketersediaan Kemasan</label>
+                  <select value={packagingAvailability} onChange={(e) => setPackagingAvailability(e.target.value as PackagingAvailability)} className="flex h-8 w-full rounded-lg border border-border bg-white px-2 text-xs">
+                    <option value="pending">Belum dicek</option>
+                    <option value="available">Tersedia</option>
+                    <option value="partial">Sebagian</option>
+                    <option value="unavailable">Tidak tersedia</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground">COA</label>
+                  <select value={coaStatus} onChange={(e) => setCoaStatus(e.target.value as CoaStatus)} className="flex h-8 w-full rounded-lg border border-border bg-white px-2 text-xs">
+                    <option value="pending">Menunggu</option>
+                    <option value="ready">Siap</option>
+                    <option value="not_required">Tidak diperlukan</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground">Status Produksi</label>
+                  <select value={productionStatus} onChange={(e) => setProductionStatus(e.target.value as ProductionStatus)} className="flex h-8 w-full rounded-lg border border-border bg-white px-2 text-xs">
+                    <option value="not_started">Belum mulai</option>
+                    <option value="in_production">Sedang produksi</option>
+                    <option value="completed">Selesai</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
             {/* Customer Document / PO Info */}
             <div className="p-3 rounded-xl border border-border bg-slate-50/70 space-y-2.5">
               <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
                 <FileText className="h-3.5 w-3.5 text-brand-primary" />
-                Dokumen & Referensi PO Pembeli
+                Dokumen PO Masuk / PI Keluar
               </h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-muted-foreground">Nomor PO Pembeli (Customer PO)</label>
+                  <label className="text-[11px] font-semibold text-muted-foreground">Nomor PO Masuk / PI Keluar</label>
                   <Input
                     placeholder="Contoh: PO-CUST-2026/09/01"
                     value={customerPoNumber}
@@ -1558,7 +1755,7 @@ export default function SalesOrdersPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-muted-foreground">Tautan Dokumen / Lampiran</label>
+                  <label className="text-[11px] font-semibold text-muted-foreground">Unggah / Tautan Dokumen (wajib, dan/atau DP diterima)</label>
                   <Input
                     placeholder="https://... atau nomor berkas fisik"
                     value={customerPoAttachment}
@@ -1595,6 +1792,33 @@ export default function SalesOrdersPage() {
                   />
                 </div>
               </div>
+              {(() => {
+                const cust = customers.find((c) => c.id === newCustomerId);
+                const options = cust
+                  ? [
+                      ...(cust.address ? [{ id: "office", label: `Alamat kantor — ${[cust.address, cust.city].filter(Boolean).join(", ")}`, text: [cust.address, cust.city, cust.province, cust.postalCode].filter(Boolean).join(", ") }] : []),
+                      ...(cust.shippingAddresses || []).map((a, i) => ({ id: `ship-${i}`, label: `${a.label || "Alamat kirim"}${a.isDefault ? " (utama)" : ""} — ${a.address}`, text: [a.address, a.city, a.province, a.postalCode].filter(Boolean).join(", ") })),
+                    ]
+                  : [];
+                if (options.length === 0) return null;
+                return (
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-muted-foreground">Pilih dari alamat pelanggan</label>
+                    <select
+                      value={selectedShipAddrId}
+                      onChange={(e) => {
+                        setSelectedShipAddrId(e.target.value);
+                        const picked = options.find((o) => o.id === e.target.value);
+                        if (picked) setShippingAddress(picked.text);
+                      }}
+                      className="flex h-8 w-full rounded-lg border border-border bg-white px-2 text-xs"
+                    >
+                      <option value="">— Ketik manual / pilih alamat —</option>
+                      {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                    </select>
+                  </div>
+                );
+              })()}
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-muted-foreground">Alamat Pengiriman</label>
                 <Input
@@ -1711,7 +1935,7 @@ export default function SalesOrdersPage() {
                         className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm"
                         onChange={(e) => {
                           const product = products.find((p) => p.id === e.target.value);
-                          updateEditLine(index, { productId: product?.id || "", unitPrice: product?.sellingPrice ?? line.unitPrice });
+                          updateEditLine(index, { productId: product?.id || "" });
                         }}
                       >
                         <option value="">Pilih produk</option>
@@ -1741,7 +1965,8 @@ export default function SalesOrdersPage() {
                         value={line.unitPrice}
                         onChange={(e) => updateEditLine(index, { unitPrice: e.target.valueAsNumber })}
                         required
-                        disabled={isEditSubmitting}
+                        disabled={isEditSubmitting || !canEditPrices}
+                        title={canEditPrices ? undefined : "Harga hanya dapat diubah superadmin / admin"}
                       />
                     </label>
                     <div className="col-span-2 flex items-center justify-between text-xs">
@@ -1769,6 +1994,18 @@ export default function SalesOrdersPage() {
                 <div className="text-right text-sm font-semibold">Total: <MoneyDisplay amount={Number.isFinite(editTotalAmount) ? editTotalAmount : 0} /></div>
               </div>
             </div>
+
+            {editingOrder && editingOrder.status !== "draft" && (
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Alasan Revisi *</label>
+                <Input
+                  value={editReason}
+                  onChange={(e) => setEditReason(e.target.value)}
+                  placeholder="Wajib bila barang / jumlah / harga diubah. Versi sebelumnya tersimpan di riwayat revisi."
+                  disabled={isEditSubmitting}
+                />
+              </div>
+            )}
 
             <DialogFooter className="gap-2 sm:gap-0">
               <Button type="button" variant="outline" size="sm" onClick={() => setIsEditOpen(false)}>

@@ -1,5 +1,6 @@
 "use client";
 
+import { SHOW_PRICE_IN_PRODUCT_MASTER } from "@/lib/roles";
 import * as React from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
@@ -154,6 +155,7 @@ function ProductDetail() {
             </p>
           </CardContent>
         </Card>
+        {SHOW_PRICE_IN_PRODUCT_MASTER && (
         <Card>
           <CardContent className="p-4">
             <span className="text-xs text-muted-foreground font-semibold uppercase">Cost Price</span>
@@ -166,6 +168,8 @@ function ProductDetail() {
             </p>
           </CardContent>
         </Card>
+        )}
+        {SHOW_PRICE_IN_PRODUCT_MASTER && (
         <Card>
           <CardContent className="p-4">
             <span className="text-xs text-muted-foreground font-semibold uppercase">Selling Price</span>
@@ -178,6 +182,7 @@ function ProductDetail() {
             </p>
           </CardContent>
         </Card>
+        )}
         <Card>
           <CardContent className="p-4">
             <span className="text-xs text-muted-foreground font-semibold uppercase">Safety Stock</span>
@@ -320,7 +325,9 @@ function ProductDetail() {
               </label>
             </div>
             {(categoriesQuery.isError || unitsQuery.isError) && <p role="alert" className="text-sm text-rose-700">Gagal memuat category atau UoM. <Button type="button" variant="outline" onClick={() => { void categoriesQuery.refetch(); void unitsQuery.refetch(); }}>Retry</Button></p>}
-            {canViewPrices("products") ? (
+            {!SHOW_PRICE_IN_PRODUCT_MASTER ? (
+              <p className="text-xs text-muted-foreground italic">Harga tidak diinput di Master Produk. Harga diisi langsung pada Sales Order.</p>
+            ) : canViewPrices("products") ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-foreground">Cost Price</label>
