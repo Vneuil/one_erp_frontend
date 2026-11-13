@@ -252,7 +252,7 @@ export default function PurchaseOrdersPage() {
     e.preventDefault();
     if (!supplierId || !expectedDate) return;
     if (poLines.length === 0) {
-      setFormError("Tambahkan minimal 1 item barang, atau pilih Purchase Request untuk mengisi otomatis.");
+      setFormError("Tambahkan minimal 1 item barang, atau pilih Permintaan Pembelian untuk mengisi otomatis.");
       return;
     }
     if (poLines.some((l) => l.unitPrice <= 0)) {
@@ -285,11 +285,11 @@ export default function PurchaseOrdersPage() {
       setCurrency("");
       setPoLines([]);
       if (res.data?.status === "approved") {
-        setNotice("Purchase Order berhasil dibuat dan langsung disetujui (tidak membutuhkan approval).");
+        setNotice("Pesanan Pembelian berhasil dibuat dan langsung disetujui (tidak membutuhkan approval).");
       } else if (res.data?.status === "pending_approval") {
-        setNotice("Purchase Order berhasil dibuat dan menunggu persetujuan (approval).");
+        setNotice("Pesanan Pembelian berhasil dibuat dan menunggu persetujuan (approval).");
       } else {
-        setNotice("Draft Purchase Order berhasil dibuat.");
+        setNotice("Draft Pesanan Pembelian berhasil dibuat.");
       }
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Gagal membuat purchase order.");
@@ -300,7 +300,7 @@ export default function PurchaseOrdersPage() {
   const handleSendForApproval = async (po: PurchaseOrderItem) => {
     const ok = await confirm({
       title: "Kirim untuk Approval",
-      message: `Kirim Purchase Order "${po.orderNo}" untuk diproses persetujuan?`,
+      message: `Kirim Pesanan Pembelian "${po.orderNo}" untuk diproses persetujuan?`,
       confirmText: "Kirim Sekarang",
       cancelText: "Batal",
       variant: "default",
@@ -316,14 +316,14 @@ export default function PurchaseOrdersPage() {
         setSelectedPo((prev) => (prev ? { ...prev, status: updatedStatus } : null));
       }
       if (updatedStatus === "approved") {
-        setNotice(`Purchase Order "${po.orderNo}" tidak memerlukan approval dan langsung disetujui.`);
+        setNotice(`Pesanan Pembelian "${po.orderNo}" tidak memerlukan approval dan langsung disetujui.`);
       } else {
-        setNotice(`Purchase Order "${po.orderNo}" berhasil diajukan untuk approval atasan.`);
+        setNotice(`Pesanan Pembelian "${po.orderNo}" berhasil diajukan untuk approval atasan.`);
       }
     } catch (err) {
       await alert({
         title: "Gagal Mengirim PO",
-        message: err instanceof Error ? err.message : "Gagal mengirim Purchase Order.",
+        message: err instanceof Error ? err.message : "Gagal mengirim Pesanan Pembelian.",
         variant: "destructive",
       });
     }
@@ -399,7 +399,7 @@ export default function PurchaseOrdersPage() {
       });
       fetchPOs();
       setEditingPo(null);
-      setNotice(`Purchase Order "${editingPo.orderNo}" berhasil diperbarui.`);
+      setNotice(`Pesanan Pembelian "${editingPo.orderNo}" berhasil diperbarui.`);
     } catch (err) {
       setEditError(err instanceof Error ? err.message : "Gagal menyimpan perubahan PO.");
     } finally {
@@ -409,8 +409,8 @@ export default function PurchaseOrdersPage() {
 
   const handleApprove = async (po: PurchaseOrderItem) => {
     const ok = await confirm({
-      title: "Setujui Purchase Order",
-      message: `Setujui Purchase Order "${po.orderNo}"?`,
+      title: "Setujui Pesanan Pembelian",
+      message: `Setujui Pesanan Pembelian "${po.orderNo}"?`,
       confirmText: "Setujui",
       variant: "default",
     });
@@ -427,8 +427,8 @@ export default function PurchaseOrdersPage() {
       }
       setNotice(
         updatedStatus === "approved"
-          ? `Purchase Order "${po.orderNo}" berhasil disetujui.`
-          : `Tahap approval Purchase Order "${po.orderNo}" disetujui dan diteruskan ke level berikutnya.`
+          ? `Pesanan Pembelian "${po.orderNo}" berhasil disetujui.`
+          : `Tahap approval Pesanan Pembelian "${po.orderNo}" disetujui dan diteruskan ke level berikutnya.`
       );
     } catch (err) {
       await alert({
@@ -443,8 +443,8 @@ export default function PurchaseOrdersPage() {
 
   const handleReject = async (po: PurchaseOrderItem) => {
     const comments = await prompt({
-      title: "Tolak Purchase Order",
-      message: `Masukkan alasan penolakan Purchase Order "${po.orderNo}":`,
+      title: "Tolak Pesanan Pembelian",
+      message: `Masukkan alasan penolakan Pesanan Pembelian "${po.orderNo}":`,
       placeholder: "Tuliskan alasan penolakan (opsional)...",
       confirmText: "Tolak PO",
       cancelText: "Batal",
@@ -461,7 +461,7 @@ export default function PurchaseOrdersPage() {
       if (selectedPo && selectedPo.id === po.id) {
         setSelectedPo((prev) => (prev ? { ...prev, status: "rejected" } : null));
       }
-      setNotice(`Purchase Order "${po.orderNo}" telah ditolak.`);
+      setNotice(`Pesanan Pembelian "${po.orderNo}" telah ditolak.`);
     } catch (err) {
       await alert({
         title: "Gagal Menolak PO",
@@ -506,7 +506,7 @@ export default function PurchaseOrdersPage() {
     },
     {
       key: "supplierName",
-      header: "Vendor / Supplier",
+      header: "Vendor",
       sortable: true,
       render: (po) => <span className="text-xs font-semibold text-foreground">{po.supplierName}</span>,
     },
@@ -522,7 +522,7 @@ export default function PurchaseOrdersPage() {
     },
     {
       key: "totalAmount",
-      header: "Total Cost",
+      header: "Total Biaya",
       align: "right",
       sortable: true,
       render: (po) => {
@@ -604,7 +604,7 @@ export default function PurchaseOrdersPage() {
                   size="icon"
                   variant="ghost"
                   className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                  title="Edit Draft PO"
+                  title="Ubah Draft PO"
                   onClick={() => handleOpenEdit(po)}
                 >
                   <Edit className="h-4 w-4" />
@@ -665,7 +665,7 @@ export default function PurchaseOrdersPage() {
           className="h-9 gap-1.5 text-xs font-semibold"
           onClick={() => setIsNewOpen(true)}
         >
-          <Plus className="h-3.5 w-3.5" /> Create Purchase Order
+          <Plus className="h-3.5 w-3.5" /> Create Pesanan Pembelian
         </Button>
       </PageHeader>
 
@@ -697,11 +697,11 @@ export default function PurchaseOrdersPage() {
       <Dialog open={isNewOpen} onOpenChange={setIsNewOpen}>
         <DialogContent className="w-[calc(100%-2rem)] max-w-lg max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
-            <DialogTitle>Create Purchase Order (Draft)</DialogTitle>
+            <DialogTitle>Buat Pesanan Pembelian (Draft)</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreatePO} className="min-w-0 space-y-3">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Vendor / Supplier</label>
+              <label className="text-xs font-semibold text-foreground">Vendor</label>
               <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                 <span>Filter sertifikat aktif:</span>
                 <select value={certFilter} onChange={(e) => setCertFilter(e.target.value)} className="h-7 rounded-md border border-border bg-white px-2 text-[11px]">
@@ -726,7 +726,7 @@ export default function PurchaseOrdersPage() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Sumber Purchase Request (Opsional)</label>
+              <label className="text-xs font-semibold text-foreground">Sumber Permintaan Pembelian (Opsional)</label>
               <select
                 value={prId}
                 onChange={(e) => handleSelectPR(e.target.value)}
@@ -894,11 +894,11 @@ export default function PurchaseOrdersPage() {
       <Dialog open={!!editingPo} onOpenChange={(open) => !open && setEditingPo(null)}>
         <DialogContent className="w-[calc(100%-2rem)] max-w-lg max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
-            <DialogTitle>Edit Purchase Order ({editingPo?.orderNo})</DialogTitle>
+            <DialogTitle>Edit Pesanan Pembelian ({editingPo?.orderNo})</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSaveEdit} className="min-w-0 space-y-3">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Vendor / Supplier</label>
+              <label className="text-xs font-semibold text-foreground">Vendor</label>
               <select
                 value={editSupplierId}
                 onChange={(e) => setEditSupplierId(e.target.value)}
@@ -1072,7 +1072,7 @@ export default function PurchaseOrdersPage() {
               <div>
                 <span className="text-muted-foreground text-[11px] block">Sumber Pengadaan</span>
                 {selectedPo.purchaseRequestId ? (
-                  <span className="font-medium text-purple-700">Dari Approved PR</span>
+                  <span className="font-medium text-purple-700">Dari PR yang Disetujui</span>
                 ) : (
                   <span className="text-muted-foreground">PO Mandiri</span>
                 )}

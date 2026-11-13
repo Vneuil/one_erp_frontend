@@ -1,7 +1,7 @@
 "use client";
 
 import { useAppStore } from "@/stores/app-store";
-import { canEditPrices, canManageMasterData, isSuperAdmin } from "@/lib/roles";
+import { canEditPrices, canManageMasterData, canSeeSalesPrices, canUseTradeDocs, isSuperAdmin } from "@/lib/roles";
 import { useNavigationAccess } from "@/providers/navigation-access";
 
 export function useRole() {
@@ -13,5 +13,9 @@ export function useRole() {
     isSuperAdmin: isSuperAdmin(role) || isSuperAdmin(roleName),
     canManageMasterData: canManageMasterData(role) || canManageMasterData(roleName),
     canEditPrices: canEditPrices(role) || canEditPrices(roleName),
+    /** PI/CI menu: superadmin, admin, accountants. */
+    canUseTradeDocs: canUseTradeDocs(role) || canUseTradeDocs(roleName),
+    /** Staff never see selling prices. */
+    canSeePrices: canSeeSalesPrices(role) || canSeeSalesPrices(roleName),
   };
 }

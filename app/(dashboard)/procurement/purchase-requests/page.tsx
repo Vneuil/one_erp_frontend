@@ -405,7 +405,7 @@ export default function PurchaseRequestsPage() {
     if (!department) {
       await alert({
         title: "Departemen Tidak Ditemukan",
-        message: "Department tidak ditemukan di data karyawan HRM untuk akun Anda. Hubungi admin untuk menautkan akun ini ke data karyawan sebelum mengajukan Purchase Request.",
+        message: "Department tidak ditemukan di data karyawan HRM untuk akun Anda. Hubungi admin untuk menautkan akun ini ke data karyawan sebelum mengajukan Permintaan Pembelian.",
         variant: "destructive",
       });
       return;
@@ -421,7 +421,7 @@ export default function PurchaseRequestsPage() {
     if (prLines.length === 0) {
       await alert({
         title: "Item Kosong",
-        message: "Tambahkan minimal 1 item barang ke Purchase Request.",
+        message: "Tambahkan minimal 1 item barang ke Permintaan Pembelian.",
         variant: "warning",
       });
       return;
@@ -457,17 +457,17 @@ export default function PurchaseRequestsPage() {
       ]);
       fetchApprovals();
       if (pr.status === "approved") {
-        setNotice("Purchase Request berhasil dibuat dan langsung disetujui (tidak membutuhkan approval).");
+        setNotice("Permintaan Pembelian berhasil dibuat dan langsung disetujui (tidak membutuhkan approval).");
       } else if (pr.status === "pending_approval") {
-        setNotice("Purchase Request berhasil dibuat dan menunggu persetujuan (approval).");
+        setNotice("Permintaan Pembelian berhasil dibuat dan menunggu persetujuan (approval).");
       } else {
-        setNotice("Draft Purchase Request berhasil dibuat.");
+        setNotice("Draft Permintaan Pembelian berhasil dibuat.");
       }
     } catch (err) {
       console.warn("Failed to create purchase request via API", err);
       await alert({
         title: "Gagal Membuat PR",
-        message: (err as Error).message || "Gagal membuat Purchase Request. Coba lagi.",
+        message: (err as Error).message || "Gagal membuat Permintaan Pembelian. Coba lagi.",
         variant: "destructive",
       });
       return;
@@ -484,7 +484,7 @@ export default function PurchaseRequestsPage() {
   const handleSendForApproval = async (id: string, prNumber?: string) => {
     const ok = await confirm({
       title: "Kirim untuk Approval",
-      message: `Kirim Purchase Request ${prNumber ? `"${prNumber}"` : "ini"} untuk diproses dan disetujui sesuai hirarki approval atasan?`,
+      message: `Kirim Permintaan Pembelian ${prNumber ? `"${prNumber}"` : "ini"} untuk diproses dan disetujui sesuai hirarki approval atasan?`,
       confirmText: "Kirim Sekarang",
       cancelText: "Batal",
       variant: "default",
@@ -504,14 +504,14 @@ export default function PurchaseRequestsPage() {
       }
       fetchApprovals();
       if (updatedStatus === "approved") {
-        setNotice("Purchase Request tidak membutuhkan approval dan langsung disetujui.");
+        setNotice("Permintaan Pembelian tidak membutuhkan approval dan langsung disetujui.");
       } else {
-        setNotice("Purchase Request berhasil dikirim untuk approval atasan.");
+        setNotice("Permintaan Pembelian berhasil dikirim untuk approval atasan.");
       }
     } catch (err) {
       await alert({
         title: "Gagal Mengirim PR",
-        message: "Gagal mengirim Purchase Request: " + (err instanceof Error ? err.message : "Kesalahan server"),
+        message: "Gagal mengirim Permintaan Pembelian: " + (err instanceof Error ? err.message : "Kesalahan server"),
         variant: "destructive",
       });
     }
@@ -557,7 +557,7 @@ export default function PurchaseRequestsPage() {
     if (editLines.length === 0) {
       await alert({
         title: "Item Kosong",
-        message: "Tambahkan minimal 1 item barang ke Purchase Request.",
+        message: "Tambahkan minimal 1 item barang ke Permintaan Pembelian.",
         variant: "warning",
       });
       return;
@@ -598,7 +598,7 @@ export default function PurchaseRequestsPage() {
         );
       }
       setEditingPr(null);
-      setNotice("Purchase Request berhasil diperbarui.");
+      setNotice("Permintaan Pembelian berhasil diperbarui.");
     } catch (err) {
       await alert({
         title: "Gagal Memperbarui PR",
@@ -613,8 +613,8 @@ export default function PurchaseRequestsPage() {
   // Approve
   const handleApprovePR = async (id: string, prNumber?: string) => {
     const ok = await confirm({
-      title: "Setujui Purchase Request",
-      message: `Apakah Anda yakin ingin menyetujui Purchase Request ${prNumber ? `"${prNumber}"` : "ini"}?`,
+      title: "Setujui Permintaan Pembelian",
+      message: `Apakah Anda yakin ingin menyetujui Permintaan Pembelian ${prNumber ? `"${prNumber}"` : "ini"}?`,
       confirmText: "Setujui",
       cancelText: "Batal",
       variant: "default",
@@ -643,11 +643,11 @@ export default function PurchaseRequestsPage() {
         );
       }
       fetchApprovals();
-      setNotice(`Purchase Request berhasil disetujui. Status saat ini: ${res.data.status}.`);
+      setNotice(`Permintaan Pembelian berhasil disetujui. Status saat ini: ${res.data.status}.`);
     } catch (err) {
       await alert({
         title: "Gagal Menyetujui PR",
-        message: "Gagal menyetujui Purchase Request: " + (err instanceof Error ? err.message : "Kesalahan server"),
+        message: "Gagal menyetujui Permintaan Pembelian: " + (err instanceof Error ? err.message : "Kesalahan server"),
         variant: "destructive",
       });
     }
@@ -656,8 +656,8 @@ export default function PurchaseRequestsPage() {
   // Reject
   const handleRejectPR = async (id: string, prNumber?: string) => {
     const reason = await prompt({
-      title: "Tolak Purchase Request",
-      message: `Masukkan alasan penolakan Purchase Request ${prNumber ? `"${prNumber}"` : "ini"}:`,
+      title: "Tolak Permintaan Pembelian",
+      message: `Masukkan alasan penolakan Permintaan Pembelian ${prNumber ? `"${prNumber}"` : "ini"}:`,
       placeholder: "Tulis alasan penolakan (opsional)...",
       confirmText: "Tolak PR",
       cancelText: "Batal",
@@ -678,11 +678,11 @@ export default function PurchaseRequestsPage() {
         );
       }
       fetchApprovals();
-      setNotice("Purchase Request telah ditolak.");
+      setNotice("Permintaan Pembelian telah ditolak.");
     } catch (err) {
       await alert({
         title: "Gagal Menolak PR",
-        message: "Gagal menolak Purchase Request: " + (err instanceof Error ? err.message : "Kesalahan server"),
+        message: "Gagal menolak Permintaan Pembelian: " + (err instanceof Error ? err.message : "Kesalahan server"),
         variant: "destructive",
       });
     }
@@ -710,7 +710,7 @@ export default function PurchaseRequestsPage() {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Purchase Request - ${selectedPr.prNumber}</title>
+          <title>Permintaan Pembelian - ${selectedPr.prNumber}</title>
           <style>
             @page {
               size: A4 portrait;
@@ -917,7 +917,7 @@ export default function PurchaseRequestsPage() {
       ? [
           {
             key: "estimatedTotal" as const,
-            header: "Est. Total",
+            header: "Estimasi Total",
             align: "right" as const,
             render: (pr: PurchaseRequest) => {
               const total = (pr.lines || []).reduce((sum, l) => {
@@ -1002,7 +1002,7 @@ export default function PurchaseRequestsPage() {
                   size="icon"
                   variant="ghost"
                   className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                  title="Edit Draft PR"
+                  title="Ubah Draft PR"
                   onClick={() => handleOpenEdit(pr)}
                 >
                   <Edit className="h-4 w-4" />
@@ -1063,7 +1063,7 @@ export default function PurchaseRequestsPage() {
             setIsNewOpen(true);
           }}
         >
-          <Plus className="h-3.5 w-3.5" /> Submit Purchase Request
+          <Plus className="h-3.5 w-3.5" /> Ajukan Permintaan Pembelian
         </Button>
       </PageHeader>
 
@@ -1095,7 +1095,7 @@ export default function PurchaseRequestsPage() {
       <Dialog open={isNewOpen} onOpenChange={setIsNewOpen}>
         <DialogContent className="w-[calc(100%-2rem)] max-w-2xl max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
-            <DialogTitle>Submit Purchase Request (Draft)</DialogTitle>
+            <DialogTitle>Ajukan Permintaan Pembelian (Draft)</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmitPR} className="min-w-0 space-y-3">
             <div className="space-y-1">
@@ -1288,7 +1288,7 @@ export default function PurchaseRequestsPage() {
               />
               {!department && (
                 <p className="text-[11px] text-rose-600">
-                  Akun Anda belum tertaut ke data karyawan HRM, sehingga Purchase Request tidak dapat diajukan. Hubungi admin.
+                  Akun Anda belum tertaut ke data karyawan HRM, sehingga Permintaan Pembelian tidak dapat diajukan. Hubungi admin.
                 </p>
               )}
             </div>
@@ -1424,7 +1424,7 @@ export default function PurchaseRequestsPage() {
       <Dialog open={!!editingPr} onOpenChange={(open) => !open && setEditingPr(null)}>
         <DialogContent className="w-[calc(100%-2rem)] max-w-lg max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
-            <DialogTitle>Edit Purchase Request ({editingPr?.prNumber})</DialogTitle>
+            <DialogTitle>Edit Permintaan Pembelian ({editingPr?.prNumber})</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSaveEdit} className="min-w-0 space-y-3">
             <div className="space-y-1">
@@ -1811,7 +1811,7 @@ export default function PurchaseRequestsPage() {
                 <div>
                   <DialogTitle className="text-base font-bold flex items-center gap-2">
                     <Printer className="h-4 w-4 text-brand-primary" />
-                    <span>Preview Cetak Purchase Request</span>
+                    <span>Preview Cetak Permintaan Pembelian</span>
                   </DialogTitle>
                   <p className="text-xs text-muted-foreground pt-0.5">
                     Tampilan dokumen cetak A4 resmi untuk nomor {selectedPr.prNumber}.

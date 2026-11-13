@@ -77,7 +77,7 @@ export default function PurchaseInvoicesPage() {
   const eligiblePOs = pos.filter((po) => !supplierId || po.supplierId === supplierId);
 
   // Picking a PO auto-fills the supplier and total amount from that order,
-  // mirroring how the Purchase Order form auto-fills lines from a Purchase
+  // mirroring how the Pesanan Pembelian form auto-fills lines from a Purchase
   // Request (see procurement/purchase-orders/page.tsx).
   const handleSelectPO = (id: string) => {
     setPurchaseOrderId(id);
@@ -138,7 +138,7 @@ export default function PurchaseInvoicesPage() {
   const columns: Column<PurchaseInvoiceItem>[] = [
     {
       key: "invoiceNumber",
-      header: "Vendor Invoice No.",
+      header: "No. Faktur Vendor",
       sortable: true,
       render: (vi) => <span className="font-mono text-xs font-bold text-brand-primary">{vi.invoiceNumber}</span>,
     },
@@ -219,7 +219,7 @@ export default function PurchaseInvoicesPage() {
           className="h-9 gap-1.5 text-xs font-semibold"
           onClick={() => setIsNewOpen(true)}
         >
-          <Plus className="h-3.5 w-3.5" /> Record Vendor Invoice
+          <Plus className="h-3.5 w-3.5" /> Catat Faktur Vendor
         </Button>
       </PageHeader>
 
@@ -243,11 +243,11 @@ export default function PurchaseInvoicesPage() {
       <Dialog open={isNewOpen} onOpenChange={setIsNewOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Record Vendor Invoice</DialogTitle>
+            <DialogTitle>Catat Faktur Vendor</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleRecordInvoice} className="space-y-3">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Purchase Order (opsional)</label>
+              <label className="text-xs font-semibold text-foreground">Pesanan Pembelian (opsional)</label>
               <select
                 value={purchaseOrderId}
                 onChange={(e) => handleSelectPO(e.target.value)}

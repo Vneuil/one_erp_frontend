@@ -335,6 +335,10 @@ export const salesApi = {
     });
   },
 
+  /** Price the customer last paid for the product (0 = never, or the caller may not see prices). */
+  lastSalePrice: async (customerName: string, productId: string): Promise<ApiResponse<{ unitPrice: number }>> =>
+    apiClient<{ unitPrice: number }>("/sales/orders/last-price", { params: { customerName, productId } }),
+
   uploadAttachment: async (
     file: File
   ): Promise<ApiResponse<{ key: string; filename: string; size: number; contentType: string }>> => {
@@ -497,6 +501,12 @@ export interface TradeInvoice {
   id: string;
   kind: TradeKind;
   number: string;
+  /** The customer's incoming PO (PO Masuk) this document answers. */
+  customerPoNumber?: string;
+  customerPoAttachment?: string;
+  /** Down payment asked by this PI (e.g. 50%). */
+  dpPercent?: number;
+  dpAmount?: number;
   salesOrderId?: string;
   quotationId?: string;
   parentId?: string;
@@ -523,7 +533,10 @@ export interface TradeInvoice {
 
 export interface CreateTradeInvoiceInput {
   kind: TradeKind;
-  /** Exactly one source. */
+  customerPoNumber?: string;
+  customerPoAttachment?: string;
+  dpPercent?: number;
+  /** At most one source; with none, customerName + lines are required (raised from a PO Masuk). */
   salesOrderId?: string;
   quotationId?: string;
   parentId?: string;
@@ -546,6 +559,9 @@ export const tradeInvoicesApi = {
     apiClient<TradeInvoice>("/sales/trade-invoices", { method: "POST", body: JSON.stringify(data) }),
   issue: (id: string): Promise<ApiResponse<TradeInvoice>> =>
     apiClient<TradeInvoice>(`/sales/trade-invoices/${id}/issue`, { method: "POST" }),
+  /** Turns an issued PI into a Sales Order. dpPaid=false means "DP menyusul". */
+  createOrder: (id: string, data: { dpPaid: boolean; warehouseId?: string; deliveryDate?: string; shippingCourier?: string }): Promise<ApiResponse<SalesOrderItem>> =>
+    apiClient<SalesOrderItem>(`/sales/trade-invoices/${id}/create-order`, { method: "POST", body: JSON.stringify(data) }),
   cancel: (id: string): Promise<ApiResponse<TradeInvoice>> =>
     apiClient<TradeInvoice>(`/sales/trade-invoices/${id}/cancel`, { method: "POST" }),
 };

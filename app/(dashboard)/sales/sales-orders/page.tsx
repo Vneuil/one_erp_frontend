@@ -121,7 +121,7 @@ export default function SalesOrdersPage() {
   const mayApprove = canApprove("sales");
   const isOwn = useIsOwnDocument();
   const currentUser = useAppStore((s) => s.currentUser);
-  const { canEditPrices } = useRole();
+  const { canEditPrices, canSeePrices } = useRole();
   const confirm = useConfirm();
   const alert = useAlert();
   const prompt = usePrompt();
@@ -308,13 +308,24 @@ export default function SalesOrdersPage() {
       });
       return;
     }
+    // Start from what this customer last paid for the product (editable); an explicit price wins.
+    let price = canEditPrices ? Math.max(0, Number(linePrice) || 0) : 0;
+    const customerName = customers.find((c) => c.id === newCustomerId)?.name;
+    if (canEditPrices && !price && customerName) {
+      try {
+        const r = await salesApi.lastSalePrice(customerName, product.id);
+        price = r.data?.unitPrice ?? 0;
+      } catch {
+        /* no sales history: the price is typed by hand */
+      }
+    }
     setOrderLines((prev) => {
       const existing = prev.find((l) => l.productId === lineProductId);
       if (existing) {
         return prev.map((l) => (l.productId === lineProductId ? { ...l, quantity: l.quantity + qty } : l));
       }
       // Prices are no longer taken from Master Produk: superadmin/admin type them here.
-      return [...prev, { productId: product.id, quantity: qty, unitPrice: canEditPrices ? Math.max(0, Number(linePrice) || 0) : 0 }];
+      return [...prev, { productId: product.id, quantity: qty, unitPrice: price }];
     });
     setLineProductId("");
     setLineQty("1");
@@ -1439,7 +1450,7 @@ export default function SalesOrdersPage() {
           <CardContent className="p-4 flex items-center justify-between">
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground font-medium">All Omnichannel Revenue</p>
-              <MoneyDisplay amount={metrics.totalRev} className="text-lg font-bold text-brand-dark" />
+              {canSeePrices ? <MoneyDisplay amount={metrics.totalRev} className="text-lg font-bold text-brand-dark" /> : <span className="text-lg font-bold text-brand-dark">—</span>}
               <p className="text-[11px] text-muted-foreground">{metrics.totalCount} Confirmed Orders</p>
             </div>
             <div className="h-10 w-10 rounded-xl bg-brand-tint text-brand-primary flex items-center justify-center">
@@ -1452,7 +1463,7 @@ export default function SalesOrdersPage() {
           <CardContent className="p-4 flex items-center justify-between">
             <div className="space-y-1">
               <p className="text-xs text-orange-700 font-medium">Marketplace E-Commerce</p>
-              <MoneyDisplay amount={metrics.marketplaceRev} className="text-lg font-bold text-orange-950" />
+              {canSeePrices ? <MoneyDisplay amount={metrics.marketplaceRev} className="text-lg font-bold text-orange-950" /> : <span className="text-lg font-bold text-orange-950">—</span>}
               <p className="text-[11px] text-orange-600 font-medium">
                 {metrics.marketplaceCount} Orders (TikTok / Shopee / Blibli / Lazada)
               </p>
@@ -1467,7 +1478,7 @@ export default function SalesOrdersPage() {
           <CardContent className="p-4 flex items-center justify-between">
             <div className="space-y-1">
               <p className="text-xs text-blue-700 font-medium">POS Retail Outlets</p>
-              <MoneyDisplay amount={metrics.posRev} className="text-lg font-bold text-blue-950" />
+              {canSeePrices ? <MoneyDisplay amount={metrics.posRev} className="text-lg font-bold text-blue-950" /> : <span className="text-lg font-bold text-blue-950">—</span>}
               <p className="text-[11px] text-blue-600 font-medium">
                 {metrics.posCount} Direct POS Transactions
               </p>
@@ -1482,7 +1493,7 @@ export default function SalesOrdersPage() {
           <CardContent className="p-4 flex items-center justify-between">
             <div className="space-y-1">
               <p className="text-xs text-emerald-700 font-medium">B2B Quotations & Direct</p>
-              <MoneyDisplay amount={metrics.b2bRev} className="text-lg font-bold text-emerald-950" />
+              {canSeePrices ? <MoneyDisplay amount={metrics.b2bRev} className="text-lg font-bold text-emerald-950" /> : <span className="text-lg font-bold text-emerald-950">—</span>}
               <p className="text-[11px] text-emerald-600 font-medium">
                 {metrics.b2bCount} Commercial Contract Orders
               </p>
@@ -1702,7 +1713,7 @@ export default function SalesOrdersPage() {
                     {selectedOrder.dpPercent != null ? `${selectedOrder.dpPercent}%` : selectedOrder.dpPaid ? "50%" : "0%"}
                   </span>
                   <span className="text-[10px] text-muted-foreground block">
-                    Rp {(selectedOrder.dpAmount || 0).toLocaleString("id-ID")}
+                    {canSeePrices ? `Rp ${(selectedOrder.dpAmount || 0).toLocaleString("id-ID")}` : ""}
                   </span>
                 </div>
                 <div>
@@ -1959,8 +1970,8 @@ export default function SalesOrdersPage() {
                       <tr>
                         <th className="py-2 px-3 text-left font-semibold">SKU & Item Name</th>
                         <th className="py-2 px-3 text-center font-semibold">Qty</th>
-                        <th className="py-2 px-3 text-right font-semibold">Unit Price</th>
-                        <th className="py-2 px-3 text-right font-semibold">Subtotal</th>
+                        {canSeePrices && <th className="py-2 px-3 text-right font-semibold">Unit Price</th>}
+                        {canSeePrices && <th className="py-2 px-3 text-right font-semibold">Subtotal</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -1973,12 +1984,16 @@ export default function SalesOrdersPage() {
                             <span className="text-foreground">{item.name}</span>
                           </td>
                           <td className="py-2 px-3 text-center font-semibold">{item.qty}</td>
-                          <td className="py-2 px-3 text-right text-muted-foreground">
-                            <MoneyDisplay amount={item.unitPrice} />
-                          </td>
-                          <td className="py-2 px-3 text-right font-bold text-foreground">
-                            <MoneyDisplay amount={item.subtotal} />
-                          </td>
+                          {canSeePrices && (
+                            <td className="py-2 px-3 text-right text-muted-foreground">
+                              <MoneyDisplay amount={item.unitPrice} />
+                            </td>
+                          )}
+                          {canSeePrices && (
+                            <td className="py-2 px-3 text-right font-bold text-foreground">
+                              <MoneyDisplay amount={item.subtotal} />
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -1994,14 +2009,16 @@ export default function SalesOrdersPage() {
                     {selectedOrder.shippingCourier || "Internal Fleet"}
                   </strong>
                 </span>
-                <div className="text-right">
-                  <span className="text-xs text-muted-foreground block">Order Grand Total:</span>
-                  <MoneyDisplay
-                    amount={selectedOrder.totalAmount}
-                    highlight
-                    className="text-base font-bold"
-                  />
-                </div>
+                {canSeePrices && (
+                  <div className="text-right">
+                    <span className="text-xs text-muted-foreground block">Order Grand Total:</span>
+                    <MoneyDisplay
+                      amount={selectedOrder.totalAmount}
+                      highlight
+                      className="text-base font-bold"
+                    />
+                  </div>
+                )}
               </div>
               {/* Interactive Timeline & Hierarchy Status */}
               <ApprovalTimeline

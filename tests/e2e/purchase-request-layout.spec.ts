@@ -9,7 +9,7 @@ for (const width of [390, 1024, 1440]) {
       await route.fulfill({ json: { success: true, data } });
     });
     await page.goto('http://localhost:3001/procurement/purchase-requests');
-    await page.getByRole('button', { name: 'Submit Purchase Request' }).click();
+    await page.getByRole('button', { name: 'Ajukan Permintaan Pembelian' }).click();
     const dialog = page.getByRole('dialog');
     async function checkBounds() {
       const result = await dialog.evaluate(el => {

@@ -124,7 +124,7 @@ export default function PurchaseReturnsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Retur Pembelian (Purchase Return)"
-        description="Kembalikan barang yang sudah diterima (Goods Receipt) ke vendor - misalnya rusak atau salah kirim."
+        description="Kembalikan barang yang sudah diterima (Penerimaan Barang) ke vendor - misalnya rusak atau salah kirim."
       >
         <Button
           variant="gradient"
@@ -162,14 +162,14 @@ export default function PurchaseReturnsPage() {
           </DialogHeader>
           <form onSubmit={handleCreate} className="space-y-3">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Goods Receipt</label>
+              <label className="text-xs font-semibold text-foreground">Penerimaan Barang</label>
               <select
                 value={selectedReceiptId}
                 onChange={(e) => setSelectedReceiptId(e.target.value)}
                 className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-xs shadow-sm"
                 required
               >
-                <option value="">Pilih Goods Receipt...</option>
+                <option value="">Pilih Penerimaan Barang...</option>
                 {receipts.map((gr) => (
                   <option key={gr.id} value={gr.id}>
                     {gr.receiptNo} · {gr.receivedDate}

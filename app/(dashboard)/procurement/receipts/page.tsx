@@ -595,7 +595,7 @@ export default function ReceiptsPage() {
     },
     {
       key: "vendorName",
-      header: "Vendor / Supplier",
+      header: "Vendor",
       sortable: true,
       render: (gr) => <span className="text-xs font-semibold text-foreground">{gr.vendorName}</span>,
     },
@@ -700,14 +700,14 @@ export default function ReceiptsPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs">
               <div className="space-y-1">
-                <label className="font-semibold text-slate-700">Referensi Purchase Order (PO)</label>
+                <label className="font-semibold text-slate-700">Referensi Pesanan Pembelian (PO)</label>
                 <select
                   value={poId}
                   onChange={(e) => setPoId(e.target.value)}
                   required
                   className="flex h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30"
                 >
-                  <option value="">Pilih Purchase Order yang masih aktif...</option>
+                  <option value="">Pilih Pesanan Pembelian yang masih aktif...</option>
                   {receivablePOs.map((po) => (
                     <option key={po.id} value={po.id}>
                       {po.orderNo} — {po.supplierName}
@@ -775,7 +775,7 @@ export default function ReceiptsPage() {
 
               {Object.keys(lineWeights).length === 0 ? (
                 <div className="p-4 rounded-lg border border-dashed border-slate-300 text-center text-xs text-muted-foreground">
-                  Pilih Purchase Order di atas untuk memuat daftar bahan yang akan ditimbang.
+                  Pilih Pesanan Pembelian di atas untuk memuat daftar bahan yang akan ditimbang.
                 </div>
               ) : (
                 <div className="space-y-3">

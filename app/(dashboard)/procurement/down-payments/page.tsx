@@ -126,7 +126,7 @@ export default function DownPaymentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Uang Muka Pembelian (Down Payment)"
-        description="Catat pembayaran awal ke vendor terhadap Purchase Order sebelum invoice final terbit."
+        description="Catat pembayaran awal ke vendor terhadap Pesanan Pembelian sebelum invoice final terbit."
       >
         <Button
           variant="gradient"
@@ -164,14 +164,14 @@ export default function DownPaymentsPage() {
           </DialogHeader>
           <form onSubmit={handleCreate} className="space-y-3">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Purchase Order</label>
+              <label className="text-xs font-semibold text-foreground">Pesanan Pembelian</label>
               <select
                 value={selectedPoId}
                 onChange={(e) => setSelectedPoId(e.target.value)}
                 className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-xs shadow-sm"
                 required
               >
-                <option value="">Pilih Purchase Order...</option>
+                <option value="">Pilih Pesanan Pembelian...</option>
                 {purchaseOrders.map((po) => (
                   <option key={po.id} value={po.id}>
                     {po.orderNo} · {po.supplierName}

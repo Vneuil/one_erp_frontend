@@ -18,7 +18,7 @@ export interface NavSubItem {
   title: string;
   href: string;
   badge?: string;
-  /** Only visible to superadmin (account role admin). */
+  /** Only visible to superadmin, admin and accountants (PI/CI). */
   superAdminOnly?: boolean;
 }
 
