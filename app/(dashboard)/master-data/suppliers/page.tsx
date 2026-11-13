@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Download, Mail, Phone, Pencil, Trash2, Power } from "lucide-react";
+import { Plus, Download, Mail, Phone, Pencil, Power, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, Column } from "@/components/data-table/data-table";
@@ -21,6 +21,11 @@ const FALLBACK_TYPES: VendorTypeOption[] = [
   { code: "ATK", label: "Alat Tulis Kantor" },
 ];
 
+function extractVendorTypeFromCode(code: string): string | null {
+  const m = code.trim().toUpperCase().match(/^VD-([A-Z]{2,4})-/);
+  return m ? m[1] : null;
+}
+
 interface FormState {
   code: string;
   vendorType: string;
@@ -37,6 +42,7 @@ interface FormState {
   paymentTerm: string;
   npwp: string;
   nik: string;
+  status: "Active" | "Inactive";
 }
 
 const emptyForm = (vendorType: string): FormState => ({
@@ -55,11 +61,12 @@ const emptyForm = (vendorType: string): FormState => ({
   paymentTerm: "",
   npwp: "",
   nik: "",
+  status: "Active",
 });
 
 const fromItem = (s: SupplierItem): FormState => ({
   code: s.code,
-  vendorType: s.vendorType || "",
+  vendorType: s.vendorType || extractVendorTypeFromCode(s.code) || "",
   batchCode: s.batchCode || "",
   name: s.name,
   contactPerson: s.contactPerson || "",
@@ -73,6 +80,7 @@ const fromItem = (s: SupplierItem): FormState => ({
   paymentTerm: s.paymentTerm || "",
   npwp: s.npwp || "",
   nik: s.nik || "",
+  status: s.status?.toLowerCase() === "inactive" ? "Inactive" : "Active",
 });
 
 const selectClass =
@@ -104,6 +112,7 @@ export default function SuppliersPage() {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [form, setForm] = React.useState<FormState>(emptyForm("PRD"));
+  const [showAddressDetails, setShowAddressDetails] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
 
   const set = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
@@ -128,12 +137,14 @@ export default function SuppliersPage() {
   const openCreate = () => {
     setEditingId(null);
     setForm(emptyForm(vendorTypes[0]?.code ?? "PRD"));
+    setShowAddressDetails(false);
     setDialogOpen(true);
   };
 
   const openEdit = (s: SupplierItem) => {
     setEditingId(s.id);
     setForm(fromItem(s));
+    setShowAddressDetails(Boolean(s.address || s.province || s.postalCode));
     setDialogOpen(true);
   };
 
@@ -141,7 +152,7 @@ export default function SuppliersPage() {
     e.preventDefault();
     setSaving(true);
     const payload = {
-      vendorType: form.vendorType,
+      vendorType: form.vendorType || undefined,
       batchCode: form.batchCode.trim().toUpperCase(),
       name: form.name,
       contactPerson: form.contactPerson,
@@ -158,8 +169,12 @@ export default function SuppliersPage() {
     };
     try {
       if (editingId) {
-        // The code is sent too: changing it (e.g. PCK-001 -> VD-PCK-001) is now saved.
-        const res = await suppliersApi.update(editingId, { ...payload, code: form.code });
+        // The code is sent too: changing it (e.g. PCK-001 -> VD-PCK-001) is saved.
+        const res = await suppliersApi.update(editingId, {
+          ...payload,
+          code: form.code,
+          ...(canManageMasterData ? { status: form.status } : {}),
+        });
         setSuppliers((prev) => prev.map((s) => (s.id === editingId ? { ...s, ...res.data } : s)));
       } else {
         await suppliersApi.create({ ...payload, code: form.code.trim() || undefined });
@@ -193,22 +208,6 @@ export default function SuppliersPage() {
       setSuppliers((prev) => prev.map((x) => (x.id === s.id ? { ...x, ...res.data } : x)));
     } catch (err) {
       await alert({ title: "Gagal Mengubah Status", message: err instanceof Error ? err.message : "Kesalahan server", variant: "destructive" });
-    }
-  };
-
-  const handleDelete = async (s: SupplierItem) => {
-    const ok = await confirm({
-      title: "Hapus Vendor",
-      message: `Hapus ${s.name} secara permanen? Disarankan menggunakan Nonaktifkan bila vendor pernah bertransaksi.`,
-      variant: "destructive",
-      confirmText: "Hapus",
-    });
-    if (!ok) return;
-    try {
-      await suppliersApi.delete(s.id);
-      setSuppliers((prev) => prev.filter((x) => x.id !== s.id));
-    } catch (err) {
-      await alert({ title: "Gagal Menghapus Vendor", message: err instanceof Error ? err.message : "Kesalahan server", variant: "destructive" });
     }
   };
 
@@ -283,19 +282,18 @@ export default function SuppliersPage() {
               <Pencil className="h-3 w-3" /> <span>Edit</span>
             </Button>
             {canManageMasterData && (
-              <>
-                <Button size="sm" variant="outline" onClick={() => handleToggleStatus(s)} className="h-7 px-2 text-[11px] gap-1">
-                  <Power className="h-3 w-3" /> <span>{active ? "Nonaktifkan" : "Aktifkan"}</span>
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleDelete(s)}
-                  className="h-7 px-2 text-[11px] gap-1 border-rose-200 text-rose-700 hover:bg-rose-50"
-                >
-                  <Trash2 className="h-3 w-3" /> <span>Hapus</span>
-                </Button>
-              </>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleToggleStatus(s)}
+                className={
+                  active
+                    ? "h-7 px-2 text-[11px] gap-1 border-amber-200 text-amber-800 hover:bg-amber-50"
+                    : "h-7 px-2 text-[11px] gap-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                }
+              >
+                <Power className="h-3 w-3" /> <span>{active ? "Nonaktifkan" : "Aktifkan"}</span>
+              </Button>
             )}
           </div>
         );
@@ -356,12 +354,22 @@ export default function SuppliersPage() {
                       {t.code} — {t.label}
                     </option>
                   ))}
+                  {form.vendorType && !vendorTypes.some((t) => t.code === form.vendorType) && (
+                    <option value={form.vendorType}>{form.vendorType} — Kustom</option>
+                  )}
                 </select>
               </Field>
               <Field label="Kode Vendor" hint={editingId ? "format VD-XXX-NNN" : "kosongkan = otomatis"}>
                 <Input
                   value={form.code}
-                  onChange={(e) => set({ code: e.target.value.toUpperCase() })}
+                  onChange={(e) => {
+                    const nextCode = e.target.value.toUpperCase();
+                    const derivedType = extractVendorTypeFromCode(nextCode);
+                    set({
+                      code: nextCode,
+                      ...(derivedType ? { vendorType: derivedType } : {}),
+                    });
+                  }}
                   placeholder={codePreview}
                   className="font-mono"
                   required={!!editingId}
@@ -404,25 +412,54 @@ export default function SuppliersPage() {
                     {p.name} ({p.days} hari)
                   </option>
                 ))}
+                {form.paymentTerm && !paymentTerms.some((p) => p.name === form.paymentTerm) && (
+                  <option value={form.paymentTerm}>{form.paymentTerm}</option>
+                )}
               </select>
               {paymentTerms.length === 0 && (
-                <p className="text-[10px] text-muted-foreground">Belum ada Payment Term. Tambahkan di Master Data › Harga &amp; Termin.</p>
+                <p className="text-[10px] text-muted-foreground">Belum ada Payment Term. Tambahkan di Master Data › Term of Payment (TOP).</p>
               )}
             </Field>
-            <Field label="Alamat (jalan, nomor, RT/RW, kelurahan)">
-              <Input value={form.address} onChange={(e) => set({ address: e.target.value })} placeholder="Jl. ..." />
+            <Field label="Kota" hint="default Semarang">
+              <Input value={form.city} onChange={(e) => set({ city: e.target.value })} placeholder={DEFAULT_CITY} />
             </Field>
-            <div className="grid grid-cols-3 gap-3">
-              <Field label="Kota">
-                <Input value={form.city} onChange={(e) => set({ city: e.target.value })} />
-              </Field>
-              <Field label="Provinsi">
-                <Input value={form.province} onChange={(e) => set({ province: e.target.value })} placeholder="Jawa Tengah" />
-              </Field>
-              <Field label="Kode Pos">
-                <Input value={form.postalCode} onChange={(e) => set({ postalCode: e.target.value })} inputMode="numeric" maxLength={10} />
-              </Field>
+            <div className="rounded-lg border border-border/70 bg-muted/20 p-2.5 space-y-2.5">
+              <button
+                type="button"
+                onClick={() => setShowAddressDetails((v) => !v)}
+                className="flex w-full items-center justify-between text-left text-[11px] font-medium text-muted-foreground hover:text-foreground"
+              >
+                <span>Tambah Alamat, Provinsi &amp; Kode Pos (Opsional)</span>
+                {showAddressDetails ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              </button>
+              {showAddressDetails && (
+                <div className="space-y-3 pt-1">
+                  <Field label="Alamat (Opsional)">
+                    <Input value={form.address} onChange={(e) => set({ address: e.target.value })} placeholder="Alamat lengkap (opsional)" />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Provinsi (Opsional)">
+                      <Input value={form.province} onChange={(e) => set({ province: e.target.value })} placeholder="Jawa Tengah" />
+                    </Field>
+                    <Field label="Kode Pos (Opsional)">
+                      <Input value={form.postalCode} onChange={(e) => set({ postalCode: e.target.value })} inputMode="numeric" maxLength={10} />
+                    </Field>
+                  </div>
+                </div>
+              )}
             </div>
+            {editingId && canManageMasterData && (
+              <Field label="Status Vendor" hint="khusus Manager / Admin">
+                <select
+                  className={selectClass}
+                  value={form.status}
+                  onChange={(e) => set({ status: e.target.value === "Inactive" ? "Inactive" : "Active" })}
+                >
+                  <option value="Active">Active (Aktif)</option>
+                  <option value="Inactive">Inactive (Nonaktif)</option>
+                </select>
+              </Field>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <Field label="NPWP">
                 <Input value={form.npwp} onChange={(e) => set({ npwp: e.target.value })} placeholder="15 atau 16 digit" inputMode="numeric" />

@@ -2173,9 +2173,11 @@ export default function SalesOrdersPage() {
                 className="flex h-10 w-full min-w-0 rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30 disabled:opacity-50"
               >
                 <option value="">{customersLoading ? "Memuat customer..." : "Pilih customer dari master data..."}</option>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>{customer.code} — {customer.name}</option>
-                ))}
+                {customers
+                  .filter((customer) => customer.status?.toLowerCase() !== "inactive")
+                  .map((customer) => (
+                    <option key={customer.id} value={customer.id}>{customer.code} — {customer.name}</option>
+                  ))}
               </select>
               {customersError ? (
                 <p role="alert" className="text-xs text-rose-600">

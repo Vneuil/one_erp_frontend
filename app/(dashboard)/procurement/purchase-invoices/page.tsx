@@ -275,9 +275,11 @@ export default function PurchaseInvoicesPage() {
                 className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30 focus-visible:border-brand-primary"
               >
                 <option value="">Pilih supplier...</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
+                {suppliers
+                  .filter((s) => s.status?.toLowerCase() !== "inactive" || s.id === supplierId)
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
               </select>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

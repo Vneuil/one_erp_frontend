@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Download, Mail, Phone, Pencil, Trash2, Power, X } from "lucide-react";
+import { Plus, Download, Mail, Phone, Pencil, Trash2, Power, X, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, Column } from "@/components/data-table/data-table";
@@ -14,6 +14,11 @@ import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
 import { useRole } from "@/lib/hooks/use-role";
 
 const DEFAULT_CITY = "Semarang";
+
+function extractCustomerTypeFromCode(code: string): CustomerType | null {
+  const m = code.trim().toUpperCase().match(/^(B2B|B2C)-/);
+  return m ? (m[1] as CustomerType) : null;
+}
 
 interface FormState {
   code: string;
@@ -32,9 +37,10 @@ interface FormState {
   contactMobile: string;
   contactWhatsapp: string;
   shippingAddresses: CustomerAddress[];
+  status: "Active" | "Inactive";
 }
 
-const blankAddress = (): CustomerAddress => ({ label: "", address: "", city: DEFAULT_CITY, isDefault: false });
+const blankAddress = (): CustomerAddress => ({ label: "", address: "", city: DEFAULT_CITY, province: "", postalCode: "", isDefault: false });
 
 const emptyForm = (): FormState => ({
   code: "",
@@ -53,11 +59,12 @@ const emptyForm = (): FormState => ({
   contactMobile: "",
   contactWhatsapp: "",
   shippingAddresses: [],
+  status: "Active",
 });
 
 const fromItem = (c: CustomerItem): FormState => ({
   code: c.code,
-  customerType: c.customerType || "B2B",
+  customerType: c.customerType || extractCustomerTypeFromCode(c.code) || "B2B",
   name: c.name,
   email: c.email || "",
   phone: c.phone || "",
@@ -72,6 +79,7 @@ const fromItem = (c: CustomerItem): FormState => ({
   contactMobile: c.contactMobile || "",
   contactWhatsapp: c.contactWhatsapp || "",
   shippingAddresses: c.shippingAddresses || [],
+  status: c.status?.toLowerCase() === "inactive" ? "Inactive" : "Active",
 });
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -89,7 +97,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 export default function CustomersPage() {
   const confirm = useConfirm();
   const alert = useAlert();
-  const { canManageMasterData } = useRole();
+  const { canManageMasterData, isSuperAdmin } = useRole();
 
   const [customers, setCustomers] = React.useState<CustomerItem[]>([]);
   const [loadError, setLoadError] = React.useState<string | null>(null);
@@ -97,6 +105,7 @@ export default function CustomersPage() {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [form, setForm] = React.useState<FormState>(emptyForm());
+  const [showAddressDetails, setShowAddressDetails] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
 
   const set = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
@@ -120,12 +129,14 @@ export default function CustomersPage() {
   const openCreate = () => {
     setEditingId(null);
     setForm(emptyForm());
+    setShowAddressDetails(false);
     setDialogOpen(true);
   };
 
   const openEdit = (c: CustomerItem) => {
     setEditingId(c.id);
     setForm(fromItem(c));
+    setShowAddressDetails(Boolean(c.address || c.province || c.postalCode));
     setDialogOpen(true);
   };
 
@@ -168,7 +179,11 @@ export default function CustomersPage() {
     };
     try {
       if (editingId) {
-        const res = await customersApi.update(editingId, payload);
+        const res = await customersApi.update(editingId, {
+          ...payload,
+          code: form.code.trim() || undefined,
+          ...(canManageMasterData ? { status: form.status } : {}),
+        });
         setCustomers((prev) => prev.map((c) => (c.id === editingId ? { ...c, ...res.data } : c)));
       } else {
         await customersApi.create({ ...payload, code: form.code.trim() || undefined });
@@ -284,14 +299,14 @@ export default function CustomersPage() {
               <Pencil className="h-3 w-3" /> <span>Edit</span>
             </Button>
             {canManageMasterData && (
-              <>
-                <Button size="sm" variant="outline" onClick={() => handleToggleStatus(c)} className="h-7 px-2 text-[11px] gap-1">
-                  <Power className="h-3 w-3" /> <span>{active ? "Nonaktifkan" : "Aktifkan"}</span>
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => handleDelete(c)} className="h-7 px-2 text-[11px] gap-1 border-rose-200 text-rose-700 hover:bg-rose-50">
-                  <Trash2 className="h-3 w-3" /> <span>Hapus</span>
-                </Button>
-              </>
+              <Button size="sm" variant="outline" onClick={() => handleToggleStatus(c)} className="h-7 px-2 text-[11px] gap-1">
+                <Power className="h-3 w-3" /> <span>{active ? "Nonaktifkan" : "Aktifkan"}</span>
+              </Button>
+            )}
+            {isSuperAdmin && (
+              <Button size="sm" variant="outline" onClick={() => handleDelete(c)} className="h-7 px-2 text-[11px] gap-1 border-rose-200 text-rose-700 hover:bg-rose-50">
+                <Trash2 className="h-3 w-3" /> <span>Hapus</span>
+              </Button>
             )}
           </div>
         );
@@ -336,7 +351,6 @@ export default function CustomersPage() {
                       type="button"
                       size="sm"
                       variant={form.customerType === t ? "gradient" : "outline"}
-                      disabled={!!editingId}
                       onClick={() => set({ customerType: t })}
                       className="flex-1"
                     >
@@ -345,8 +359,21 @@ export default function CustomersPage() {
                   ))}
                 </div>
               </Field>
-              <Field label="Kode" hint={editingId ? undefined : "kosongkan = otomatis"}>
-                <Input value={form.code} disabled={!!editingId} onChange={(e) => set({ code: e.target.value.toUpperCase() })} placeholder={`${form.customerType}-####`} className="font-mono" />
+              <Field label="Kode" hint={editingId ? "format B2B/B2C-NNNN" : "kosongkan = otomatis"}>
+                <Input
+                  value={form.code}
+                  onChange={(e) => {
+                    const nextCode = e.target.value.toUpperCase();
+                    const derived = extractCustomerTypeFromCode(nextCode);
+                    set({
+                      code: nextCode,
+                      ...(derived ? { customerType: derived } : {}),
+                    });
+                  }}
+                  placeholder={`${form.customerType}-####`}
+                  className="font-mono"
+                  required={!!editingId}
+                />
               </Field>
             </div>
             <Field label={isB2B ? "Nama Perusahaan *" : "Nama Lengkap *"}>
@@ -385,17 +412,34 @@ export default function CustomersPage() {
               )}
             </div>
 
-            <fieldset className="rounded-lg border border-border p-3 space-y-3">
-              <legend className="px-1 font-semibold text-foreground">Alamat {isB2B ? "Kantor" : ""}</legend>
-              <Field label="Jalan / Detail Alamat">
-                <Input value={form.address} onChange={(e) => set({ address: e.target.value })} />
-              </Field>
-              <div className="grid grid-cols-3 gap-3">
-                <Field label="Kota"><Input value={form.city} onChange={(e) => set({ city: e.target.value })} /></Field>
-                <Field label="Provinsi"><Input value={form.province} onChange={(e) => set({ province: e.target.value })} /></Field>
-                <Field label="Kode Pos"><Input value={form.postalCode} onChange={(e) => set({ postalCode: e.target.value })} inputMode="numeric" maxLength={10} /></Field>
-              </div>
-            </fieldset>
+            <Field label="Kota" hint="default Semarang">
+              <Input value={form.city} onChange={(e) => set({ city: e.target.value })} placeholder={DEFAULT_CITY} />
+            </Field>
+            <div className="rounded-lg border border-border/70 bg-muted/20 p-2.5 space-y-2.5">
+              <button
+                type="button"
+                onClick={() => setShowAddressDetails((v) => !v)}
+                className="flex w-full items-center justify-between text-left text-[11px] font-medium text-muted-foreground hover:text-foreground"
+              >
+                <span>Tambah Alamat {isB2B ? "Kantor" : ""}, Provinsi &amp; Kode Pos (Opsional)</span>
+                {showAddressDetails ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              </button>
+              {showAddressDetails && (
+                <div className="space-y-3 pt-1">
+                  <Field label={isB2B ? "Alamat Kantor (Opsional)" : "Alamat (Opsional)"}>
+                    <Input value={form.address} onChange={(e) => set({ address: e.target.value })} placeholder="Alamat lengkap (opsional)" />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Provinsi (Opsional)">
+                      <Input value={form.province} onChange={(e) => set({ province: e.target.value })} placeholder="Jawa Tengah" />
+                    </Field>
+                    <Field label="Kode Pos (Opsional)">
+                      <Input value={form.postalCode} onChange={(e) => set({ postalCode: e.target.value })} inputMode="numeric" maxLength={10} />
+                    </Field>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <fieldset className="rounded-lg border border-border p-3 space-y-3">
               <legend className="px-1 font-semibold text-foreground">Alamat Kirim (gudang / produksi)</legend>
@@ -416,6 +460,10 @@ export default function CustomersPage() {
                   <Input placeholder="Alamat lengkap" value={a.address} onChange={(e) => setAddress(i, { address: e.target.value })} />
                   <div className="grid grid-cols-3 gap-2">
                     <Input placeholder="Kota" value={a.city ?? ""} onChange={(e) => setAddress(i, { city: e.target.value })} />
+                    <Input placeholder="Provinsi (opsional)" value={a.province ?? ""} onChange={(e) => setAddress(i, { province: e.target.value })} />
+                    <Input placeholder="Kode Pos" value={a.postalCode ?? ""} inputMode="numeric" maxLength={10} onChange={(e) => setAddress(i, { postalCode: e.target.value })} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
                     <Input placeholder="Penerima" value={a.recipientName ?? ""} onChange={(e) => setAddress(i, { recipientName: e.target.value })} />
                     <Input placeholder="Telepon penerima" value={a.phone ?? ""} onChange={(e) => setAddress(i, { phone: e.target.value })} />
                   </div>
@@ -425,6 +473,19 @@ export default function CustomersPage() {
                 <Plus className="h-3 w-3" /> Tambah Alamat Kirim
               </Button>
             </fieldset>
+
+            {editingId && canManageMasterData && (
+              <Field label="Status Pelanggan" hint="khusus Manager / Admin">
+                <select
+                  className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30 focus-visible:border-brand-primary shadow-xs"
+                  value={form.status}
+                  onChange={(e) => set({ status: e.target.value === "Inactive" ? "Inactive" : "Active" })}
+                >
+                  <option value="Active">Active (Aktif)</option>
+                  <option value="Inactive">Inactive (Nonaktif)</option>
+                </select>
+              </Field>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="NPWP"><Input value={form.npwp} onChange={(e) => set({ npwp: e.target.value })} inputMode="numeric" placeholder="15 atau 16 digit" /></Field>
