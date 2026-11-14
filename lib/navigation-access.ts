@@ -5,6 +5,7 @@ import type { PermissionItem } from "@/lib/api/rbac";
 const routeModules: Record<string, string[]> = {
   "/crm/whatsapp": ["omnichannel"], "/pos/loyalty": ["loyalty"],
   "/master-data/products": ["products"], "/master-data/categories-units": ["product-categories", "units-of-measure"],
+  "/master-data/certifications": ["products"], "/master-data/currencies": ["finance"],
   "/master-data/pricing-terms": ["payment-terms", "customer-types", "tax-rates"],
   "/master-data/customers": ["customers"], "/master-data/suppliers": ["suppliers"],
   "/master-data/salesmen": ["salesmen"], "/master-data/warehouses": ["warehouses"],

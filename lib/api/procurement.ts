@@ -352,6 +352,9 @@ export const procurementApi = {
   updatePurchaseRequest: async (id: string, data: Partial<CreatePurchaseRequestInput>): Promise<ApiResponse<PurchaseRequestItem>> => {
     return apiClient<PurchaseRequestItem>(`/procurement/requests/${id}`, { method: "PUT", body: JSON.stringify(data) });
   },
+  deletePurchaseRequest: async (id: string): Promise<ApiResponse<null>> => {
+    return apiClient<null>(`/procurement/requests/${id}`, { method: "DELETE" });
+  },
   submitPurchaseRequest: async (id: string): Promise<ApiResponse<PurchaseRequestItem>> => {
     return apiClient<PurchaseRequestItem>(`/procurement/requests/${id}/submit`, { method: "POST" });
   },

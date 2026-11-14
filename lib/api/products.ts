@@ -11,10 +11,18 @@ export interface ProductItem {
   stock: number;
   costPrice: number;
   sellingPrice: number;
+  currency?: string;
   status: string;
   grade?: string;
   safetyStock?: number;
   organicType?: string;
+  certifications?: string;
+  dimensionLength?: number;
+  dimensionWidth?: number;
+  dimensionHeight?: number;
+  packagingType?: string;
+  packagingSpec?: string;
+  remarks?: string;
   isBelowSafetyStock?: boolean;
   /** Base product id when this is a variant (e.g. "Merah / L"). */
   variantOf?: string | null;
@@ -34,10 +42,18 @@ export interface CreateProductInput {
   stock: number;
   costPrice: number;
   sellingPrice: number;
+  currency?: string;
   status?: string;
   grade?: string;
   safetyStock?: number;
   organicType?: string;
+  certifications?: string;
+  dimensionLength?: number;
+  dimensionWidth?: number;
+  dimensionHeight?: number;
+  packagingType?: string;
+  packagingSpec?: string;
+  remarks?: string;
   /** Send the base product id to make a variant; the nil uuid (all zeros) detaches it. */
   variantOf?: string;
   variantLabel?: string;
@@ -53,6 +69,28 @@ export interface UnitOfMeasureItem {
   name: string;
   symbol: string;
 }
+
+export interface CertificationItem {
+  id: string;
+  code: string;
+  name: string;
+  description?: string;
+}
+
+export const certificationsApi = {
+  list: async (): Promise<ApiResponse<CertificationItem[]>> => {
+    return apiClient<CertificationItem[]>("/product-certifications");
+  },
+  create: async (data: { code: string; name: string; description?: string }): Promise<ApiResponse<CertificationItem>> => {
+    return apiClient<CertificationItem>("/product-certifications", { method: "POST", body: JSON.stringify(data) });
+  },
+  update: async (id: string, data: { code?: string; name?: string; description?: string }): Promise<ApiResponse<CertificationItem>> => {
+    return apiClient<CertificationItem>(`/product-certifications/${id}`, { method: "PUT", body: JSON.stringify(data) });
+  },
+  remove: async (id: string): Promise<ApiResponse<null>> => {
+    return apiClient<null>(`/product-certifications/${id}`, { method: "DELETE" });
+  },
+};
 
 export const productCategoriesApi = {
   list: async (): Promise<ApiResponse<ProductCategoryItem[]>> => {

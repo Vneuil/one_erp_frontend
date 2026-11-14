@@ -527,7 +527,7 @@ export default function PurchaseOrdersPage() {
       sortable: true,
       render: (po) => {
         if (!canViewPrices("procurement")) {
-          return <span className="text-xs font-mono text-muted-foreground italic">*** (Rahasia)</span>;
+          return <span className="text-xs text-muted-foreground">—</span>;
         }
         const hasForeignCurrency = po.currency && po.currency !== "IDR";
         return (

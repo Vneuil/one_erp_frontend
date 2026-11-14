@@ -1265,7 +1265,7 @@ export default function SalesOrdersPage() {
       sortable: true,
       render: (so) => {
         if (!canViewPrices("sales")) {
-          return <span className="text-xs font-mono text-muted-foreground italic">*** (Rahasia)</span>;
+          return <span className="text-xs text-muted-foreground">—</span>;
         }
         return <MoneyDisplay amount={so.totalAmount} highlight className="text-xs font-bold" />;
       },

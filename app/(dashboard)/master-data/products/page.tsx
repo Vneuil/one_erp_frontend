@@ -23,6 +23,7 @@ interface Product {
   stock: number;
   costPrice: number;
   sellingPrice: number;
+  currency?: string;
   status: string;
   variantLabel?: string;
   marketplacePlatform?: string;
@@ -30,6 +31,13 @@ interface Product {
   grade?: string;
   safetyStock?: number;
   organicType?: string;
+  certifications?: string;
+  dimensionLength?: number;
+  dimensionWidth?: number;
+  dimensionHeight?: number;
+  packagingType?: string;
+  packagingSpec?: string;
+  remarks?: string;
   isBelowSafetyStock?: boolean;
 }
 
@@ -128,9 +136,20 @@ export default function ProductsPage() {
                 Grade {item.grade}
               </span>
             )}
-            {item.organicType && (
+            {item.certifications ? (
+              item.certifications.split(",").map((c) => c.trim()).filter(Boolean).map((cert) => (
+                <span key={cert} className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase border border-emerald-200">
+                  {cert}
+                </span>
+              ))
+            ) : item.organicType ? (
               <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase">
                 {item.organicType}
+              </span>
+            ) : null}
+            {item.packagingSpec && (
+              <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-medium border border-amber-200">
+                {item.packagingType ? `${item.packagingType}: ` : ""}{item.packagingSpec}
               </span>
             )}
             {item.variantLabel && (
@@ -140,6 +159,11 @@ export default function ProductsPage() {
             )}
           </div>
           <span className="text-[11px] text-muted-foreground">{item.category}</span>
+          {item.dimensionLength || item.dimensionWidth || item.dimensionHeight ? (
+            <span className="text-[10px] text-muted-foreground ml-2">
+              ({item.dimensionLength || 0}×{item.dimensionWidth || 0}×{item.dimensionHeight || 0} cm)
+            </span>
+          ) : null}
           {item.marketplaceProductId && (
             <span className="block text-[10px] text-muted-foreground">
               TikTok Shop Product ID: {item.marketplaceProductId}
@@ -165,39 +189,37 @@ export default function ProductsPage() {
         </div>
       ),
     },
-    ...((SHOW_PRICE_IN_PRODUCT_MASTER
+    ...((SHOW_PRICE_IN_PRODUCT_MASTER && canViewPrices("products")
       ? [
-    {
-      key: "costPrice",
-      header: "Cost Price",
-      align: "right",
-      render: (item) => {
-        if (!canViewPrices("products")) {
-          return <span className="text-xs font-mono text-muted-foreground italic">*** (Rahasia)</span>;
-        }
-        return (
-          <span className="text-xs text-muted-foreground">
-            <MoneyDisplay amount={item.costPrice} />
-          </span>
-        );
-      },
-    },
-    {
-      key: "sellingPrice",
-      header: "Selling Price",
-      align: "right",
-      sortable: true,
-      render: (item) => {
-        if (!canViewPrices("products")) {
-          return <span className="text-xs font-mono text-muted-foreground italic">*** (Rahasia)</span>;
-        }
-        return (
-          <span className="text-xs font-semibold">
-            <MoneyDisplay amount={item.sellingPrice} highlight />
-          </span>
-        );
-      },
-    },
+          {
+            key: "costPrice",
+            header: "Cost Price",
+            align: "right",
+            render: (item: Product) => (
+              <span className="text-xs text-muted-foreground">
+                {item.currency && item.currency !== "IDR" ? (
+                  <span className="font-mono">{item.currency} {formatNumber(item.costPrice)}</span>
+                ) : (
+                  <MoneyDisplay amount={item.costPrice} />
+                )}
+              </span>
+            ),
+          },
+          {
+            key: "sellingPrice",
+            header: "Selling Price",
+            align: "right",
+            sortable: true,
+            render: (item: Product) => (
+              <span className="text-xs font-semibold">
+                {item.currency && item.currency !== "IDR" ? (
+                  <span className="font-mono text-brand-primary">{item.currency} {formatNumber(item.sellingPrice)}</span>
+                ) : (
+                  <MoneyDisplay amount={item.sellingPrice} highlight />
+                )}
+              </span>
+            ),
+          },
         ]
       : []) as Column<Product>[]),
     {

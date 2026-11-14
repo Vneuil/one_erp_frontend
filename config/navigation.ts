@@ -67,6 +67,8 @@ export const navigationConfig: NavGroup[] = [
         items: [
           { title: "Master Produk", href: "/master-data/products" },
           { title: "Kategori & Satuan", href: "/master-data/categories-units" },
+          { title: "Master Sertifikasi", href: "/master-data/certifications" },
+          { title: "Master Mata Uang", href: "/master-data/currencies" },
           { title: "Master Pelanggan", href: "/master-data/customers" },
           { title: "Master Vendor", href: "/master-data/suppliers" },
           { title: "Master Gudang", href: "/master-data/warehouses" },

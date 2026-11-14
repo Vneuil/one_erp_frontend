@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Eye, Edit, Send, Check, X, Printer, Sparkles, AlertCircle, CheckCircle2, RotateCcw, PackageCheck, Loader2 } from "lucide-react";
+import { Plus, Eye, Edit, Trash2, Send, Check, X, Printer, Sparkles, AlertCircle, CheckCircle2, RotateCcw, PackageCheck, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -610,6 +610,34 @@ export default function PurchaseRequestsPage() {
     }
   };
 
+  // Delete Purchase Request
+  const handleDeletePR = async (id: string, prNumber?: string) => {
+    const ok = await confirm({
+      title: "Hapus Permintaan Pembelian",
+      message: `Hapus Permintaan Pembelian ${prNumber ? `"${prNumber}"` : "ini"}?`,
+      description: "Data PR yang dihapus tidak dapat dikembalikan dari sistem.",
+      confirmText: "Hapus",
+      cancelText: "Batal",
+      variant: "destructive",
+    });
+    if (!ok) return;
+
+    try {
+      await procurementApi.deletePurchaseRequest(id);
+      setPrs((prev) => prev.filter((item) => item.id !== id));
+      if (selectedPr && selectedPr.id === id) {
+        setSelectedPr(null);
+      }
+      setNotice(`Permintaan Pembelian ${prNumber ? `"${prNumber}"` : ""} berhasil dihapus.`);
+    } catch (err) {
+      await alert({
+        title: "Gagal Menghapus PR",
+        message: err instanceof Error ? err.message : "Gagal menghapus Permintaan Pembelian.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Approve
   const handleApprovePR = async (id: string, prNumber?: string) => {
     const ok = await confirm({
@@ -995,28 +1023,41 @@ export default function PurchaseRequestsPage() {
               <Printer className="h-4 w-4" />
             </Button>
 
-            {/* Draft Actions: Edit & Kirim untuk Approval */}
-            {isDraft && (
+            {/* Edit & Delete Actions: Tersedia untuk semua status kecuali yang sudah dikonversi ke PO */}
+            {(pr.status || "").toLowerCase() !== "converted" && (
               <>
                 <Button
                   size="icon"
                   variant="ghost"
                   className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                  title="Ubah Draft PR"
+                  title="Edit Permintaan Pembelian"
                   onClick={() => handleOpenEdit(pr)}
                 >
                   <Edit className="h-4 w-4" />
                 </Button>
                 <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 gap-1 text-[11px] font-semibold text-brand-primary border-brand-primary/30 hover:bg-brand-tint"
-                  title="Kirim untuk Approval Atasan"
-                  onClick={() => handleSendForApproval(pr.id, pr.prNumber)}
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-muted-foreground hover:text-rose-600"
+                  title="Hapus Permintaan Pembelian"
+                  onClick={() => handleDeletePR(pr.id, pr.prNumber)}
                 >
-                  <Send className="h-3 w-3" /> Kirim
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </>
+            )}
+
+            {/* Draft Actions: Kirim untuk Approval */}
+            {isDraft && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 text-[11px] font-semibold text-brand-primary border-brand-primary/30 hover:bg-brand-tint"
+                title="Kirim untuk Approval Atasan"
+                onClick={() => handleSendForApproval(pr.id, pr.prNumber)}
+              >
+                <Send className="h-3 w-3" /> Kirim
+              </Button>
             )}
 
             {/* Approval Actions: Only when Pending and user is authorized approver */}
@@ -1420,7 +1461,7 @@ export default function PurchaseRequestsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit PR Dialog (Draft Only) */}
+      {/* Edit PR Dialog */}
       <Dialog open={!!editingPr} onOpenChange={(open) => !open && setEditingPr(null)}>
         <DialogContent className="w-[calc(100%-2rem)] max-w-lg max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
@@ -1464,6 +1505,16 @@ export default function PurchaseRequestsPage() {
                 ) : (
                   <div className="rounded-lg border border-border bg-white overflow-x-auto">
                     <table className="w-full text-xs">
+                      <thead className="bg-slate-100/70 text-muted-foreground border-b border-border">
+                        <tr>
+                          <th className="py-1.5 px-3 text-left font-semibold">Nama Produk</th>
+                          <th className="py-1.5 px-3 text-center font-semibold w-28">Jumlah & Satuan</th>
+                          {pricesAllowed && (
+                            <th className="py-1.5 px-3 text-right font-semibold">Subtotal (Est.)</th>
+                          )}
+                          <th className="py-1.5 px-3 text-right font-semibold w-12">Aksi</th>
+                        </tr>
+                      </thead>
                       <tbody className="divide-y divide-border">
                         {editLines.map((l) => {
                           const product = products.find((p) => p.id === l.productId);
@@ -1474,7 +1525,25 @@ export default function PurchaseRequestsPage() {
                                 <div className="font-medium text-foreground">{product?.name || l.productId}</div>
                                 {l.notes && <div className="text-[10px] text-muted-foreground">{l.notes}</div>}
                               </td>
-                              <td className="py-2 px-3 text-center whitespace-nowrap">{l.quantity}x</td>
+                              <td className="py-2 px-3 text-center whitespace-nowrap">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    value={l.quantity}
+                                    onChange={(e) => {
+                                      const val = Number(e.target.value);
+                                      if (val >= 1) {
+                                        setEditLines((prev) =>
+                                          prev.map((item) => (item.productId === l.productId ? { ...item, quantity: val } : item))
+                                        );
+                                      }
+                                    }}
+                                    className="h-7 w-16 text-center text-xs bg-white font-medium"
+                                  />
+                                  <span className="text-[11px] text-muted-foreground font-medium">{product?.unit || "Unit"}</span>
+                                </div>
+                              </td>
                               {pricesAllowed && (
                                 <td className="py-2 px-3 text-right whitespace-nowrap text-muted-foreground">
                                   <MoneyDisplay amount={subtotal} />
@@ -1578,7 +1647,7 @@ export default function PurchaseRequestsPage() {
                   {pricesAllowed ? (
                     <MoneyDisplay amount={selectedPrTotalNominal} highlight className="text-base font-bold text-foreground" />
                   ) : (
-                    <span className="text-xs font-semibold text-muted-foreground">*** (Rahasia)</span>
+                    <span className="text-xs text-muted-foreground">—</span>
                   )}
                 </div>
               </div>
@@ -1627,6 +1696,7 @@ export default function PurchaseRequestsPage() {
                     <tr>
                       <th className="py-2 px-3 text-left font-semibold">Nama Produk</th>
                       <th className="py-2 px-3 text-center font-semibold">Qty</th>
+                      <th className="py-2 px-3 text-center font-semibold">Satuan</th>
                       {pricesAllowed && (
                         <>
                           <th className="py-2 px-3 text-right font-semibold">Harga Satuan (Est.)</th>
@@ -1650,7 +1720,8 @@ export default function PurchaseRequestsPage() {
                                 <span className="block text-[10px] text-muted-foreground font-mono">{product.sku}</span>
                               )}
                             </td>
-                            <td className="py-2 px-3 text-center font-semibold">{l.quantity}x</td>
+                            <td className="py-2 px-3 text-center font-semibold">{l.quantity.toLocaleString("id-ID")}</td>
+                            <td className="py-2 px-3 text-center text-muted-foreground font-medium">{product?.unit || "Unit"}</td>
                             {pricesAllowed && (
                               <>
                                 <td className="py-2 px-3 text-right text-muted-foreground">
@@ -1667,7 +1738,7 @@ export default function PurchaseRequestsPage() {
                       })
                     ) : (
                       <tr>
-                        <td colSpan={pricesAllowed ? 5 : 3} className="py-3 text-center text-muted-foreground">
+                        <td colSpan={pricesAllowed ? 6 : 4} className="py-3 text-center text-muted-foreground">
                           {selectedPr.itemCount} items terlampir
                         </td>
                       </tr>
@@ -1676,7 +1747,7 @@ export default function PurchaseRequestsPage() {
                   {pricesAllowed && selectedPr.lines && selectedPr.lines.length > 0 && (
                     <tfoot className="bg-slate-50 border-t border-border font-bold">
                       <tr>
-                        <td colSpan={3} className="py-2.5 px-3 text-right text-muted-foreground text-xs">
+                        <td colSpan={4} className="py-2.5 px-3 text-right text-muted-foreground text-xs">
                           Total Estimasi Nilai PR:
                         </td>
                         <td className="py-2.5 px-3 text-right text-brand-primary text-xs font-bold">
@@ -1722,9 +1793,17 @@ export default function PurchaseRequestsPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                {/* Draft Actions */}
-                {(selectedPr.status || "").toLowerCase() === "draft" && (
+                {/* Actions: Edit & Hapus (tersedia jika belum dikonversi ke PO) */}
+                {(selectedPr.status || "").toLowerCase() !== "converted" && (
                   <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200"
+                      onClick={() => handleDeletePR(selectedPr.id, selectedPr.prNumber)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Hapus PR
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
@@ -1735,17 +1814,21 @@ export default function PurchaseRequestsPage() {
                         handleOpenEdit(toEdit);
                       }}
                     >
-                      <Edit className="h-3.5 w-3.5" /> Edit Draft
-                    </Button>
-                    <Button
-                      variant="gradient"
-                      size="sm"
-                      className="gap-1.5 text-xs font-semibold"
-                      onClick={() => handleSendForApproval(selectedPr.id, selectedPr.prNumber)}
-                    >
-                      <Send className="h-3.5 w-3.5" /> Kirim untuk Approval
+                      <Edit className="h-3.5 w-3.5" /> Edit PR
                     </Button>
                   </>
+                )}
+
+                {/* Draft Actions: Kirim untuk Approval */}
+                {(selectedPr.status || "").toLowerCase() === "draft" && (
+                  <Button
+                    variant="gradient"
+                    size="sm"
+                    className="gap-1.5 text-xs font-semibold"
+                    onClick={() => handleSendForApproval(selectedPr.id, selectedPr.prNumber)}
+                  >
+                    <Send className="h-3.5 w-3.5" /> Kirim untuk Approval
+                  </Button>
                 )}
 
                 {/* Approval Actions in Detail */}
@@ -1880,6 +1963,7 @@ export default function PurchaseRequestsPage() {
                       <th className="border border-slate-300 py-2 px-2.5 text-left font-bold">Kode / SKU</th>
                       <th className="border border-slate-300 py-2 px-2.5 text-left font-bold">Deskripsi Barang</th>
                       <th className="border border-slate-300 py-2 px-2.5 text-center w-16 font-bold">Qty</th>
+                      <th className="border border-slate-300 py-2 px-2.5 text-center w-16 font-bold">Satuan</th>
                       {pricesAllowed && (
                         <>
                           <th className="border border-slate-300 py-2 px-2.5 text-right w-28 font-bold">Harga Satuan (Est.)</th>
@@ -1905,7 +1989,10 @@ export default function PurchaseRequestsPage() {
                               {product?.name || l.productId}
                             </td>
                             <td className="border border-slate-300 py-2 px-2.5 text-center font-bold text-slate-900">
-                              {l.quantity}
+                              {l.quantity.toLocaleString("id-ID")}
+                            </td>
+                            <td className="border border-slate-300 py-2 px-2.5 text-center text-slate-700 font-medium">
+                              {product?.unit || "Unit"}
                             </td>
                             {pricesAllowed && (
                               <>
@@ -1925,7 +2012,7 @@ export default function PurchaseRequestsPage() {
                       })
                     ) : (
                       <tr>
-                        <td colSpan={pricesAllowed ? 7 : 5} className="py-4 text-center text-slate-400">
+                        <td colSpan={pricesAllowed ? 8 : 6} className="py-4 text-center text-slate-400">
                           {selectedPr.itemCount} items
                         </td>
                       </tr>
@@ -1934,7 +2021,7 @@ export default function PurchaseRequestsPage() {
                   {pricesAllowed && selectedPr.lines && selectedPr.lines.length > 0 && (
                     <tfoot>
                       <tr className="total-row bg-slate-50 font-bold border-t-2 border-slate-400">
-                        <td colSpan={5} className="border border-slate-300 py-2.5 px-3 text-right text-slate-700">
+                        <td colSpan={6} className="border border-slate-300 py-2.5 px-3 text-right text-slate-700">
                           Total Estimasi Nilai PR:
                         </td>
                         <td className="border border-slate-300 py-2.5 px-3 text-right text-slate-950 font-bold">
