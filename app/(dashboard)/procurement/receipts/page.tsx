@@ -85,7 +85,7 @@ export default function ReceiptsPage() {
     inventoryApi
       .listWarehouses({ perPage: 50 })
       .then((res) => {
-        const list = res.data || [];
+        const list = (res.data || []).filter((w) => w.isActive !== false);
         setWarehouses(list);
         if (list.length > 0) setWarehouseId((prev) => prev || list[0].id);
       })

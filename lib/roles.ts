@@ -14,8 +14,9 @@ export const canManageMasterData = (role?: string | null) => MANAGER.has((role ?
 
 /**
  * Master Produk carries standard cost and selling prices.
+ * Per PT Manna policy, pricing is transaction-based (PO / SO) and omitted from master data.
  */
-export const SHOW_PRICE_IN_PRODUCT_MASTER = true;
+export const SHOW_PRICE_IN_PRODUCT_MASTER = false;
 
 // Mirrors the backend (actor.TradeDocRoles / MaySeePrices). The server stays authoritative.
 const TRADE_DOCS = new Set([

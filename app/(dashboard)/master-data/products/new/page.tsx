@@ -613,47 +613,52 @@ export default function NewProductPage() {
                 )}
               </div>
 
-              {/* Standard Cost Price (Feedback 7: input tidak default terkunci di 0) */}
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">
-                  Standard Cost Price ({formData.currency})
-                </label>
-                <Input
-                  type="number"
-                  step="any"
-                  min={0}
-                  value={formData.costPrice}
-                  onFocus={(e) => e.target.select()}
-                  onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
-                  placeholder="0"
-                />
-                {formData.currency !== baseCurrency && activeRate && formData.costPrice && (
-                  <p className="text-[10px] text-muted-foreground">
-                    ≈ Rp {formatNumber(Number(formData.costPrice) * activeRate.rateToBase)}
-                  </p>
-                )}
-              </div>
+              {/* Standard Cost & Selling Price conditional on SHOW_PRICE_IN_PRODUCT_MASTER */}
+              {SHOW_PRICE_IN_PRODUCT_MASTER && (
+                <>
+                  {/* Standard Cost Price (Feedback 7: input tidak default terkunci di 0) */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-foreground">
+                      Standard Cost Price ({formData.currency})
+                    </label>
+                    <Input
+                      type="number"
+                      step="any"
+                      min={0}
+                      value={formData.costPrice}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
+                      placeholder="0"
+                    />
+                    {formData.currency !== baseCurrency && activeRate && formData.costPrice && (
+                      <p className="text-[10px] text-muted-foreground">
+                        ≈ Rp {formatNumber(Number(formData.costPrice) * activeRate.rateToBase)}
+                      </p>
+                    )}
+                  </div>
 
-              {/* Selling Price (Feedback 7: input tidak default terkunci di 0) */}
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">
-                  Standard Selling Price ({formData.currency})
-                </label>
-                <Input
-                  type="number"
-                  step="any"
-                  min={0}
-                  value={formData.sellingPrice}
-                  onFocus={(e) => e.target.select()}
-                  onChange={(e) => setFormData({ ...formData, sellingPrice: e.target.value })}
-                  placeholder="0"
-                />
-                {formData.currency !== baseCurrency && activeRate && formData.sellingPrice && (
-                  <p className="text-[10px] text-muted-foreground">
-                    ≈ Rp {formatNumber(Number(formData.sellingPrice) * activeRate.rateToBase)}
-                  </p>
-                )}
-              </div>
+                  {/* Selling Price (Feedback 7: input tidak default terkunci di 0) */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-foreground">
+                      Standard Selling Price ({formData.currency})
+                    </label>
+                    <Input
+                      type="number"
+                      step="any"
+                      min={0}
+                      value={formData.sellingPrice}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => setFormData({ ...formData, sellingPrice: e.target.value })}
+                      placeholder="0"
+                    />
+                    {formData.currency !== baseCurrency && activeRate && formData.sellingPrice && (
+                      <p className="text-[10px] text-muted-foreground">
+                        ≈ Rp {formatNumber(Number(formData.sellingPrice) * activeRate.rateToBase)}
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="space-y-2 max-w-xs">

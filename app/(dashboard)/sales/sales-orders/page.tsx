@@ -893,11 +893,12 @@ export default function SalesOrdersPage() {
                       ? "tokopedia"
                       : undefined;
             const isPos = ch === "pos";
+            const isQuotation = ch.includes("quotation") || Boolean(o.invoiceDocType === "PI" || (o as any).quotationId || (o as any).quotationNumber);
             return {
             id: o.id,
             orderNumber: o.orderNumber,
             createdByEmail: o.createdByEmail,
-            source: platform ? "marketplace" : isPos ? "pos" : "quotation",
+            source: (platform ? "marketplace" : isPos ? "pos" : isQuotation ? "quotation" : "manual") as OrderSourceType,
             platform,
             externalOrderId: o.marketplaceOrderId,
             customerName: o.customerName,
@@ -1234,6 +1235,7 @@ export default function SalesOrdersPage() {
       const res = await salesApi.createOrder({
         customerId: customer.id,
         customerName: customer.name,
+        channel: "Direct B2B",
         paymentTermId: selectedPaymentTermId || undefined,
         paymentTerm: selectedPaymentTerm || undefined,
         taxRateId: selectedTaxRateId || undefined,

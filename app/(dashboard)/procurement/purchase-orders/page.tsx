@@ -66,7 +66,11 @@ export default function PurchaseOrdersPage() {
       }),
     [suppliers, eligibility, certFilter]
   );
-  const suspendedFor = (id: string) => eligibility.find((e) => e.supplierId === id)?.suspended ?? [];
+  const suspendedFor = (id: string) => {
+    const allSuspended = eligibility.find((e) => e.supplierId === id)?.suspended ?? [];
+    if (!certFilter) return allSuspended;
+    return allSuspended.filter((s) => s.toLowerCase() === certFilter.toLowerCase());
+  };
   const [allProducts, setAllProducts] = React.useState<ProductItem[]>([]);
   const productMap = React.useMemo(() => new Map(allProducts.map((p) => [p.id, p])), [allProducts]);
   const products = React.useMemo(() => allProducts.filter(isProductActive), [allProducts]);

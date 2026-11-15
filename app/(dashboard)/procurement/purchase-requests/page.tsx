@@ -25,6 +25,7 @@ import { ApprovalTimeline, canUserApprove } from "@/components/shared/approval-t
 import { MoneyDisplay } from "@/components/shared/money-display";
 import { useNavigationAccess } from "@/providers/navigation-access";
 import { usePermission } from "@/lib/hooks/use-permission";
+import { SHOW_PRICE_IN_PRODUCT_MASTER } from "@/lib/roles";
 
 interface PurchaseRequest {
   id: string;
@@ -1444,7 +1445,7 @@ export default function PurchaseRequestsPage() {
                       <option value="">Pilih produk...</option>
                       {products.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.name} ({p.sku}){pricesAllowed ? ` — Rp ${(p.costPrice || 0).toLocaleString("id-ID")}` : ""}
+                          {p.name} ({p.sku}){pricesAllowed && SHOW_PRICE_IN_PRODUCT_MASTER && p.costPrice ? ` — Rp ${(p.costPrice || 0).toLocaleString("id-ID")}` : ""}
                         </option>
                       ))}
                     </select>
@@ -1606,7 +1607,7 @@ export default function PurchaseRequestsPage() {
                       <option value="">Pilih produk...</option>
                       {products.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.name} ({p.sku}){pricesAllowed ? ` — Rp ${(p.costPrice || 0).toLocaleString("id-ID")}` : ""}
+                          {p.name} ({p.sku}){pricesAllowed && SHOW_PRICE_IN_PRODUCT_MASTER && p.costPrice ? ` — Rp ${(p.costPrice || 0).toLocaleString("id-ID")}` : ""}
                         </option>
                       ))}
                     </select>
