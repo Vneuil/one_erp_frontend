@@ -115,17 +115,20 @@ export default function PickingPage() {
     {
       key: "pickerName",
       header: "Assigned Picker",
+      hiddenBelow: "md",
       render: (pk) => <span className="text-xs font-semibold text-foreground">{pk.pickerName}</span>,
     },
     {
       key: "zone",
       header: "Warehouse Zone",
+      hiddenBelow: "lg",
       render: (pk) => <span className="text-xs text-muted-foreground">{pk.zone}</span>,
     },
     {
       key: "progress",
       header: "Pick Progress",
       align: "center",
+      hiddenBelow: "sm",
       render: (pk) => (
         <span className="text-xs font-bold text-foreground">
           {pk.pickedItems} / {pk.itemsToPick} Items

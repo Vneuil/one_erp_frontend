@@ -243,6 +243,7 @@ export default function RequisitionsPage() {
     {
       key: "department",
       header: "Departemen / Bagian",
+      hiddenBelow: "md",
       render: (r: MaterialRequisitionItem) => (
         <div>
           <div className="font-semibold text-foreground text-xs">{r.department}</div>
@@ -289,6 +290,7 @@ export default function RequisitionsPage() {
     {
       key: "status",
       header: "Status",
+      hiddenBelow: "sm",
       render: (r: MaterialRequisitionItem) => {
         if (r.status === "completed") {
           return (
@@ -600,7 +602,7 @@ export default function RequisitionsPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-semibold text-foreground">Tanggal Permintaan</label>
                 <Input
@@ -622,7 +624,7 @@ export default function RequisitionsPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-semibold text-foreground">Nama Pemohon (Produksi)</label>
                 <Input
@@ -687,7 +689,7 @@ export default function RequisitionsPage() {
                       </Button>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       <div>
                         <label className="text-[10px] text-muted-foreground">Batch/Lot</label>
                         <Input
@@ -742,7 +744,7 @@ export default function RequisitionsPage() {
                     </div>
 
                     {activeTab === "packaging" && (
-                      <div className="grid grid-cols-3 gap-2 pt-1 border-t border-border">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-border">
                         <div>
                           <label className="text-[10px] text-emerald-700 font-medium">Terpakai</label>
                           <Input
@@ -803,7 +805,7 @@ export default function RequisitionsPage() {
 
                 <div className="space-y-2">
                   {formData.dispensingItems?.map((item, idx) => (
-                    <div key={idx} className="p-2.5 rounded-lg border border-border bg-card grid grid-cols-6 gap-2 items-center text-xs">
+                    <div key={idx} className="p-2.5 rounded-lg border border-border bg-card grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 items-center text-xs">
                       <div>
                         <span className="font-bold text-foreground">#{item.jerryCanNo}</span>
                       </div>

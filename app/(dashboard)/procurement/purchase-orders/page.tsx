@@ -550,16 +550,19 @@ export default function PurchaseOrdersPage() {
     {
       key: "paymentTerm",
       header: "Termin (TOP)",
+      hiddenBelow: "lg",
       render: (po) => <span className="text-xs text-foreground font-medium">{po.paymentTerm || "-"}</span>,
     },
     {
       key: "orderDate",
       header: "Order Date",
+      hiddenBelow: "md",
       render: (po) => <span className="text-xs text-muted-foreground">{po.orderDate}</span>,
     },
     {
       key: "expectedDate",
       header: "Expected Delivery",
+      hiddenBelow: "md",
       render: (po) => <span className="text-xs font-medium text-foreground">{po.expectedDate}</span>,
     },
     {
@@ -848,7 +851,7 @@ export default function PurchaseOrdersPage() {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-foreground">Expected Delivery</label>
                 <Input type="date" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} required />
@@ -868,7 +871,7 @@ export default function PurchaseOrdersPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-foreground">Term of Payment (TOP)</label>
                 <select
@@ -905,7 +908,7 @@ export default function PurchaseOrdersPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-foreground">Skema Ongkir</label>
                 <select
@@ -1050,7 +1053,7 @@ export default function PurchaseOrdersPage() {
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-foreground">Expected Delivery</label>
                 <Input type="date" value={editExpectedDate} onChange={(e) => setEditExpectedDate(e.target.value)} required />
@@ -1068,7 +1071,7 @@ export default function PurchaseOrdersPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-foreground">Biaya Ongkir (Rp)</label>
                 <Input

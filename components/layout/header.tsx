@@ -168,7 +168,7 @@ export function Header() {
 
       {/* Right side: Quick Search, Language Switcher, Company Switcher, Notification, User Profile */}
       <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-        {/* Global search bar button */}
+        {/* Global search bar button (desktop / tablet) */}
         <button
           onClick={() => setCommandMenuOpen(true)}
           className="hidden sm:flex items-center gap-2 h-9 px-3 rounded-lg border border-border bg-muted/50 hover:bg-muted text-xs text-muted-foreground hover:text-foreground transition-all cursor-pointer w-48 md:w-60"
@@ -179,6 +179,17 @@ export function Header() {
             ⌘K
           </kbd>
         </button>
+
+        {/* Mobile search icon button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setCommandMenuOpen(true)}
+          className="sm:hidden h-9 w-9 text-muted-foreground hover:text-foreground cursor-pointer"
+          aria-label={t.header.quickSearch}
+        >
+          <Search className="h-4 w-4" />
+        </Button>
 
         {/* Bilingual Language Switcher */}
         <div>
@@ -255,7 +266,7 @@ export function Header() {
               )}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-80">
+          <DropdownMenuContent align="end" className="w-[calc(100vw-2rem)] sm:w-80 max-w-sm">
             <div className="flex items-center justify-between px-3 py-2 border-b border-border">
               <span className="text-xs font-bold text-foreground">
                 {isIndonesian ? "Notifikasi" : "Notifications"}

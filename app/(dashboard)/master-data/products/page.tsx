@@ -226,6 +226,7 @@ export default function ProductsPage() {
       key: "stock",
       header: "Stock Level",
       sortable: true,
+      hiddenBelow: "sm",
       render: (item) => (
         <div>
           <span className="text-xs font-medium">
@@ -245,6 +246,7 @@ export default function ProductsPage() {
             key: "costPrice",
             header: "Cost Price",
             align: "right",
+            hiddenBelow: "lg",
             render: (item: Product) => (
               <span className="text-xs text-muted-foreground">
                 <MoneyDisplay amount={item.costPrice} currency={item.currency || "IDR"} />
@@ -256,6 +258,7 @@ export default function ProductsPage() {
             header: "Selling Price",
             align: "right",
             sortable: true,
+            hiddenBelow: "md",
             render: (item: Product) => (
               <span className="text-xs font-semibold">
                 <MoneyDisplay amount={item.sellingPrice} currency={item.currency || "IDR"} highlight />
@@ -267,6 +270,7 @@ export default function ProductsPage() {
     {
       key: "status",
       header: "Status",
+      hiddenBelow: "sm",
       render: (item) => {
         const active = isProductActive(item);
         return (

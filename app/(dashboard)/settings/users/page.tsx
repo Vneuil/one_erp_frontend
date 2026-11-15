@@ -105,6 +105,7 @@ export default function UsersSettingsPage() {
     {
       key: "roleId",
       header: "Custom Role (RBAC)",
+      hiddenBelow: "md",
       render: (u) => (
         <select
           value={u.roleId || ""}

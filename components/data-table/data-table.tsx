@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 export interface Column<T> {
   key: string;
@@ -27,6 +28,17 @@ export interface Column<T> {
   render?: (item: T) => React.ReactNode;
   sortable?: boolean;
   align?: "left" | "center" | "right";
+  className?: string;
+  hiddenOnMobile?: boolean;
+  hiddenBelow?: "sm" | "md" | "lg";
+}
+
+function getColumnVisibilityClass(col: Column<unknown>): string {
+  if (col.hiddenOnMobile) return "hidden md:table-cell";
+  if (col.hiddenBelow === "sm") return "hidden sm:table-cell";
+  if (col.hiddenBelow === "md") return "hidden md:table-cell";
+  if (col.hiddenBelow === "lg") return "hidden lg:table-cell";
+  return "";
 }
 
 interface DataTableProps<T> {
@@ -116,7 +128,7 @@ export function DataTable<T extends object>({
     <div className="space-y-4">
       {/* Search & Actions Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2 flex-1 max-w-sm">
+        <div className="flex items-center gap-2 flex-1 w-full sm:max-w-sm">
           {searchKey && (
             <div className="relative w-full">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -127,40 +139,47 @@ export function DataTable<T extends object>({
                   setSearch(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="pl-9 h-9 text-xs"
+                className="pl-9 h-9 text-xs w-full"
               />
             </div>
           )}
           {filterSlot}
         </div>
 
-        {actionSlot && <div className="flex items-center gap-2">{actionSlot}</div>}
+        {actionSlot && <div className="flex items-center gap-2 flex-wrap">{actionSlot}</div>}
       </div>
 
       {/* Table Container */}
-      <div className="rounded-xl border border-border bg-white shadow-xs overflow-hidden">
+      <div className="rounded-xl border border-border bg-white shadow-xs overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              {columns.map((col) => (
-                <TableHead
-                  key={col.key}
-                  className={col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"}
-                >
-                  {col.sortable ? (
-                    <button
-                      type="button"
-                      onClick={() => handleSort(col.key)}
-                      className="inline-flex items-center gap-1.5 hover:text-foreground cursor-pointer font-semibold"
-                    >
+              {columns.map((col) => {
+                const visibility = getColumnVisibilityClass(col as Column<unknown>);
+                return (
+                  <TableHead
+                    key={col.key}
+                    className={cn(
+                      col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left",
+                      visibility,
+                      col.className
+                    )}
+                  >
+                    {col.sortable ? (
+                      <button
+                        type="button"
+                        onClick={() => handleSort(col.key)}
+                        className="inline-flex items-center gap-1.5 hover:text-foreground cursor-pointer font-semibold"
+                      >
+                        <span>{col.header}</span>
+                        <ArrowUpDown className="h-3 w-3" />
+                      </button>
+                    ) : (
                       <span>{col.header}</span>
-                      <ArrowUpDown className="h-3 w-3" />
-                    </button>
-                  ) : (
-                    <span>{col.header}</span>
-                  )}
-                </TableHead>
-              ))}
+                    )}
+                  </TableHead>
+                );
+              })}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -192,20 +211,25 @@ export function DataTable<T extends object>({
                   onClick={() => onRowClick?.(item)}
                   className={onRowClick ? "cursor-pointer" : undefined}
                 >
-                  {columns.map((col) => (
-                    <TableCell
-                      key={col.key}
-                      className={
-                        col.align === "right"
-                          ? "text-right"
-                          : col.align === "center"
-                          ? "text-center"
-                          : "text-left"
-                      }
-                    >
-                      {col.render ? col.render(item) : String((item as Record<string, unknown>)[col.key] ?? "")}
-                    </TableCell>
-                  ))}
+                  {columns.map((col) => {
+                    const visibility = getColumnVisibilityClass(col as Column<unknown>);
+                    return (
+                      <TableCell
+                        key={col.key}
+                        className={cn(
+                          col.align === "right"
+                            ? "text-right"
+                            : col.align === "center"
+                            ? "text-center"
+                            : "text-left",
+                          visibility,
+                          col.className
+                        )}
+                      >
+                        {col.render ? col.render(item) : String((item as Record<string, unknown>)[col.key] ?? "")}
+                      </TableCell>
+                    );
+                  })}
                 </TableRow>
               ))
             )}
@@ -214,19 +238,20 @@ export function DataTable<T extends object>({
       </div>
 
       {/* Pagination Footer */}
-      <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
-        <span>
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground px-1 py-1">
+        <span className="text-center sm:text-left">
           {t.common.showing} {paginatedData.length > 0 ? (visiblePage - 1) * pageSize + 1 : 0} {isIndonesian ? "sampai" : "to"}{" "}
           {Math.min(visiblePage * pageSize, sortedData.length)} {t.common.of} {sortedData.length} {t.common.entries}
         </span>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-wrap justify-center">
           <Button
             variant="outline"
             size="icon"
             className="h-8 w-8"
             disabled={visiblePage === 1}
             onClick={() => setCurrentPage(1)}
+            aria-label="First page"
           >
             <ChevronsLeft className="h-4 w-4" />
           </Button>
@@ -236,10 +261,11 @@ export function DataTable<T extends object>({
             className="h-8 w-8"
             disabled={visiblePage === 1}
             onClick={() => setCurrentPage(Math.max(1, visiblePage - 1))}
+            aria-label="Previous page"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="px-3 py-1 font-medium text-foreground">
+          <span className="px-2 sm:px-3 py-1 font-medium text-foreground text-center">
             {t.common.page} {visiblePage} {t.common.of} {totalPages}
           </span>
           <Button
@@ -248,6 +274,7 @@ export function DataTable<T extends object>({
             className="h-8 w-8"
             disabled={visiblePage === totalPages}
             onClick={() => setCurrentPage(Math.min(totalPages, visiblePage + 1))}
+            aria-label="Next page"
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -257,6 +284,7 @@ export function DataTable<T extends object>({
             className="h-8 w-8"
             disabled={visiblePage === totalPages}
             onClick={() => setCurrentPage(totalPages)}
+            aria-label="Last page"
           >
             <ChevronsRight className="h-4 w-4" />
           </Button>

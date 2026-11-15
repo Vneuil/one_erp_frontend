@@ -1385,6 +1385,7 @@ export default function SalesOrdersPage() {
       key: "source",
       header: "Order Channel / Source",
       sortable: true,
+      hiddenBelow: "md",
       render: (so) => (
         <div className="flex flex-col gap-1">
           <ChannelBadge
@@ -1466,6 +1467,7 @@ export default function SalesOrdersPage() {
       key: "orderDate",
       header: "Order Date",
       sortable: true,
+      hiddenBelow: "md",
       render: (so) => <span className="text-xs text-muted-foreground">{so.orderDate}</span>,
     },
     {
@@ -1483,6 +1485,7 @@ export default function SalesOrdersPage() {
     {
       key: "paymentTerms",
       header: "Termin (TOP)",
+      hiddenBelow: "lg",
       render: (so) => (
         <span className="text-xs text-foreground font-medium">{so.paymentTerms || "-"}</span>
       ),

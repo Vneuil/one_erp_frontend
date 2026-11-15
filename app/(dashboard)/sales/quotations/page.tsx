@@ -584,16 +584,19 @@ export default function QuotationsPage() {
     {
       key: "paymentTerm",
       header: "Termin (TOP)",
+      hiddenBelow: "lg",
       render: (q) => <span className="text-xs text-foreground font-medium">{q.paymentTerm || "-"}</span>,
     },
     {
       key: "issueDate",
       header: "Date Issued",
+      hiddenBelow: "md",
       render: (q) => <span className="text-xs text-muted-foreground">{q.issueDate}</span>,
     },
     {
       key: "expiryDate",
       header: "Valid Until",
+      hiddenBelow: "md",
       render: (q) => <span className="text-xs text-foreground font-medium">{q.expiryDate}</span>,
     },
     {

@@ -902,13 +902,13 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
+          <div className="flex items-center gap-2 self-start sm:self-center flex-wrap w-full sm:w-auto justify-between sm:justify-start">
             {/* View Switching Pills: Allows toggling between Pending Approvals and Unsubmitted Drafts */}
             <div className="inline-flex items-center p-1 rounded-lg bg-slate-100 border border-slate-200/80 text-xs">
               <button
                 type="button"
                 onClick={() => setSelectedTab("approvals")}
-                className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer text-xs flex items-center gap-1.5 ${
+                className={`px-2 sm:px-3 py-1 rounded-md font-semibold transition-all cursor-pointer text-[11px] sm:text-xs flex items-center gap-1.5 ${
                   activeTab === "approvals"
                     ? "bg-white text-foreground shadow-xs"
                     : "text-muted-foreground hover:text-foreground"
@@ -924,7 +924,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => setSelectedTab("drafts")}
-                className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer text-xs flex items-center gap-1.5 ${
+                className={`px-2 sm:px-3 py-1 rounded-md font-semibold transition-all cursor-pointer text-[11px] sm:text-xs flex items-center gap-1.5 ${
                   activeTab === "drafts"
                     ? "bg-white text-foreground shadow-xs"
                     : "text-muted-foreground hover:text-foreground"
@@ -958,13 +958,13 @@ export default function DashboardPage() {
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50/80 border-y border-border text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                     <tr>
-                      <th className="py-3 px-4">{copy.docNumberCol}</th>
-                      <th className="py-3 px-4">{copy.docTypeCol}</th>
-                      <th className="py-3 px-4">{copy.partyCol}</th>
-                      <th className="py-3 px-4">{copy.dateCol}</th>
-                      <th className="py-3 px-4 text-right">{copy.amountCol}</th>
-                      <th className="py-3 px-4 text-center">{copy.statusCol}</th>
-                      <th className="py-3 px-4 text-right">{copy.actionCol}</th>
+                      <th className="py-3 px-3 sm:px-4">{copy.docNumberCol}</th>
+                      <th className="py-3 px-3 sm:px-4">{copy.docTypeCol}</th>
+                      <th className="py-3 px-3 sm:px-4 hidden md:table-cell">{copy.partyCol}</th>
+                      <th className="py-3 px-3 sm:px-4 hidden sm:table-cell">{copy.dateCol}</th>
+                      <th className="py-3 px-3 sm:px-4 text-right">{copy.amountCol}</th>
+                      <th className="py-3 px-3 sm:px-4 text-center hidden lg:table-cell">{copy.statusCol}</th>
+                      <th className="py-3 px-3 sm:px-4 text-right">{copy.actionCol}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -985,53 +985,53 @@ export default function DashboardPage() {
 
                       return (
                         <tr key={req.id} className="hover:bg-brand-tint/20 transition-colors">
-                          <td className="py-3 px-4 font-mono font-bold text-foreground">
+                          <td className="py-3 px-3 sm:px-4 font-mono font-bold text-foreground">
                             <Link href={viewHref} className="hover:text-brand-primary hover:underline">
                               {req.documentNumber}
                             </Link>
                           </td>
-                          <td className="py-3 px-4">
+                          <td className="py-3 px-3 sm:px-4">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${typeConfig.badgeClass}`}>
                               {typeConfig.badge} · {isIndonesian ? typeConfig.id : typeConfig.en}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-muted-foreground">
+                          <td className="py-3 px-3 sm:px-4 text-muted-foreground hidden md:table-cell">
                             {req.requesterName || "-"}
                           </td>
-                          <td className="py-3 px-4 text-muted-foreground whitespace-nowrap">
+                          <td className="py-3 px-3 sm:px-4 text-muted-foreground whitespace-nowrap hidden sm:table-cell">
                             {formatDocDate(req.createdAt)}
                           </td>
-                          <td className="py-3 px-4 text-right font-bold text-foreground whitespace-nowrap">
+                          <td className="py-3 px-3 sm:px-4 text-right font-bold text-foreground whitespace-nowrap">
                             <MoneyDisplay amount={req.amount} />
                           </td>
-                          <td className="py-3 px-4 text-center whitespace-nowrap">
+                          <td className="py-3 px-3 sm:px-4 text-center whitespace-nowrap hidden lg:table-cell">
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
                               <Clock className="h-3 w-3" />
                               {copy.statusPendingLevel} {req.currentLevel}
                               {currentStep?.approverRole ? ` (${currentStep.approverRole})` : ""}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <td className="py-3 px-3 sm:px-4 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1.5">
                               <Button
                                 size="sm"
                                 variant="outline"
                                 disabled={actingApprovalId === req.id}
                                 onClick={() => handleReject(req)}
-                                className="h-7 px-2.5 text-xs font-semibold border-rose-300 text-rose-700 hover:bg-rose-50 cursor-pointer"
+                                className="h-7 px-2 text-xs font-semibold border-rose-300 text-rose-700 hover:bg-rose-50 cursor-pointer"
                               >
-                                <X className="h-3 w-3 mr-1" />
-                                {copy.rejectBtn}
+                                <X className="h-3 w-3 sm:mr-1" />
+                                <span className="hidden sm:inline">{copy.rejectBtn}</span>
                               </Button>
                               <Button
                                 size="sm"
                                 variant="gradient"
                                 disabled={actingApprovalId === req.id}
                                 onClick={() => handleApprove(req)}
-                                className="h-7 px-2.5 text-xs font-semibold cursor-pointer"
+                                className="h-7 px-2 text-xs font-semibold cursor-pointer"
                               >
-                                <Check className="h-3 w-3 mr-1" />
-                                {copy.approveBtn}
+                                <Check className="h-3 w-3 sm:mr-1" />
+                                <span className="hidden sm:inline">{copy.approveBtn}</span>
                               </Button>
                             </div>
                           </td>
@@ -1052,13 +1052,13 @@ export default function DashboardPage() {
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50/80 border-y border-border text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                     <tr>
-                      <th className="py-3 px-4">{copy.docNumberCol}</th>
-                      <th className="py-3 px-4">{copy.docTypeCol}</th>
-                      <th className="py-3 px-4">{copy.partyCol}</th>
-                      <th className="py-3 px-4">{copy.dateCol}</th>
-                      <th className="py-3 px-4 text-right">{copy.amountCol}</th>
-                      <th className="py-3 px-4 text-center">{copy.statusCol}</th>
-                      <th className="py-3 px-4 text-right">{copy.actionCol}</th>
+                      <th className="py-3 px-3 sm:px-4">{copy.docNumberCol}</th>
+                      <th className="py-3 px-3 sm:px-4">{copy.docTypeCol}</th>
+                      <th className="py-3 px-3 sm:px-4 hidden md:table-cell">{copy.partyCol}</th>
+                      <th className="py-3 px-3 sm:px-4 hidden sm:table-cell">{copy.dateCol}</th>
+                      <th className="py-3 px-3 sm:px-4 text-right">{copy.amountCol}</th>
+                      <th className="py-3 px-3 sm:px-4 text-center hidden lg:table-cell">{copy.statusCol}</th>
+                      <th className="py-3 px-3 sm:px-4 text-right">{copy.actionCol}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -1072,45 +1072,45 @@ export default function DashboardPage() {
 
                       return (
                         <tr key={`${doc.documentType}-${doc.id}`} className="hover:bg-brand-tint/20 transition-colors">
-                          <td className="py-3 px-4 font-mono font-bold text-foreground">
+                          <td className="py-3 px-3 sm:px-4 font-mono font-bold text-foreground">
                             <Link href={doc.viewHref} className="hover:text-brand-primary hover:underline">
                               {doc.documentNumber}
                             </Link>
                           </td>
-                          <td className="py-3 px-4">
+                          <td className="py-3 px-3 sm:px-4">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${typeConfig.badgeClass}`}>
                               {typeConfig.badge} · {isIndonesian ? typeConfig.id : typeConfig.en}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-muted-foreground">
+                          <td className="py-3 px-3 sm:px-4 text-muted-foreground hidden md:table-cell">
                             {doc.partyName}
                           </td>
-                          <td className="py-3 px-4 text-muted-foreground whitespace-nowrap">
+                          <td className="py-3 px-3 sm:px-4 text-muted-foreground whitespace-nowrap hidden sm:table-cell">
                             {formatDocDate(doc.date)}
                           </td>
-                          <td className="py-3 px-4 text-right font-bold text-foreground whitespace-nowrap">
+                          <td className="py-3 px-3 sm:px-4 text-right font-bold text-foreground whitespace-nowrap">
                             {doc.amount !== undefined ? (
                               <MoneyDisplay amount={doc.amount} />
                             ) : (
                               <span className="text-muted-foreground font-normal">{doc.itemCount ?? 0} item</span>
                             )}
                           </td>
-                          <td className="py-3 px-4 text-center whitespace-nowrap">
+                          <td className="py-3 px-3 sm:px-4 text-center whitespace-nowrap hidden lg:table-cell">
                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-300">
                               {copy.statusDraft}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <td className="py-3 px-3 sm:px-4 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1.5">
                               <Button
                                 asChild
                                 size="sm"
                                 variant="outline"
-                                className="h-7 px-2.5 text-xs font-semibold cursor-pointer"
+                                className="h-7 px-2 text-xs font-semibold cursor-pointer"
                               >
                                 <Link href={doc.viewHref}>
-                                  <ExternalLink className="h-3 w-3 mr-1" />
-                                  {copy.viewBtn}
+                                  <ExternalLink className="h-3 w-3 sm:mr-1" />
+                                  <span className="hidden sm:inline">{copy.viewBtn}</span>
                                 </Link>
                               </Button>
                               <Button
@@ -1118,10 +1118,10 @@ export default function DashboardPage() {
                                 variant="gradient"
                                 disabled={actingDraftId === doc.id}
                                 onClick={() => handleSubmitDraft(doc)}
-                                className="h-7 px-2.5 text-xs font-semibold cursor-pointer"
+                                className="h-7 px-2 text-xs font-semibold cursor-pointer"
                               >
-                                <Send className="h-3 w-3 mr-1" />
-                                {copy.submitDraftBtn}
+                                <Send className="h-3 w-3 sm:mr-1" />
+                                <span className="hidden sm:inline">{copy.submitDraftBtn}</span>
                               </Button>
                             </div>
                           </td>

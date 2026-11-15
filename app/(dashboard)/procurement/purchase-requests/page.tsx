@@ -933,17 +933,20 @@ export default function PurchaseRequestsPage() {
     {
       key: "requestedBy",
       header: "Requested By",
+      hiddenBelow: "lg",
       render: (pr) => <span className="text-xs text-muted-foreground">{pr.requestedBy}</span>,
     },
     {
       key: "requestDate",
       header: "Date Requested",
+      hiddenBelow: "md",
       render: (pr) => <span className="text-xs text-muted-foreground">{pr.requestDate}</span>,
     },
     {
       key: "itemCount",
       header: "Items",
       align: "center",
+      hiddenBelow: "sm",
       render: (pr) => <span className="text-xs font-semibold">{pr.itemCount} SKUs</span>,
     },
     ...(pricesAllowed
@@ -969,6 +972,7 @@ export default function PurchaseRequestsPage() {
     {
       key: "category",
       header: "Category",
+      hiddenBelow: "md",
       render: (pr) => <PRCategoryBadge category={pr.category} />,
     },
     {

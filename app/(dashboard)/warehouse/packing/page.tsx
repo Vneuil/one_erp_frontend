@@ -116,11 +116,13 @@ export default function PackingPage() {
     {
       key: "pickListNo",
       header: "Pick List Ref",
+      hiddenBelow: "md",
       render: (p) => <span className="font-mono text-xs text-muted-foreground">{p.pickListNo}</span>,
     },
     {
       key: "packageSpecs",
       header: "Package Specs",
+      hiddenBelow: "lg",
       render: (p) => (
         <span className="text-xs text-muted-foreground">
           {p.boxCount} Boxes • {p.weightKg} KG
@@ -130,6 +132,7 @@ export default function PackingPage() {
     {
       key: "packerName",
       header: "Packer PIC",
+      hiddenBelow: "md",
       render: (p) => <span className="text-xs font-medium text-foreground">{p.packerName}</span>,
     },
     {

@@ -120,16 +120,19 @@ export default function ShippingPage() {
     {
       key: "destination",
       header: "Destination",
+      hiddenBelow: "md",
       render: (s) => <span className="text-xs text-muted-foreground">{s.destination}</span>,
     },
     {
       key: "dispatchTime",
       header: "Dispatch Time",
+      hiddenBelow: "md",
       render: (s) => <span className="text-xs text-muted-foreground">{s.dispatchTime}</span>,
     },
     {
       key: "estArrival",
       header: "Est. Arrival",
+      hiddenBelow: "lg",
       render: (s) => <span className="text-xs font-medium text-foreground">{s.estArrival}</span>,
     },
     {

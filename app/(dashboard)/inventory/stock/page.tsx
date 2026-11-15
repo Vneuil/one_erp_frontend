@@ -125,6 +125,7 @@ export default function InventoryStockPage() {
       key: "warehouseName",
       header: "Location",
       sortable: true,
+      hiddenBelow: "md",
       render: (s) => <span className="text-xs text-muted-foreground">{s.warehouseName}</span>,
     },
     {
@@ -132,12 +133,14 @@ export default function InventoryStockPage() {
       header: "Physical On-Hand",
       align: "right",
       sortable: true,
+      hiddenBelow: "lg",
       render: (s) => <span className="text-xs font-semibold">{formatNumber(s.quantity)}</span>,
     },
     {
       key: "reserved",
       header: "Reserved/SO",
       align: "right",
+      hiddenBelow: "lg",
       render: (s) => <span className="text-xs text-muted-foreground">{formatNumber(s.reserved)}</span>,
     },
     {
@@ -151,6 +154,7 @@ export default function InventoryStockPage() {
       key: "minStock",
       header: "Buffer (Min/Max)",
       align: "right",
+      hiddenBelow: "md",
       render: (s) => (
         <span className="text-xs text-muted-foreground">
           {s.minStock > 0 || s.maxStock > 0 ? `${formatNumber(s.minStock)} / ${formatNumber(s.maxStock)}` : "-"}
@@ -160,6 +164,7 @@ export default function InventoryStockPage() {
     {
       key: "id",
       header: "Stock Health",
+      hiddenBelow: "sm",
       render: (s) => <StatusBadge status={stockHealthStatus(s)} />,
     },
     {

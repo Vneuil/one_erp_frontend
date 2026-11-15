@@ -8,8 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { authApi } from "@/lib/api/auth";
+import { LanguageSwitcher } from "@/components/layout/language-switcher";
+import { useTranslation } from "@/lib/i18n/translations";
 
 export default function ForgotPasswordPage() {
+  const { isIndonesian } = useTranslation();
   const [submitted, setSubmitted] = React.useState(false);
   const [email, setEmail] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
@@ -31,8 +34,12 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-[#f6faf4] to-[#edf7e8] flex items-center justify-center p-4 sm:p-6">
-      <div className="w-full max-w-md space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-white via-[#f6faf4] to-[#edf7e8] flex flex-col justify-between p-4 sm:p-6">
+      <div className="max-w-md w-full mx-auto flex justify-end pt-2">
+        <LanguageSwitcher variant="pill" />
+      </div>
+
+      <div className="w-full max-w-md mx-auto my-auto py-6 space-y-6">
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center mb-1">
             <Image
@@ -41,14 +48,16 @@ export default function ForgotPasswordPage() {
               width={160}
               height={64}
               priority
-              className="h-14 w-auto object-contain"
+              className="h-12 sm:h-14 w-auto object-contain"
             />
           </div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-foreground">
-            Reset Password
+          <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-foreground">
+            {isIndonesian ? "Atur Ulang Kata Sandi" : "Reset Password"}
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Enter your email to receive recovery instructions
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            {isIndonesian
+              ? "Masukkan email terdaftar untuk menerima petunjuk pemulihan kata sandi"
+              : "Enter your registered email to receive recovery instructions"}
           </p>
         </div>
 
@@ -59,14 +68,26 @@ export default function ForgotPasswordPage() {
                 <div className="mx-auto h-12 w-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
                   <CheckCircle2 className="h-6 w-6" />
                 </div>
-                <h3 className="font-bold text-lg text-foreground">Check Your Inbox</h3>
-                <p className="text-sm text-muted-foreground">
-                  If an account exists for{" "}
-                  <span className="font-semibold text-foreground">{email}</span>, we
-                  have sent password reset instructions to it.
+                <h3 className="font-bold text-base sm:text-lg text-foreground">
+                  {isIndonesian ? "Periksa Kotak Masuk Anda" : "Check Your Inbox"}
+                </h3>
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  {isIndonesian ? (
+                    <>
+                      Jika akun terdaftar untuk{" "}
+                      <span className="font-semibold text-foreground">{email}</span>, petunjuk reset kata sandi telah dikirim.
+                    </>
+                  ) : (
+                    <>
+                      If an account exists for{" "}
+                      <span className="font-semibold text-foreground">{email}</span>, we have sent password reset instructions to it.
+                    </>
+                  )}
                 </p>
-                <Button asChild variant="outline" className="w-full mt-4">
-                  <Link href="/login">Return to Login</Link>
+                <Button asChild variant="outline" className="w-full mt-4 text-xs sm:text-sm">
+                  <Link href="/login">
+                    {isIndonesian ? "Kembali ke Halaman Masuk" : "Return to Login"}
+                  </Link>
                 </Button>
               </div>
             ) : (
@@ -74,7 +95,7 @@ export default function ForgotPasswordPage() {
                 <div className="space-y-2">
                   <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                     <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                    Corporate Email
+                    {isIndonesian ? "Email Perusahaan" : "Corporate Email"}
                   </label>
                   <Input
                     type="email"
@@ -82,37 +103,42 @@ export default function ForgotPasswordPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
+                    className="h-10 text-xs sm:text-sm"
                   />
                 </div>
 
                 <Button
                   type="submit"
                   variant="gradient"
-                  className="w-full h-10 font-semibold"
+                  className="w-full h-10 font-semibold text-xs sm:text-sm"
                   disabled={isLoading}
                 >
                   {isLoading ? (
                     <span className="flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Sending...</span>
+                      <span>{isIndonesian ? "Mengirim..." : "Sending..."}</span>
                     </span>
                   ) : (
-                    "Send Reset Link"
+                    isIndonesian ? "Kirim Tautan Reset" : "Send Reset Link"
                   )}
                 </Button>
 
-                <div className="text-center">
+                <div className="text-center pt-1">
                   <Link
                     href="/login"
                     className="inline-flex items-center gap-1.5 text-xs text-brand-primary font-medium hover:underline"
                   >
-                    <ArrowLeft className="h-3 w-3" /> Back to Sign In
+                    <ArrowLeft className="h-3 w-3" /> {isIndonesian ? "Kembali ke Halaman Masuk" : "Back to Sign In"}
                   </Link>
                 </div>
               </form>
             )}
           </CardContent>
         </Card>
+      </div>
+
+      <div className="text-center text-[11px] text-muted-foreground pb-2">
+        © 2026 PT Digital Ventura Integrasi
       </div>
     </div>
   );
