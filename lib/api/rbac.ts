@@ -11,11 +11,17 @@ export interface RoleItem {
 export interface PermissionItem {
   module: string;
   canView: boolean;
-  canManage: boolean;
-  /** Allows approving/rejecting/paying/posting documents in this module (implies canManage). */
+  canCreate?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  canSubmit?: boolean;
+  canManage?: boolean;
+  /** Allows approving/rejecting/paying/posting documents in this module. */
   canApprove?: boolean;
   /** Confidential pricing access: view unit costs, totals, and selling prices. */
   canViewPrices?: boolean;
+  /** Permission to modify prices/costs. */
+  canEditPrices?: boolean;
 }
 
 export interface RoleWithPermissions {

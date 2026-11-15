@@ -12,13 +12,17 @@ import {
   ExecutiveSummary,
 } from "@/lib/api/reports";
 import { downloadCsv } from "@/lib/utils/csv";
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value || 0);
-}
+import { currencyApi } from "@/lib/api/currency";
+import { formatCurrency as formatCurrencyUtil } from "@/lib/utils";
 
 export default function EnterpriseReportsPage() {
+  const [baseCurrency, setBaseCurrency] = React.useState("IDR");
   const [summary, setSummary] = React.useState<ExecutiveSummary | null>(null);
+
+  const formatCurrency = React.useCallback(
+    (value: number) => formatCurrencyUtil(value || 0, baseCurrency),
+    [baseCurrency]
+  );
   const [sales, setSales] = React.useState<SalesPerformance | null>(null);
   const [inventory, setInventory] = React.useState<InventoryValuation | null>(null);
   const [hrm, setHrm] = React.useState<HRMSummary | null>(null);
@@ -27,6 +31,14 @@ export default function EnterpriseReportsPage() {
 
   const loadData = React.useCallback(() => {
     setLoading(true);
+    currencyApi
+      .list()
+      .then((res) => {
+        const base = (res.data || []).find((c) => c.isBase);
+        if (base) setBaseCurrency(base.code);
+      })
+      .catch(() => undefined);
+
     Promise.all([
       reportsApi.getExecutiveSummary(),
       reportsApi.getSalesPerformance(),

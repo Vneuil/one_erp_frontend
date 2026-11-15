@@ -3,7 +3,7 @@
 import { SHOW_PRICE_IN_PRODUCT_MASTER } from "@/lib/roles";
 import * as React from "react";
 import Link from "next/link";
-import { Plus, Download, Eye, Edit, Trash2 } from "lucide-react";
+import { Plus, Download, Eye, Edit, Trash2, Power } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, Column } from "@/components/data-table/data-table";
@@ -12,6 +12,7 @@ import { MoneyDisplay } from "@/components/shared/money-display";
 import { CopyProductsDialog } from "@/components/shared/copy-products-dialog";
 import { formatNumber } from "@/lib/utils";
 import { useNavigationAccess } from "@/providers/navigation-access";
+import { usePermission } from "@/lib/hooks/use-permission";
 import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
 
 interface Product {
@@ -42,21 +43,29 @@ interface Product {
 }
 
 import { fetchAllPages } from "@/lib/api/pagination";
-import { productsApi } from "@/lib/api/products";
+import { productsApi, isProductActive, productCategoriesApi, ProductCategoryItem } from "@/lib/api/products";
 import { downloadCsv } from "@/lib/utils/csv";
 
 export default function ProductsPage() {
   const { canViewPrices } = useNavigationAccess();
+  const { canCreate: canCreateProduct, canDelete: canDeleteProduct, canEditPrices: canEditPricesProduct } = usePermission("product");
   const confirm = useConfirm();
   const alert = useAlert();
   const [products, setProducts] = React.useState<Product[]>([]);
+  const [categories, setCategories] = React.useState<ProductCategoryItem[]>([]);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [statusFilter, setStatusFilter] = React.useState<"active" | "inactive" | "all">("active");
+  const [categoryFilter, setCategoryFilter] = React.useState<string>("all");
 
   React.useEffect(() => {
-    fetchAllPages(productsApi.list)
-      .then((res) => {
-        setProducts(res);
+    Promise.all([
+      fetchAllPages(productsApi.list),
+      productCategoriesApi.list().catch(() => ({ data: [] })),
+    ])
+      .then(([prodRes, catRes]) => {
+        setProducts(prodRes);
+        setCategories(catRes.data || []);
       })
       .catch((err) => {
         setLoadError(err instanceof Error ? err.message : "Gagal memuat daftar barang.");
@@ -65,6 +74,47 @@ export default function ProductsPage() {
         setIsLoading(false);
       });
   }, []);
+
+  const activeCount = React.useMemo(() => products.filter(isProductActive).length, [products]);
+  const inactiveCount = React.useMemo(() => products.filter((p) => !isProductActive(p)).length, [products]);
+
+  const displayedProducts = React.useMemo(() => {
+    let list = products;
+    if (statusFilter === "active") list = list.filter(isProductActive);
+    else if (statusFilter === "inactive") list = list.filter((p) => !isProductActive(p));
+
+    if (categoryFilter !== "all") {
+      list = list.filter((p) => (p.category || "").toLowerCase() === categoryFilter.toLowerCase());
+    }
+    return list;
+  }, [products, statusFilter, categoryFilter]);
+
+  const handleToggleStatus = async (item: Product) => {
+    const active = isProductActive(item);
+    const ok = await confirm({
+      title: active ? "Nonaktifkan Produk" : "Aktifkan Produk",
+      message: active
+        ? `Nonaktifkan produk "${item.name}" (${item.sku})? Produk ini akan disembunyikan dari tabel katalog aktif dan seluruh pilihan transaksi (Quotation, PO Masuk, PI, SO, PR/PO). Riwayat transaksi tetap tersimpan.`
+        : `Aktifkan kembali produk "${item.name}" (${item.sku})? Produk ini akan kembali muncul di tabel katalog dan pilihan transaksi.`,
+      confirmText: active ? "Nonaktifkan" : "Aktifkan",
+      variant: active ? "destructive" : "default",
+    });
+    if (!ok) return;
+
+    const newStatus = active ? "Inactive" : "Active";
+    try {
+      await productsApi.setStatus(item.id, newStatus);
+      setProducts((prev) =>
+        prev.map((p) => (p.id === item.id ? { ...p, status: newStatus } : p))
+      );
+    } catch (err) {
+      await alert({
+        title: "Gagal Mengubah Status",
+        message: "Gagal mengubah status produk: " + (err instanceof Error ? err.message : "Kesalahan server"),
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleDelete = async (id: string, name: string) => {
     const ok = await confirm({
@@ -90,7 +140,7 @@ export default function ProductsPage() {
   };
 
   const handleExport = () => {
-    const pricesAllowed = canViewPrices("products");
+    const pricesAllowed = SHOW_PRICE_IN_PRODUCT_MASTER || canViewPrices("products");
     downloadCsv(
       "products.csv",
       ["SKU", "Name", "Grade", "Organic", "Category", "Unit", "Stock", "Safety Stock", ...(SHOW_PRICE_IN_PRODUCT_MASTER ? ["Cost Price", "Selling Price"] : []), "Status"],
@@ -189,7 +239,7 @@ export default function ProductsPage() {
         </div>
       ),
     },
-    ...((SHOW_PRICE_IN_PRODUCT_MASTER && canViewPrices("products")
+    ...(((SHOW_PRICE_IN_PRODUCT_MASTER || canViewPrices("products"))
       ? [
           {
             key: "costPrice",
@@ -197,11 +247,7 @@ export default function ProductsPage() {
             align: "right",
             render: (item: Product) => (
               <span className="text-xs text-muted-foreground">
-                {item.currency && item.currency !== "IDR" ? (
-                  <span className="font-mono">{item.currency} {formatNumber(item.costPrice)}</span>
-                ) : (
-                  <MoneyDisplay amount={item.costPrice} />
-                )}
+                <MoneyDisplay amount={item.costPrice} currency={item.currency || "IDR"} />
               </span>
             ),
           },
@@ -212,11 +258,7 @@ export default function ProductsPage() {
             sortable: true,
             render: (item: Product) => (
               <span className="text-xs font-semibold">
-                {item.currency && item.currency !== "IDR" ? (
-                  <span className="font-mono text-brand-primary">{item.currency} {formatNumber(item.sellingPrice)}</span>
-                ) : (
-                  <MoneyDisplay amount={item.sellingPrice} highlight />
-                )}
+                <MoneyDisplay amount={item.sellingPrice} currency={item.currency || "IDR"} highlight />
               </span>
             ),
           },
@@ -225,34 +267,55 @@ export default function ProductsPage() {
     {
       key: "status",
       header: "Status",
-      render: (item) => <StatusBadge status={item.status} />,
+      render: (item) => {
+        const active = isProductActive(item);
+        return (
+          <StatusBadge
+            status={active ? "active" : "inactive"}
+            label={active ? "Aktif" : "Non-Aktif"}
+          />
+        );
+      },
     },
     {
       key: "actions",
       header: "Actions",
       align: "right",
-      render: (item) => (
-        <div className="flex items-center justify-end gap-1">
-          <Button asChild variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-primary">
-            <Link href={`/master-data/products/${item.id}`}>
-              <Eye className="h-4 w-4" />
-            </Link>
-          </Button>
-          <Button asChild variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" title="Lihat & Edit Detail">
-            <Link href={`/master-data/products/${item.id}`}>
-              <Edit className="h-4 w-4" />
-            </Link>
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => handleDelete(item.id, item.name)}
-            className="h-8 w-8 text-muted-foreground hover:text-red-600"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      ),
+      render: (item) => {
+        const active = isProductActive(item);
+        return (
+          <div className="flex items-center justify-end gap-1">
+            <Button asChild variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-primary" title="Lihat Detail">
+              <Link href={`/master-data/products/${item.id}`}>
+                <Eye className="h-4 w-4" />
+              </Link>
+            </Button>
+            <Button asChild variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" title="Lihat & Edit Detail">
+              <Link href={`/master-data/products/${item.id}`}>
+                <Edit className="h-4 w-4" />
+              </Link>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => handleToggleStatus(item)}
+              title={active ? "Nonaktifkan Produk" : "Aktifkan Produk"}
+              className={`h-8 w-8 ${active ? "text-muted-foreground hover:text-rose-600" : "text-emerald-600 hover:text-emerald-700 bg-emerald-50/60"}`}
+            >
+              <Power className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => handleDelete(item.id, item.name)}
+              className="h-8 w-8 text-muted-foreground hover:text-red-600"
+              title="Hapus Produk"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        );
+      },
     },
   ];
 
@@ -260,27 +323,98 @@ export default function ProductsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Master Produk"
-        description="Kelola katalog bahan baku, rakitan, dan produk jadi. Harga tidak diinput di sini, melainkan langsung di Pesanan Penjualan."
+        description="Kelola katalog bahan baku, kemasan, rakitan, dan produk jadi beserta harga acuan standar dan status keaktifan."
       >
         <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs" onClick={handleExport}>
           <Download className="h-3.5 w-3.5" />
           Export Excel
         </Button>
-        <CopyProductsDialog onCopied={copied => setProducts(current => [...copied, ...current.filter(item => !copied.some(copy => copy.id === item.id))])} />
-        <Button asChild variant="gradient" size="sm" className="h-9 gap-1.5 text-xs font-semibold">
-          <Link href="/master-data/products/new">
-            <Plus className="h-3.5 w-3.5" />
-            Add New Product
-          </Link>
-        </Button>
+        {canCreateProduct && (
+          <>
+            <CopyProductsDialog onCopied={copied => setProducts(current => [...copied, ...current.filter(item => !copied.some(copy => copy.id === item.id))])} />
+            <Button asChild variant="gradient" size="sm" className="h-9 gap-1.5 text-xs font-semibold">
+              <Link href="/master-data/products/new">
+                <Plus className="h-3.5 w-3.5" />
+                Add New Product
+              </Link>
+            </Button>
+          </>
+        )}
       </PageHeader>
+
+      {/* Filter Keaktifan Produk & Filter Kategori */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-lg">
+            <button
+              type="button"
+              onClick={() => setStatusFilter("active")}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                statusFilter === "active"
+                  ? "bg-white text-emerald-800 shadow-xs border border-emerald-200"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Produk Aktif ({activeCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter("inactive")}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                statusFilter === "inactive"
+                  ? "bg-white text-rose-800 shadow-xs border border-rose-200"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Non-Aktif ({inactiveCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter("all")}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                statusFilter === "all"
+                  ? "bg-white text-brand-primary shadow-xs border border-border"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Semua ({products.length})
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Kategori:</span>
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="h-8 px-2.5 rounded-md border border-border bg-white text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-brand-primary"
+            >
+              <option value="all">Semua Kategori</option>
+              {categories.map((c) => {
+                const count = products.filter((p) => (p.category || "").toLowerCase() === c.name.toLowerCase()).length;
+                return (
+                  <option key={c.id} value={c.name}>
+                    {c.name} ({count})
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+        </div>
+
+        {statusFilter === "active" && inactiveCount > 0 && (
+          <span className="text-xs text-muted-foreground">
+            {inactiveCount} produk non-aktif disembunyikan dari tabel
+          </span>
+        )}
+      </div>
 
       {loadError && <p role="alert" className="text-sm text-rose-700">{loadError}</p>}
       <DataTable
         columns={columns}
-        data={products}
+        data={displayedProducts}
         isLoading={isLoading}
         searchKey="name"
+        searchKeys={["name", "sku", "category", "grade"]}
         searchPlaceholder="Search by name, category, or SKU..."
       />
     </div>

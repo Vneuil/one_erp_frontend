@@ -7,11 +7,13 @@ import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, Column } from "@/components/data-table/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { customersApi, CustomerItem, CustomerAddress, CustomerType } from "@/lib/api/customers";
+import { pricingApi, PaymentTermItem, CustomerTypeItem } from "@/lib/api/pricing";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { downloadCsv } from "@/lib/utils/csv";
 import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
 import { useRole } from "@/lib/hooks/use-role";
+import { usePermission } from "@/lib/hooks/use-permission";
 
 const DEFAULT_CITY = "Semarang";
 
@@ -23,6 +25,10 @@ function extractCustomerTypeFromCode(code: string): CustomerType | null {
 interface FormState {
   code: string;
   customerType: CustomerType;
+  customerTypeId: string;
+  customerTypeName: string;
+  paymentTermId: string;
+  paymentTermName: string;
   name: string;
   email: string;
   phone: string;
@@ -45,6 +51,10 @@ const blankAddress = (): CustomerAddress => ({ label: "", address: "", city: DEF
 const emptyForm = (): FormState => ({
   code: "",
   customerType: "B2B",
+  customerTypeId: "",
+  customerTypeName: "",
+  paymentTermId: "",
+  paymentTermName: "",
   name: "",
   email: "",
   phone: "",
@@ -65,6 +75,10 @@ const emptyForm = (): FormState => ({
 const fromItem = (c: CustomerItem): FormState => ({
   code: c.code,
   customerType: c.customerType || extractCustomerTypeFromCode(c.code) || "B2B",
+  customerTypeId: c.customerTypeId || "",
+  customerTypeName: c.customerTypeName || "",
+  paymentTermId: c.paymentTermId || "",
+  paymentTermName: c.paymentTermName || "",
   name: c.name,
   email: c.email || "",
   phone: c.phone || "",
@@ -98,8 +112,11 @@ export default function CustomersPage() {
   const confirm = useConfirm();
   const alert = useAlert();
   const { canManageMasterData, isSuperAdmin } = useRole();
+  const { canCreate: canCreateCustomer, canEdit: canEditCustomer, canDelete: canDeleteCustomer } = usePermission("customers");
 
   const [customers, setCustomers] = React.useState<CustomerItem[]>([]);
+  const [paymentTerms, setPaymentTerms] = React.useState<PaymentTermItem[]>([]);
+  const [customerTypes, setCustomerTypes] = React.useState<CustomerTypeItem[]>([]);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [dialogOpen, setDialogOpen] = React.useState(false);
@@ -124,6 +141,8 @@ export default function CustomersPage() {
 
   React.useEffect(() => {
     fetchCustomers();
+    pricingApi.listPaymentTerms().then((res) => setPaymentTerms(res.data || [])).catch(() => {});
+    pricingApi.listCustomerTypes().then((res) => setCustomerTypes(res.data || [])).catch(() => {});
   }, [fetchCustomers]);
 
   const openCreate = () => {
@@ -162,6 +181,10 @@ export default function CustomersPage() {
     setSaving(true);
     const payload = {
       customerType: form.customerType,
+      customerTypeId: form.customerTypeId || undefined,
+      customerTypeName: form.customerTypeName || undefined,
+      paymentTermId: form.paymentTermId || undefined,
+      paymentTermName: form.paymentTermName || undefined,
       name: form.name,
       email: form.email,
       phone: form.phone,
@@ -237,8 +260,8 @@ export default function CustomersPage() {
   const handleExport = () => {
     downloadCsv(
       "pelanggan.csv",
-      ["Kode", "Tipe", "Nama", "Contact Person", "Email", "Telepon", "HP", "WhatsApp", "Kota", "Status"],
-      customers.map((c) => [c.code, c.customerType, c.name, c.contactPerson ?? "", c.email, c.contactPhone ?? c.phone, c.contactMobile ?? "", c.contactWhatsapp ?? "", c.city ?? "", c.status])
+      ["Kode", "Kategori", "Jenis Pelanggan", "Termin Pembayaran (TOP)", "Nama", "Contact Person", "Email", "Telepon", "HP", "WhatsApp", "Kota", "Status"],
+      customers.map((c) => [c.code, c.customerType, c.customerTypeName ?? "", c.paymentTermName ?? "", c.name, c.contactPerson ?? "", c.email, c.contactPhone ?? c.phone, c.contactMobile ?? "", c.contactWhatsapp ?? "", c.city ?? "", c.status])
     );
   };
 
@@ -255,11 +278,27 @@ export default function CustomersPage() {
       sortable: true,
       render: (c) => (
         <div>
-          <p className="font-semibold text-xs text-foreground">{c.name}</p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-semibold text-xs text-foreground">{c.name}</span>
+            {c.customerTypeName && (
+              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] bg-blue-50 text-blue-700 border border-blue-200">
+                {c.customerTypeName}
+              </span>
+            )}
+          </div>
           <span className="text-[11px] text-muted-foreground">
             {c.customerType === "B2C" ? "Perorangan (B2C)" : "Perusahaan (B2B)"}
           </span>
         </div>
+      ),
+    },
+    {
+      key: "paymentTermName",
+      header: "Termin (TOP)",
+      render: (c) => (
+        <span className="text-xs font-medium text-foreground">
+          {c.paymentTermName || "-"}
+        </span>
       ),
     },
     {
@@ -320,9 +359,11 @@ export default function CustomersPage() {
         <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs" onClick={handleExport}>
           <Download className="h-3.5 w-3.5" /> Ekspor
         </Button>
-        <Button onClick={openCreate} variant="gradient" size="sm" className="h-9 gap-1.5 text-xs font-semibold">
-          <Plus className="h-3.5 w-3.5" /> Tambah Pelanggan
-        </Button>
+        {canCreateCustomer && (
+          <Button onClick={openCreate} variant="gradient" size="sm" className="h-9 gap-1.5 text-xs font-semibold">
+            <Plus className="h-3.5 w-3.5" /> Tambah Pelanggan
+          </Button>
+        )}
       </PageHeader>
 
       {loadError && (
@@ -374,6 +415,48 @@ export default function CustomersPage() {
                   className="font-mono"
                   required={!!editingId}
                 />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Jenis Pelanggan" hint="Master Jenis Pelanggan">
+                <select
+                  className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30 focus-visible:border-brand-primary shadow-xs"
+                  value={form.customerTypeId}
+                  onChange={(e) => {
+                    const ct = customerTypes.find((x) => x.id === e.target.value);
+                    set({
+                      customerTypeId: e.target.value,
+                      customerTypeName: ct ? ct.name : "",
+                    });
+                  }}
+                >
+                  <option value="">-- Pilih Jenis Pelanggan --</option>
+                  {customerTypes.map((ct) => (
+                    <option key={ct.id} value={ct.id}>
+                      {ct.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Default Termin Pembayaran (TOP)" hint="Master TOP">
+                <select
+                  className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30 focus-visible:border-brand-primary shadow-xs"
+                  value={form.paymentTermId}
+                  onChange={(e) => {
+                    const pt = paymentTerms.find((x) => x.id === e.target.value);
+                    set({
+                      paymentTermId: e.target.value,
+                      paymentTermName: pt ? pt.name : "",
+                    });
+                  }}
+                >
+                  <option value="">-- Pilih TOP --</option>
+                  {paymentTerms.map((pt) => (
+                    <option key={pt.id} value={pt.id}>
+                      {pt.name} ({pt.days} hari)
+                    </option>
+                  ))}
+                </select>
               </Field>
             </div>
             <Field label={isB2B ? "Nama Perusahaan *" : "Nama Lengkap *"}>

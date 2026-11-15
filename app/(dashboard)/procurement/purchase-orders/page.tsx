@@ -17,21 +17,25 @@ import { DataTable, Column } from "@/components/data-table/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { MoneyDisplay } from "@/components/shared/money-display";
 import { downloadCsv } from "@/lib/utils/csv";
+import { formatCurrency } from "@/lib/utils";
 import { procurementApi, PurchaseOrderItem, PurchaseOrderLineInput, PurchaseRequestItem } from "@/lib/api/procurement";
 import { suppliersApi, SupplierItem } from "@/lib/api/suppliers";
 import { certificationsApi, SupplierEligibility } from "@/lib/api/certifications";
-import { productsApi, ProductItem } from "@/lib/api/products";
+import { productsApi, ProductItem, isProductActive } from "@/lib/api/products";
 import { currencyApi, CurrencyItem } from "@/lib/api/currency";
+import { pricingApi, PaymentTermItem, TaxRateItem } from "@/lib/api/pricing";
 import { approvalApi, ApprovalRequest } from "@/lib/api/approval";
 import { useIsOwnDocument } from "@/lib/hooks/use-own-document";
 import { PoPrintDialog } from "@/components/procurement/po-print-dialog";
 import { useAppStore } from "@/stores/app-store";
 import { useConfirm, useAlert, usePrompt } from "@/components/shared/confirm-modal";
 import { ApprovalTimeline, canUserApprove } from "@/components/shared/approval-timeline";
+import { usePermission } from "@/lib/hooks/use-permission";
 
 export default function PurchaseOrdersPage() {
   const { canApprove, canViewPrices, roleName } = useNavigationAccess();
-  const mayApprove = canApprove("procurement");
+  const { canCreate: canCreatePO, canApprove: canApprovePO, canDelete: canDeletePO } = usePermission("procurement");
+  const mayApprove = canApprovePO || canApprove("procurement");
   const isOwn = useIsOwnDocument();
   const currentUser = useAppStore((s) => s.currentUser);
   const confirm = useConfirm();
@@ -63,13 +67,20 @@ export default function PurchaseOrdersPage() {
     [suppliers, eligibility, certFilter]
   );
   const suspendedFor = (id: string) => eligibility.find((e) => e.supplierId === id)?.suspended ?? [];
-  const [products, setProducts] = React.useState<ProductItem[]>([]);
+  const [allProducts, setAllProducts] = React.useState<ProductItem[]>([]);
+  const productMap = React.useMemo(() => new Map(allProducts.map((p) => [p.id, p])), [allProducts]);
+  const products = React.useMemo(() => allProducts.filter(isProductActive), [allProducts]);
   const [approvedPRs, setApprovedPRs] = React.useState<PurchaseRequestItem[]>([]);
   const [supplierId, setSupplierId] = React.useState("");
   const [prId, setPrId] = React.useState("");
   const [expectedDate, setExpectedDate] = React.useState("");
   const [currencies, setCurrencies] = React.useState<CurrencyItem[]>([]);
   const [currency, setCurrency] = React.useState("");
+  const [paymentTerms, setPaymentTerms] = React.useState<PaymentTermItem[]>([]);
+  const [taxRates, setTaxRates] = React.useState<TaxRateItem[]>([]);
+  const [paymentTermId, setPaymentTermId] = React.useState("");
+  const [paymentTerm, setPaymentTerm] = React.useState("");
+  const [taxRateId, setTaxRateId] = React.useState("");
   const [poLines, setPoLines] = React.useState<PurchaseOrderLineInput[]>([]);
   const [lineProductId, setLineProductId] = React.useState("");
   const [lineQty, setLineQty] = React.useState("1");
@@ -148,8 +159,16 @@ export default function PurchaseOrdersPage() {
       .catch((err) => console.warn("Failed to load vendor certification status", err));
     productsApi
       .list({ perPage: 500 })
-      .then((res) => setProducts(res.data || []))
+      .then((res) => setAllProducts(res.data || []))
       .catch((err) => console.warn("Failed to load products", err));
+    pricingApi
+      .listPaymentTerms()
+      .then((res) => setPaymentTerms(res.data || []))
+      .catch(() => undefined);
+    pricingApi
+      .listTaxRates()
+      .then((res) => setTaxRates(res.data || []))
+      .catch(() => undefined);
     procurementApi
       .listPurchaseRequests({ perPage: 100 })
       .then((res) => {
@@ -196,7 +215,7 @@ export default function PurchaseOrdersPage() {
     const pr = approvedPRs.find((p) => p.id === id);
     if (!pr) return;
     const lines: PurchaseOrderLineInput[] = pr.lines.map((l) => {
-      const product = products.find((p) => p.id === l.productId);
+      const product = productMap.get(l.productId);
       return { productId: l.productId, quantity: l.quantity, unitPrice: product?.costPrice || 0 };
     });
     setPoLines(lines);
@@ -205,7 +224,7 @@ export default function PurchaseOrdersPage() {
   const handleAddLine = async () => {
     if (!lineProductId) return;
     const qty = Number(lineQty) || 1;
-    const product = products.find((p) => p.id === lineProductId);
+    const product = productMap.get(lineProductId);
     let price = product?.costPrice || 0;
     if (supplierId) {
       try {
@@ -274,6 +293,9 @@ export default function PurchaseOrdersPage() {
       const res = await procurementApi.createPurchaseOrder({
         supplierId,
         supplierName: selectedSupplier?.name,
+        paymentTermId: paymentTermId || undefined,
+        paymentTerm: paymentTerm || undefined,
+        taxRateId: taxRateId || undefined,
         purchaseRequestId: prId || null,
         salesOrderId: linkedPr?.salesOrderId || directSoId || undefined,
         salesOrderNo: linkedPr?.salesOrderNo || directSoNo || undefined,
@@ -363,7 +385,7 @@ export default function PurchaseOrdersPage() {
   const handleEditAddLine = async () => {
     if (!editLineProductId) return;
     const qty = Number(editLineQty) || 1;
-    const product = products.find((p) => p.id === editLineProductId);
+    const product = productMap.get(editLineProductId);
     const price = product?.costPrice || 0;
     setEditLines((prev) => {
       const existing = prev.find((l) => l.productId === editLineProductId);
@@ -522,6 +544,11 @@ export default function PurchaseOrdersPage() {
       render: (po) => <span className="text-xs font-semibold text-foreground">{po.supplierName}</span>,
     },
     {
+      key: "paymentTerm",
+      header: "Termin (TOP)",
+      render: (po) => <span className="text-xs text-foreground font-medium">{po.paymentTerm || "-"}</span>,
+    },
+    {
       key: "orderDate",
       header: "Order Date",
       render: (po) => <span className="text-xs text-muted-foreground">{po.orderDate}</span>,
@@ -540,17 +567,18 @@ export default function PurchaseOrdersPage() {
         if (!canViewPrices("procurement")) {
           return <span className="text-xs text-muted-foreground">—</span>;
         }
-        const hasForeignCurrency = po.currency && po.currency !== "IDR";
+        const baseCurrency = currencies.find((c) => c.isBase)?.code || "IDR";
+        const hasForeignCurrency = po.currency && po.currency !== baseCurrency;
         return (
           <div className="flex flex-col items-end">
             <MoneyDisplay
               amount={po.totalAmount}
-              currency={hasForeignCurrency ? po.currency : undefined}
+              currency={po.currency || baseCurrency}
               className="text-xs font-bold text-foreground"
             />
             {hasForeignCurrency && po.baseAmount != null && (
               <span className="text-[11px] text-muted-foreground">
-                ≈ Rp {po.baseAmount.toLocaleString("id-ID")}
+                ≈ {formatCurrency(po.baseAmount, baseCurrency)}
               </span>
             )}
           </div>
@@ -661,6 +689,17 @@ export default function PurchaseOrdersPage() {
     },
   ];
 
+  const displayedPOs = React.useMemo(() => {
+    if (allProducts.length === 0) return pos;
+    return pos.filter((po) => {
+      if (!po.lines || po.lines.length === 0) return true;
+      return po.lines.every((l) => {
+        const p = productMap.get(l.productId);
+        return p ? isProductActive(p) : false;
+      });
+    });
+  }, [pos, allProducts, productMap]);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -670,14 +709,16 @@ export default function PurchaseOrdersPage() {
         <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs" onClick={handleExport}>
           <Download className="h-3.5 w-3.5" /> Export
         </Button>
-        <Button
-          variant="gradient"
-          size="sm"
-          className="h-9 gap-1.5 text-xs font-semibold"
-          onClick={() => setIsNewOpen(true)}
-        >
-          <Plus className="h-3.5 w-3.5" /> Create Pesanan Pembelian
-        </Button>
+        {canCreatePO && (
+          <Button
+            variant="gradient"
+            size="sm"
+            className="h-9 gap-1.5 text-xs font-semibold"
+            onClick={() => setIsNewOpen(true)}
+          >
+            <Plus className="h-3.5 w-3.5" /> Create Pesanan Pembelian
+          </Button>
+        )}
       </PageHeader>
 
       {loadError && (
@@ -697,7 +738,7 @@ export default function PurchaseOrdersPage() {
       ) : (
         <DataTable
           columns={columns}
-          data={pos}
+          data={displayedPOs}
           searchKey="orderNo"
           searchPlaceholder="Search PO number or vendor..."
           onRowClick={(item) => setSelectedPo(item)}
@@ -741,7 +782,15 @@ export default function PurchaseOrdersPage() {
               </div>
               <select
                 value={supplierId}
-                onChange={(e) => setSupplierId(e.target.value)}
+                onChange={(e) => {
+                  setSupplierId(e.target.value);
+                  const sup = suppliers.find((s) => s.id === e.target.value);
+                  if (sup?.paymentTerm) {
+                    setPaymentTerm(sup.paymentTerm);
+                    const matched = paymentTerms.find((p) => p.name === sup.paymentTerm);
+                    if (matched) setPaymentTermId(matched.id);
+                  }
+                }}
                 required
                 className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30 focus-visible:border-brand-primary"
               >
@@ -750,6 +799,25 @@ export default function PurchaseOrdersPage() {
                   <option key={s.id} value={s.id}>{s.name} ({s.code}){suspendedFor(s.id).length ? " ⚠ sertifikat ditangguhkan" : ""}</option>
                 ))}
               </select>
+              {selectedSupplier && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-muted-foreground">
+                  <span className="font-medium">Kode Vendor:</span>
+                  {(selectedSupplier.codes && selectedSupplier.codes.length > 0
+                    ? selectedSupplier.codes
+                    : selectedSupplier.code
+                    ? [{ id: selectedSupplier.id, code: selectedSupplier.code, batchCode: selectedSupplier.batchCode }]
+                    : []
+                  ).map((c) => (
+                    <span
+                      key={c.id || c.code}
+                      className="inline-flex items-center gap-1 font-mono text-[10px] font-bold text-brand-primary bg-brand-primary/10 px-1.5 py-0.5 rounded border border-brand-primary/20"
+                    >
+                      {c.code}
+                      {c.batchCode && <span className="text-emerald-800 font-semibold">({c.batchCode})</span>}
+                    </span>
+                  ))}
+                </div>
+              )}
               {supplierId && suspendedFor(supplierId).length > 0 && (
                 <p role="alert" className="text-[11px] text-amber-700">Sertifikat ditangguhkan: {suspendedFor(supplierId).join(", ")}. Periksa sebelum menerbitkan PO.</p>
               )}
@@ -791,6 +859,43 @@ export default function PurchaseOrdersPage() {
                   <option value="">IDR (Rupiah)</option>
                   {currencies.map((c) => (
                     <option key={c.id} value={c.code}>{c.code} - {c.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Term of Payment (TOP)</label>
+                <select
+                  value={paymentTermId}
+                  onChange={(e) => {
+                    const pt = paymentTerms.find((p) => p.id === e.target.value);
+                    setPaymentTermId(e.target.value);
+                    setPaymentTerm(pt ? pt.name : "");
+                  }}
+                  className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30"
+                >
+                  <option value="">-- Pilih TOP --</option>
+                  {paymentTerms.map((pt) => (
+                    <option key={pt.id} value={pt.id}>
+                      {pt.name} ({pt.days} hari)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Tarif Pajak (PPN Masukan)</label>
+                <select
+                  value={taxRateId}
+                  onChange={(e) => setTaxRateId(e.target.value)}
+                  className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30"
+                >
+                  <option value="">-- Standar (11%) --</option>
+                  {taxRates.map((tr) => (
+                    <option key={tr.id} value={tr.id}>
+                      {tr.name} ({tr.rate}%)
+                    </option>
                   ))}
                 </select>
               </div>
@@ -847,7 +952,7 @@ export default function PurchaseOrdersPage() {
                       </thead>
                       <tbody className="divide-y divide-border">
                         {poLines.map((l) => {
-                          const product = products.find((p) => p.id === l.productId);
+                          const product = productMap.get(l.productId);
                           return (
                             <tr key={l.productId}>
                               <td className="py-2 px-3">
@@ -880,7 +985,7 @@ export default function PurchaseOrdersPage() {
                     </table>
                     <div className="flex justify-between items-center px-3 py-2 bg-slate-50 border-t border-border text-xs font-bold">
                       <span>Total</span>
-                      <span>Rp {totalAmount.toLocaleString("id-ID")}</span>
+                      <span>{formatCurrency(totalAmount, currency || "IDR")}</span>
                     </div>
                   </div>
                 )}
@@ -995,7 +1100,7 @@ export default function PurchaseOrdersPage() {
                       </thead>
                       <tbody className="divide-y divide-border">
                         {editLines.map((l) => {
-                          const product = products.find((p) => p.id === l.productId);
+                          const product = productMap.get(l.productId);
                           return (
                             <tr key={l.productId}>
                               <td className="py-2 px-3">
@@ -1136,7 +1241,7 @@ export default function PurchaseOrdersPage() {
                   <tbody className="divide-y divide-border">
                     {selectedPo.lines && selectedPo.lines.length > 0 ? (
                       selectedPo.lines.map((l, idx) => {
-                        const product = products.find((p) => p.id === l.productId);
+                        const product = productMap.get(l.productId);
                         return (
                           <tr key={idx}>
                             <td className="py-2 px-3">

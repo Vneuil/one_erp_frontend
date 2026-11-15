@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/dialog";
 import { posApi } from "@/lib/api/pos";
 import { loyaltyApi, MemberCard } from "@/lib/api/loyalty";
-import { productsApi, ProductItem } from "@/lib/api/products";
+import { productsApi, ProductItem, isProductActive, productCategoriesApi } from "@/lib/api/products";
 import { inventoryApi, WarehouseItem } from "@/lib/api/inventory";
 import { computeSale, defaultPosSettings, PosSettings } from "@/lib/utils/pos-totals";
 import { useAppStore } from "@/stores/app-store";
@@ -70,6 +70,7 @@ export default function PosCashierPage() {
   const [cart, setCart] = React.useState<CartItem[]>([]);
   const [search, setSearch] = React.useState("");
   const [selectedCategory, setSelectedCategory] = React.useState<string>("All");
+  const [masterCategories, setMasterCategories] = React.useState<string[]>([]);
   const [customerName, setCustomerName] = React.useState("Walk-in Customer");
   const [customerPhone, setCustomerPhone] = React.useState("");
   const [memberCard, setMemberCard] = React.useState<MemberCard | null>(null);
@@ -87,9 +88,13 @@ export default function PosCashierPage() {
 
   const loadCatalog = React.useCallback(() => {
     setIsLoadingProducts(true);
-    Promise.all([productsApi.list({ perPage: 200 }), inventoryApi.listWarehouses({ perPage: 1 })])
-      .then(([productsRes, warehousesRes]) => {
-        const items = productsRes.data || [];
+    Promise.all([
+      productsApi.list({ perPage: 200 }),
+      inventoryApi.listWarehouses({ perPage: 1 }),
+      productCategoriesApi.list().catch(() => ({ data: [] })),
+    ])
+      .then(([productsRes, warehousesRes, catRes]) => {
+        const items = (productsRes.data || []).filter(isProductActive);
         setProducts(
           items.map((p: ProductItem) => ({
             id: p.id,
@@ -103,6 +108,7 @@ export default function PosCashierPage() {
         );
         const wh = (warehousesRes.data || [])[0];
         setWarehouse(wh || null);
+        setMasterCategories((catRes.data || []).map((c) => c.name));
       })
       .catch((err) => {
         console.error("Failed to load POS product catalog", err);
@@ -139,10 +145,10 @@ export default function PosCashierPage() {
     }
   };
 
-  const categories = React.useMemo(
-    () => ["All", ...Array.from(new Set(products.map((p) => p.category))).sort()],
-    [products]
-  );
+  const categories = React.useMemo(() => {
+    const set = new Set(["All", ...masterCategories, ...products.map((p) => p.category)]);
+    return Array.from(set);
+  }, [masterCategories, products]);
 
   const filteredProducts = products.filter((p) => {
     const matchSearch =

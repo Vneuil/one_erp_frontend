@@ -21,8 +21,39 @@ export interface SupplierItem {
   nik?: string;
   category: string;
   status: string;
+  codes?: SupplierCodeItem[];
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface SupplierCodeItem {
+  id: string;
+  supplierId: string;
+  supplierName?: string;
+  code: string;
+  vendorType: string;
+  batchCode?: string;
+  description?: string;
+  status: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateSupplierCodeInput {
+  supplierId: string;
+  code?: string;
+  vendorType: string;
+  batchCode?: string;
+  description?: string;
+  status?: string;
+}
+
+export interface UpdateSupplierCodeInput {
+  code?: string;
+  vendorType?: string;
+  batchCode?: string;
+  description?: string;
+  status?: string;
 }
 
 export interface VendorTypeOption {
@@ -80,6 +111,35 @@ export const suppliersApi = {
 
   delete: async (id: string): Promise<ApiResponse<null>> => {
     return apiClient<null>(`/suppliers/${id}`, {
+      method: "DELETE",
+    });
+  },
+};
+
+export const supplierCodesApi = {
+  list: async (params?: { supplierId?: string; vendorType?: string }): Promise<ApiResponse<SupplierCodeItem[]>> => {
+    return apiClient<SupplierCodeItem[]>("/supplier-codes", { params });
+  },
+
+  create: async (data: CreateSupplierCodeInput): Promise<ApiResponse<SupplierCodeItem>> => {
+    return apiClient<SupplierCodeItem>("/supplier-codes", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  update: async (id: string, data: UpdateSupplierCodeInput): Promise<ApiResponse<SupplierCodeItem>> => {
+    return apiClient<SupplierCodeItem>(`/supplier-codes/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  setStatus: async (id: string, status: "Active" | "Inactive"): Promise<ApiResponse<SupplierCodeItem>> =>
+    apiClient<SupplierCodeItem>(`/supplier-codes/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+
+  delete: async (id: string): Promise<ApiResponse<null>> => {
+    return apiClient<null>(`/supplier-codes/${id}`, {
       method: "DELETE",
     });
   },

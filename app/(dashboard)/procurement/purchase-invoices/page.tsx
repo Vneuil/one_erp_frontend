@@ -19,6 +19,19 @@ import { InvoiceAdjustmentsFields } from "@/components/shared/invoice-adjustment
 import { InvoiceAdjustments, noAdjustments, adjustmentPayload } from "@/lib/utils/invoice-amounts";
 import { procurementApi, PurchaseInvoiceItem, PurchaseOrderItem } from "@/lib/api/procurement";
 import { suppliersApi, SupplierItem } from "@/lib/api/suppliers";
+import { pricingApi, PaymentTermItem } from "@/lib/api/pricing";
+
+function parseDaysFromTerm(term: string): number {
+  const clean = term.toLowerCase().trim();
+  if (clean === "cod" || clean === "cash" || clean === "cash on delivery") return 0;
+  if (clean.startsWith("net ") || clean.startsWith("net-")) {
+    const d = parseInt(clean.slice(4), 10);
+    if (!isNaN(d) && d >= 0) return d;
+  }
+  const d = parseInt(clean, 10);
+  if (!isNaN(d) && d >= 0) return d;
+  return 30;
+}
 
 export default function PurchaseInvoicesPage() {
   const [invoices, setInvoices] = React.useState<PurchaseInvoiceItem[]>([]);
@@ -27,6 +40,9 @@ export default function PurchaseInvoicesPage() {
 
   const [isNewOpen, setIsNewOpen] = React.useState(false);
   const [suppliers, setSuppliers] = React.useState<SupplierItem[]>([]);
+  const [paymentTerms, setPaymentTerms] = React.useState<PaymentTermItem[]>([]);
+  const [paymentTermId, setPaymentTermId] = React.useState("");
+  const [paymentTerm, setPaymentTerm] = React.useState("");
   const [pos, setPos] = React.useState<PurchaseOrderItem[]>([]);
   const [supplierId, setSupplierId] = React.useState("");
   const [purchaseOrderId, setPurchaseOrderId] = React.useState("");
@@ -54,6 +70,10 @@ export default function PurchaseInvoicesPage() {
 
   React.useEffect(() => {
     loadInvoices();
+    pricingApi
+      .listPaymentTerms()
+      .then((res) => setPaymentTerms(res.data || []))
+      .catch(() => undefined);
     suppliersApi
       .list({ perPage: 200 })
       .then((res) => setSuppliers(res.data || []))
@@ -76,9 +96,7 @@ export default function PurchaseInvoicesPage() {
   // all eligible POs if no supplier has been chosen yet).
   const eligiblePOs = pos.filter((po) => !supplierId || po.supplierId === supplierId);
 
-  // Picking a PO auto-fills the supplier and total amount from that order,
-  // mirroring how the Pesanan Pembelian form auto-fills lines from a Purchase
-  // Request (see procurement/purchase-orders/page.tsx).
+  // Picking a PO auto-fills the supplier, total amount, TOP, and due date.
   const handleSelectPO = (id: string) => {
     setPurchaseOrderId(id);
     if (!id) return;
@@ -86,6 +104,29 @@ export default function PurchaseInvoicesPage() {
     if (!po) return;
     setSupplierId(po.supplierId);
     setTotalAmount(po.totalAmount);
+    if (po.paymentTerm) {
+      setPaymentTerm(po.paymentTerm);
+      if (po.paymentTermId) setPaymentTermId(po.paymentTermId);
+      const days = parseDaysFromTerm(po.paymentTerm);
+      const d = new Date();
+      d.setDate(d.getDate() + days);
+      setDueDate(d.toISOString().slice(0, 10));
+    }
+  };
+
+  const handleSelectSupplier = (id: string) => {
+    setSupplierId(id);
+    if (!id) return;
+    const sup = suppliers.find((s) => s.id === id);
+    if (sup?.paymentTerm) {
+      setPaymentTerm(sup.paymentTerm);
+      const matched = paymentTerms.find((p) => p.name === sup.paymentTerm);
+      if (matched) setPaymentTermId(matched.id);
+      const days = parseDaysFromTerm(sup.paymentTerm);
+      const d = new Date();
+      d.setDate(d.getDate() + days);
+      setDueDate(d.toISOString().slice(0, 10));
+    }
   };
 
   const handleRecordInvoice = async (e: React.FormEvent) => {
@@ -96,6 +137,8 @@ export default function PurchaseInvoicesPage() {
       await procurementApi.createPurchaseInvoice({
         supplierId,
         supplierName: selectedSupplier?.name,
+        paymentTermId: paymentTermId || undefined,
+        paymentTerm: paymentTerm || undefined,
         purchaseOrderId: purchaseOrderId || null,
         dueDate,
         totalAmount,
@@ -152,6 +195,11 @@ export default function PurchaseInvoicesPage() {
       header: "Vendor",
       sortable: true,
       render: (vi) => <span className="text-xs font-semibold text-foreground">{vi.supplierName}</span>,
+    },
+    {
+      key: "paymentTerm",
+      header: "Termin (TOP)",
+      render: (vi) => <span className="text-xs text-foreground font-medium">{vi.paymentTerm || "-"}</span>,
     },
     {
       key: "dueDate",
@@ -266,21 +314,49 @@ export default function PurchaseInvoicesPage() {
                 </p>
               )}
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Vendor</label>
-              <select
-                value={supplierId}
-                onChange={(e) => setSupplierId(e.target.value)}
-                required
-                className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30 focus-visible:border-brand-primary"
-              >
-                <option value="">Pilih supplier...</option>
-                {suppliers
-                  .filter((s) => s.status?.toLowerCase() !== "inactive" || s.id === supplierId)
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Vendor</label>
+                <select
+                  value={supplierId}
+                  onChange={(e) => handleSelectSupplier(e.target.value)}
+                  required
+                  className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30 focus-visible:border-brand-primary"
+                >
+                  <option value="">Pilih supplier...</option>
+                  {suppliers
+                    .filter((s) => s.status?.toLowerCase() !== "inactive" || s.id === supplierId)
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Term of Payment (TOP)</label>
+                <select
+                  value={paymentTermId}
+                  onChange={(e) => {
+                    const pt = paymentTerms.find((p) => p.id === e.target.value);
+                    setPaymentTermId(e.target.value);
+                    const name = pt ? pt.name : "";
+                    setPaymentTerm(name);
+                    if (name) {
+                      const days = parseDaysFromTerm(name);
+                      const d = new Date();
+                      d.setDate(d.getDate() + days);
+                      setDueDate(d.toISOString().slice(0, 10));
+                    }
+                  }}
+                  className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30"
+                >
+                  <option value="">-- Pilih TOP --</option>
+                  {paymentTerms.map((pt) => (
+                    <option key={pt.id} value={pt.id}>
+                      {pt.name} ({pt.days} hari)
+                    </option>
                   ))}
-              </select>
+                </select>
+              </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">

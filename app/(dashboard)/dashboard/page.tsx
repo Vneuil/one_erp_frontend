@@ -35,8 +35,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { MoneyDisplay } from "@/components/shared/money-display";
-import { formatNumber } from "@/lib/utils";
+import { formatNumber, formatCurrency } from "@/lib/utils";
 import { downloadCsv } from "@/lib/utils/csv";
+import { currencyApi } from "@/lib/api/currency";
 import { salesApi, SalesOrderItem } from "@/lib/api/sales";
 import { inventoryApi, StockLevelItem } from "@/lib/api/inventory";
 import { financeApi, ReceivableItem } from "@/lib/api/finance";
@@ -274,6 +275,17 @@ export default function DashboardPage() {
   const [stockError, setStockError] = React.useState(false);
   const [financeError, setFinanceError] = React.useState(false);
   const [reportsError, setReportsError] = React.useState(false);
+  const [baseCurrency, setBaseCurrency] = React.useState("IDR");
+
+  React.useEffect(() => {
+    currencyApi
+      .list()
+      .then((res) => {
+        const base = (res.data || []).find((c) => c.isBase);
+        if (base) setBaseCurrency(base.code);
+      })
+      .catch(() => undefined);
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -770,7 +782,7 @@ export default function DashboardPage() {
                         boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.08)",
                         fontSize: "12px",
                       }}
-                      formatter={(val) => [new Intl.NumberFormat(isIndonesian ? "id-ID" : "en-US", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(Number(val)), isIndonesian ? "Nilai Pesanan" : "Order Value"]}
+                      formatter={(val) => [formatCurrency(Number(val), baseCurrency), isIndonesian ? "Nilai Pesanan" : "Order Value"]}
                     />
                     <Bar dataKey="revenue" fill="#50B747" radius={[6, 6, 0, 0]} />
                   </BarChart>

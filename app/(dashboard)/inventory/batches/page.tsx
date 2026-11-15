@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { useNavigationAccess } from "@/providers/navigation-access";
 import { inventoryApi, StockBatchItem, WarehouseItem } from "@/lib/api/inventory";
-import { productsApi, ProductItem } from "@/lib/api/products";
+import { productsApi, ProductItem, isProductActive } from "@/lib/api/products";
 import { usePrompt } from "@/components/shared/confirm-modal";
 
 const errText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
@@ -24,7 +24,9 @@ export default function StockBatchesPage() {
   const mayWriteOff = canApprove("inventory");
 
   const [batches, setBatches] = React.useState<StockBatchItem[]>([]);
-  const [products, setProducts] = React.useState<ProductItem[]>([]);
+  const [allProducts, setAllProducts] = React.useState<ProductItem[]>([]);
+  const productMap = React.useMemo(() => new Map(allProducts.map((p) => [p.id, p])), [allProducts]);
+  const products = React.useMemo(() => allProducts.filter(isProductActive), [allProducts]);
   const [warehouses, setWarehouses] = React.useState<WarehouseItem[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -49,7 +51,7 @@ export default function StockBatchesPage() {
       .then(([b, p, w]) => {
         if (!alive) return;
         setBatches(b.data || []);
-        setProducts(p.data || []);
+        setAllProducts(p.data || []);
         setWarehouses(w.data || []);
       })
       .catch((e) => alive && setError(errText(e, "Gagal memuat batch.")))
@@ -91,9 +93,18 @@ export default function StockBatchesPage() {
     }
   };
 
-  const shown = batches.filter((b) => !onlyRisky || b.status === "expired" || b.status === "expiring_soon");
-  const expired = batches.filter((b) => b.status === "expired");
-  const soon = batches.filter((b) => b.status === "expiring_soon");
+  const activeBatches = React.useMemo(() => {
+    if (allProducts.length === 0) return batches;
+    return batches.filter((b) => {
+      if (!b.productId) return true;
+      const prod = productMap.get(b.productId);
+      return prod ? isProductActive(prod) : false;
+    });
+  }, [batches, allProducts, productMap]);
+
+  const shown = activeBatches.filter((b) => !onlyRisky || b.status === "expired" || b.status === "expiring_soon");
+  const expired = activeBatches.filter((b) => b.status === "expired");
+  const soon = activeBatches.filter((b) => b.status === "expiring_soon");
   const th = "text-left text-[11px] font-bold text-muted-foreground px-3 py-2";
   const td = "px-3 py-2 text-xs";
 
@@ -156,7 +167,7 @@ export default function StockBatchesPage() {
               {!loading && shown.length === 0 && <tr><td className={td} colSpan={7}>Tidak ada batch.</td></tr>}
               {shown.map((b) => (
                 <tr key={b.id} className="border-t border-border">
-                  <td className={`${td} font-semibold`}>{b.productName}<div className="text-[10px] font-normal text-muted-foreground">{b.productSku}</div></td>
+                  <td className={`${td} font-semibold`}>{b.productName || productMap.get(b.productId)?.name || "-"}<div className="text-[10px] font-normal text-muted-foreground">{b.productSku || productMap.get(b.productId)?.sku || "-"}</div></td>
                   <td className={td}>{b.warehouseName}</td>
                   <td className={`${td} font-mono`}>{b.batchNo}</td>
                   <td className={td}>{b.expiryDate || "-"}{b.daysToExpiry !== undefined && <div className="text-[10px] text-muted-foreground">{b.daysToExpiry < 0 ? `${-b.daysToExpiry} hari lalu` : `${b.daysToExpiry} hari lagi`}</div>}</td>

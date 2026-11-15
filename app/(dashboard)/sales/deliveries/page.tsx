@@ -16,7 +16,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, Column } from "@/components/data-table/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { salesApi, DeliveryItem, SalesOrderItem, DeliveryLineInput } from "@/lib/api/sales";
-import { productsApi, ProductItem } from "@/lib/api/products";
+import { productsApi, ProductItem, isProductActive } from "@/lib/api/products";
 import { shippingMethodsApi, ShippingMethodItem } from "@/lib/api/shipping-methods";
 
 // A Sales Order's channel string identifies a marketplace-synced order the
@@ -31,7 +31,9 @@ function isMarketplaceChannel(channel?: string): boolean {
 export default function DeliveriesPage() {
   const [deliveries, setDeliveries] = React.useState<DeliveryItem[]>([]);
   const [salesOrders, setSalesOrders] = React.useState<SalesOrderItem[]>([]);
-  const [products, setProducts] = React.useState<ProductItem[]>([]);
+  const [allProducts, setAllProducts] = React.useState<ProductItem[]>([]);
+  const productMap = React.useMemo(() => new Map(allProducts.map((p) => [p.id, p])), [allProducts]);
+  const products = React.useMemo(() => allProducts.filter(isProductActive), [allProducts]);
   const [shippingMethods, setShippingMethods] = React.useState<ShippingMethodItem[]>([]);
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
   const [salesOrderId, setSalesOrderId] = React.useState("");
@@ -97,8 +99,8 @@ export default function DeliveriesPage() {
       .then((res) => setSalesOrders(res.data || []))
       .catch((err) => console.warn("Failed to load sales orders for delivery form", err));
     productsApi
-      .list({ perPage: 200 })
-      .then((res) => setProducts(res.data || []))
+      .list({ perPage: 500 })
+      .then((res) => setAllProducts(res.data || []))
       .catch((err) => console.warn("Failed to load products for delivery form", err));
     shippingMethodsApi
       .list({ perPage: 100 })
@@ -227,6 +229,18 @@ export default function DeliveriesPage() {
     },
   ];
 
+  const displayedDeliveries = React.useMemo(() => {
+    if (allProducts.length === 0) return deliveries;
+    return deliveries.filter((d) => {
+      if (!d.lines || d.lines.length === 0) return true;
+      return d.lines.every((l) => {
+        if (!l.productId) return true;
+        const p = productMap.get(l.productId);
+        return p ? isProductActive(p) : false;
+      });
+    });
+  }, [deliveries, allProducts, productMap]);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -245,7 +259,7 @@ export default function DeliveriesPage() {
 
       <DataTable
         columns={columns}
-        data={deliveries}
+        data={displayedDeliveries}
         searchKey="deliveryNumber"
         searchPlaceholder="Search delivery order number..."
       />

@@ -7,9 +7,43 @@ import { rbacApi, type PermissionItem } from "@/lib/api/rbac";
 import { useAppStore, type UserInfo, type CompanyInfo } from "@/stores/app-store";
 import { useTranslation } from "@/lib/i18n/translations";
 import { canUseTradeDocs } from "@/lib/roles";
-import { filterNavigation, canViewRoute, canApproveModule, canViewPricesModule } from "@/lib/navigation-access";
+import {
+  filterNavigation,
+  canViewRoute,
+  canCreateModule,
+  canEditModule,
+  canDeleteModule,
+  canSubmitModule,
+  canApproveModule,
+  canViewPricesModule,
+  canEditPricesModule,
+} from "@/lib/navigation-access";
 
-const AccessContext = React.createContext<{ navigation: NavGroup[]; canView: (href: string) => boolean; canApprove: (module: string) => boolean; canViewPrices: (module: string) => boolean; roleName: string | null }>({ navigation: [], canView: () => false, canApprove: () => false, canViewPrices: () => false, roleName: null });
+interface AccessContextType {
+  navigation: NavGroup[];
+  canView: (href: string) => boolean;
+  canCreate: (module: string) => boolean;
+  canEdit: (module: string) => boolean;
+  canDelete: (module: string) => boolean;
+  canSubmit: (module: string) => boolean;
+  canApprove: (module: string) => boolean;
+  canViewPrices: (module: string) => boolean;
+  canEditPrices: (module: string) => boolean;
+  roleName: string | null;
+}
+
+const AccessContext = React.createContext<AccessContextType>({
+  navigation: [],
+  canView: () => false,
+  canCreate: () => false,
+  canEdit: () => false,
+  canDelete: () => false,
+  canSubmit: () => false,
+  canApprove: () => false,
+  canViewPrices: () => false,
+  canEditPrices: () => false,
+  roleName: null,
+});
 export const useNavigationAccess = () => React.useContext(AccessContext);
 
 export function NavigationAccessProvider({ children }: { children: React.ReactNode }) {
@@ -45,8 +79,13 @@ export function NavigationAccessProvider({ children }: { children: React.ReactNo
   const value = React.useMemo(() => ({
     navigation: filterNavigation(navigationConfig, permissions).map((g) => ({ ...g, items: g.items.map((it) => it.items ? { ...it, items: it.items.filter((sub) => !sub.superAdminOnly || canUseTradeDocs(account.role) || canUseTradeDocs(roleName)) } : it) })),
     canView: (href: string) => canViewRoute(href, permissions),
+    canCreate: (module: string) => canCreateModule(module, account, permissions),
+    canEdit: (module: string) => canEditModule(module, account, permissions),
+    canDelete: (module: string) => canDeleteModule(module, account, permissions),
+    canSubmit: (module: string) => canSubmitModule(module, account, permissions),
     canApprove: (module: string) => canApproveModule(module, account, permissions),
     canViewPrices: (module: string) => canViewPricesModule(module, account, permissions),
+    canEditPrices: (module: string) => canEditPricesModule(module, account, permissions),
     roleName,
   }), [permissions, account, roleName]);
   if (failed) return <div role="alert" className="p-6 space-y-3"><p>{isIndonesian ? "Gagal memuat akun dan izin akses." : "Unable to load your account and permissions."}</p><button className="underline" onClick={() => setAttempt((n) => n + 1)}>{isIndonesian ? "Coba lagi" : "Retry"}</button><a className="block underline" href="/login">{isIndonesian ? "Masuk kembali" : "Sign in again"}</a></div>;

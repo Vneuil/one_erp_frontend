@@ -104,6 +104,7 @@ export default function BillingTermsPage() {
           <Card className="border-border shadow-2xs">
             <CardContent className="p-4 flex flex-wrap gap-6 text-xs">
               <div><div className="text-muted-foreground font-semibold">Nilai order</div><div className="text-lg font-black"><MoneyDisplay amount={order.baseAmount ?? order.totalAmount} /></div></div>
+              <div><div className="text-muted-foreground font-semibold">Termin (TOP) Order</div><div className="text-sm font-bold text-brand-primary mt-1">{order.paymentTerm || "Belum diatur"}</div></div>
               <div><div className="text-muted-foreground font-semibold">Sudah ditagihkan</div><div className="text-lg font-black text-emerald-700"><MoneyDisplay amount={invoiced} /></div></div>
               <div><div className="text-muted-foreground font-semibold">Belum ditagihkan</div><div className="text-lg font-black text-amber-700"><MoneyDisplay amount={(order.baseAmount ?? order.totalAmount) - invoiced} /></div></div>
             </CardContent>

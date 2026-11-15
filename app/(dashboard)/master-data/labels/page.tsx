@@ -5,7 +5,7 @@ import { Tags, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { productsApi, ProductItem } from "@/lib/api/products";
+import { productsApi, ProductItem, isProductActive } from "@/lib/api/products";
 import { canEncode128, code128Runs, code128Width } from "@/lib/utils/code128";
 
 const errText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
@@ -43,7 +43,7 @@ export default function LabelPrintPage() {
     let alive = true;
     productsApi
       .list({ perPage: 500 })
-      .then((r) => alive && setProducts(r.data || []))
+      .then((r) => alive && setProducts((r.data || []).filter(isProductActive)))
       .catch((e) => alive && setError(errText(e, "Gagal memuat produk.")))
       .finally(() => alive && setLoading(false));
     return () => {

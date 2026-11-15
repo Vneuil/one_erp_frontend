@@ -11,13 +11,16 @@ import { MoneyDisplay } from "@/components/shared/money-display";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
 import { customersApi, CustomerItem } from "@/lib/api/customers";
-import { productsApi, ProductItem } from "@/lib/api/products";
+import { productsApi, ProductItem, isProductActive } from "@/lib/api/products";
 import { currencyApi, CurrencyItem } from "@/lib/api/currency";
+import { pricingApi, PaymentTermItem } from "@/lib/api/pricing";
 import { salesApi, customerPosApi, CustomerPOItem, CustomerPOLineInput } from "@/lib/api/sales";
+import { usePermission } from "@/lib/hooks/use-permission";
 
 const selectClass = "flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm shadow-xs";
 
 export default function CustomerPOsPage() {
+  const { canCreate: canCreateSales, canDelete: canDeleteSales } = usePermission("sales");
   const confirm = useConfirm();
   const alert = useAlert();
 
@@ -27,7 +30,9 @@ export default function CustomerPOsPage() {
 
   // References
   const [customers, setCustomers] = React.useState<CustomerItem[]>([]);
-  const [products, setProducts] = React.useState<ProductItem[]>([]);
+  const [allProducts, setAllProducts] = React.useState<ProductItem[]>([]);
+  const productMap = React.useMemo(() => new Map(allProducts.map((p) => [p.id, p])), [allProducts]);
+  const products = React.useMemo(() => allProducts.filter(isProductActive), [allProducts]);
   const [currencies, setCurrencies] = React.useState<CurrencyItem[]>([]);
 
   // Modals
@@ -35,6 +40,9 @@ export default function CustomerPOsPage() {
   const [selectedPo, setSelectedPo] = React.useState<CustomerPOItem | null>(null);
 
   // Form state
+  const [paymentTerms, setPaymentTerms] = React.useState<PaymentTermItem[]>([]);
+  const [paymentTermId, setPaymentTermId] = React.useState("");
+  const [paymentTerm, setPaymentTerm] = React.useState("");
   const [customerId, setCustomerId] = React.useState("");
   const [poNumber, setPoNumber] = React.useState("");
   const [poDate, setPoDate] = React.useState("");
@@ -64,12 +72,15 @@ export default function CustomerPOsPage() {
   React.useEffect(() => {
     void loadData();
     customersApi.list({ perPage: 200 }).then((r) => setCustomers((r.data || []).filter((c) => c.status?.toLowerCase() !== "inactive"))).catch(() => undefined);
-    productsApi.list({ perPage: 500 }).then((r) => setProducts(r.data || [])).catch(() => undefined);
+    productsApi.list({ perPage: 500 }).then((r) => setAllProducts(r.data || [])).catch(() => undefined);
     currencyApi.list().then((r) => setCurrencies(r.data || [])).catch(() => undefined);
+    pricingApi.listPaymentTerms().then((r) => setPaymentTerms(r.data || [])).catch(() => undefined);
   }, [loadData]);
 
   const resetForm = () => {
     setCustomerId("");
+    setPaymentTermId("");
+    setPaymentTerm("");
     setPoNumber("");
     setPoDate(new Date().toISOString().slice(0, 10));
     setCurrency("IDR");
@@ -135,6 +146,8 @@ export default function CustomerPOsPage() {
       await customerPosApi.create({
         customerId: selCust.id,
         customerName: selCust.name,
+        paymentTermId: paymentTermId || undefined,
+        paymentTerm: paymentTerm || undefined,
         poNumber: poNumber.trim(),
         poDate: poDate || undefined,
         attachment: attachmentKey || undefined,
@@ -214,16 +227,26 @@ export default function CustomerPOsPage() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
+  const getStatusBadge = (po: CustomerPOItem) => {
+    switch (po.status) {
       case "Agreed":
-        return <StatusBadge status="approved" label="Disetujui (Agreed)" />;
+        return (
+          <StatusBadge
+            status="approved"
+            label={po.tradeInvoiceNumber ? `Disetujui - PI (${po.tradeInvoiceNumber})` : "Disetujui (Agree)"}
+          />
+        );
       case "Negotiating":
-        return <StatusBadge status="pending" label="Negosiasi (Quotation)" />;
+        return (
+          <StatusBadge
+            status="pending"
+            label={po.quotationNumber ? `Negosiasi (${po.quotationNumber})` : "Negosiasi (Quotation)"}
+          />
+        );
       case "Cancelled":
         return <StatusBadge status="cancelled" label="Dibatalkan" />;
       default:
-        return <StatusBadge status="draft" label="Pending Review" />;
+        return <StatusBadge status="draft" label="Menunggu Review" />;
     }
   };
 
@@ -255,6 +278,11 @@ export default function CustomerPOsPage() {
       render: (i) => <span className="text-xs font-semibold text-foreground">{i.customerName}</span>,
     },
     {
+      key: "paymentTerm",
+      header: "Termin (TOP)",
+      render: (i) => <span className="text-xs text-foreground font-medium">{i.paymentTerm || "-"}</span>,
+    },
+    {
       key: "attachment",
       header: "Dokumen PO",
       render: (i) =>
@@ -281,7 +309,7 @@ export default function CustomerPOsPage() {
     {
       key: "status",
       header: "Status Alur",
-      render: (i) => getStatusBadge(i.status),
+      render: (i) => getStatusBadge(i),
     },
     {
       key: "id",
@@ -294,15 +322,29 @@ export default function CustomerPOsPage() {
     },
   ];
 
+  const displayedItems = React.useMemo(() => {
+    if (allProducts.length === 0) return items;
+    return items.filter((po) => {
+      if (!po.lines || po.lines.length === 0) return true;
+      return po.lines.every((l) => {
+        if (!l.productId) return true;
+        const p = productMap.get(l.productId);
+        return p ? isProductActive(p) : false;
+      });
+    });
+  }, [items, allProducts, productMap]);
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="PO Masuk (Purchase Order Pelanggan)"
         description="Penerimaan dan review Purchase Order dari pembeli. Tentukan apakah PO disetujui (Agree) untuk lanjut ke Proforma Invoice, atau ditolak/nego (Disagree) untuk diterbitkan Quotation balasan."
       >
-        <Button onClick={handleOpenCreate} variant="gradient" size="sm" className="h-9 gap-1.5 text-xs font-semibold">
-          <Plus className="h-3.5 w-3.5" /> Catat PO Masuk
-        </Button>
+        {canCreateSales && (
+          <Button onClick={handleOpenCreate} variant="gradient" size="sm" className="h-9 gap-1.5 text-xs font-semibold">
+            <Plus className="h-3.5 w-3.5" /> Catat PO Masuk
+          </Button>
+        )}
       </PageHeader>
 
       {error && (
@@ -313,7 +355,7 @@ export default function CustomerPOsPage() {
 
       <DataTable
         columns={columns}
-        data={items}
+        data={displayedItems}
         isLoading={loading}
         searchKey="poNumber"
         searchPlaceholder="Cari nomor PO atau nama pelanggan..."
@@ -332,13 +374,44 @@ export default function CustomerPOsPage() {
                 <select
                   className={selectClass}
                   value={customerId}
-                  onChange={(e) => setCustomerId(e.target.value)}
+                  onChange={(e) => {
+                    setCustomerId(e.target.value);
+                    const c = customers.find((x) => x.id === e.target.value);
+                    if (c?.paymentTermId) {
+                      setPaymentTermId(c.paymentTermId);
+                      setPaymentTerm(c.paymentTermName || "");
+                    } else if (c?.paymentTermName) {
+                      setPaymentTerm(c.paymentTermName);
+                      const matched = paymentTerms.find((p) => p.name === c.paymentTermName);
+                      if (matched) setPaymentTermId(matched.id);
+                    }
+                  }}
                   required
                 >
                   <option value="">— Pilih Pelanggan —</option>
                   {customers.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.code} — {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-foreground">Term of Payment (TOP)</label>
+                <select
+                  className={selectClass}
+                  value={paymentTermId}
+                  onChange={(e) => {
+                    const pt = paymentTerms.find((p) => p.id === e.target.value);
+                    setPaymentTermId(e.target.value);
+                    setPaymentTerm(pt ? pt.name : "");
+                  }}
+                >
+                  <option value="">-- Pilih TOP --</option>
+                  {paymentTerms.map((pt) => (
+                    <option key={pt.id} value={pt.id}>
+                      {pt.name} ({pt.days} hari)
                     </option>
                   ))}
                 </select>
@@ -493,38 +566,123 @@ export default function CustomerPOsPage() {
               <DialogTitle className="text-base font-bold flex items-center gap-2">
                 PO Masuk: {selectedPo?.poNumber}
               </DialogTitle>
-              {selectedPo && getStatusBadge(selectedPo.status)}
+              {selectedPo && getStatusBadge(selectedPo)}
             </div>
           </DialogHeader>
 
           {selectedPo && (
             <div className="space-y-4 text-xs">
-              {/* Infobox Keputusan Alur */}
-              <div className="rounded-lg border border-brand-primary/20 bg-brand-primary/5 p-3">
-                <h4 className="font-semibold text-brand-primary text-sm mb-1">Keputusan Review PO (Agree or Disagree?)</h4>
-                <p className="text-muted-foreground text-[11px] mb-3">
-                  Tinjau harga dan kuantiti yang diajukan oleh pembeli pada tabel di bawah. Pilih keputusan bisnis Anda:
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="gradient"
-                    size="sm"
-                    className="gap-1.5 font-semibold text-xs bg-emerald-600 hover:bg-emerald-700"
-                    onClick={() => handleAgreeAndCreatePI(selectedPo)}
-                  >
-                    <CheckCircle2 className="h-4 w-4" /> Setuju (Agree) → Terbitkan PI
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 font-semibold text-xs border-amber-300 text-amber-900 bg-amber-50 hover:bg-amber-100"
-                    onClick={() => handleDisagreeAndCreateQuotation(selectedPo)}
-                  >
-                    <MessageSquare className="h-4 w-4 text-amber-700" /> Tidak Setuju → Buat Quotation Balasan
-                  </Button>
-                  {selectedPo.status !== "Cancelled" && (
+              {/* Infobox Status: Agreed & PI Issued */}
+              {(selectedPo.status === "Agreed" || selectedPo.tradeInvoiceNumber) ? (
+                <div className="rounded-xl border border-emerald-300 bg-emerald-50/70 p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-emerald-900 text-sm flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      PO Masuk Telah Disetujui (Agree) &amp; PI Diterbitkan
+                    </h4>
+                    <span className="text-[11px] font-semibold bg-emerald-200 text-emerald-900 px-2.5 py-0.5 rounded-full border border-emerald-300">
+                      PI Terbit
+                    </span>
+                  </div>
+                  <p className="text-[12px] text-emerald-800 leading-relaxed">
+                    PO ini telah disetujui. Dokumen <strong>Proforma Invoice (PI)</strong> telah resmi diterbitkan untuk penagihan Down Payment (DP) kepada pelanggan.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3 pt-2 text-xs">
+                    {selectedPo.tradeInvoiceNumber && (
+                      <span className="font-semibold text-emerald-950 bg-white border border-emerald-200 px-2.5 py-1 rounded-md">
+                        No. Proforma Invoice: <strong>{selectedPo.tradeInvoiceNumber}</strong>
+                      </span>
+                    )}
+                    {selectedPo.quotationNumber && (
+                      <span className="text-muted-foreground bg-white border border-slate-200 px-2.5 py-1 rounded-md">
+                        Melalui Penawaran: <strong>{selectedPo.quotationNumber}</strong>
+                      </span>
+                    )}
+                    <Button
+                      type="button"
+                      variant="gradient"
+                      size="sm"
+                      className="gap-1.5 font-semibold text-xs ml-auto bg-emerald-600 hover:bg-emerald-700"
+                      onClick={() => {
+                        window.location.href = `/sales/trade-invoices?tab=PI${selectedPo.tradeInvoiceId ? `&viewId=${selectedPo.tradeInvoiceId}` : ""}`;
+                      }}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" /> Buka Dokumen Proforma Invoice (PI) &rarr;
+                    </Button>
+                  </div>
+                </div>
+              ) : (selectedPo.status === "Negotiating" || selectedPo.quotationNumber) ? (
+                <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-amber-900 text-sm flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-amber-600" />
+                      PO Masuk Dalam Tahap Negosiasi (Quotation Balasan)
+                    </h4>
+                    <span className="text-[11px] font-semibold bg-amber-200 text-amber-900 px-2.5 py-0.5 rounded-full border border-amber-300">
+                      Negosiasi Aktif
+                    </span>
+                  </div>
+                  <p className="text-[12px] text-amber-900 leading-relaxed">
+                    Harga atau kuantiti PO ini diajukan penawaran balasan (Quotation) oleh internal Manna. Segala revisi negosiasi dan persetujuan akhir (penerbitan PI) dilakukan di modul <strong>Quotations</strong>.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3 pt-2 text-xs">
+                    {selectedPo.quotationNumber && (
+                      <span className="font-semibold text-amber-950 bg-white border border-amber-300 px-2.5 py-1 rounded-md">
+                        No. Quotation Balasan: <strong>{selectedPo.quotationNumber}</strong>
+                      </span>
+                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 font-semibold text-xs border-amber-400 text-amber-950 bg-white hover:bg-amber-100"
+                      onClick={() => {
+                        window.location.href = "/sales/quotations";
+                      }}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5 text-amber-700" /> Buka Modul Quotations (Lanjut / Revisi / Setujui Jadi PI) &rarr;
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs text-rose-600 hover:bg-rose-50 ml-auto"
+                      onClick={() => handleCancelPO(selectedPo)}
+                    >
+                      <XCircle className="h-3.5 w-3.5" /> Batalkan PO
+                    </Button>
+                  </div>
+                </div>
+              ) : selectedPo.status === "Cancelled" ? (
+                <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3 text-xs text-rose-800 flex items-center gap-2">
+                  <XCircle className="h-4 w-4 text-rose-600 shrink-0" />
+                  <span>PO Masuk ini telah <strong>dibatalkan</strong> dan tidak diproses lebih lanjut.</span>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-brand-primary/20 bg-brand-primary/5 p-4 space-y-2">
+                  <h4 className="font-bold text-brand-primary text-sm">Keputusan Review PO Masuk (Agree or Disagree?)</h4>
+                  <p className="text-muted-foreground text-[11px]">
+                    Tinjau harga dan kuantiti yang diajukan oleh pembeli pada tabel di bawah. Pilih keputusan bisnis Anda:
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="gradient"
+                      size="sm"
+                      className="gap-1.5 font-semibold text-xs bg-emerald-600 hover:bg-emerald-700"
+                      onClick={() => handleAgreeAndCreatePI(selectedPo)}
+                    >
+                      <CheckCircle2 className="h-4 w-4" /> Setuju (Agree) → Terbitkan PI
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 font-semibold text-xs border-amber-300 text-amber-900 bg-amber-50 hover:bg-amber-100"
+                      onClick={() => handleDisagreeAndCreateQuotation(selectedPo)}
+                    >
+                      <MessageSquare className="h-4 w-4 text-amber-700" /> Tidak Setuju → Buat Quotation Balasan
+                    </Button>
                     <Button
                       type="button"
                       variant="outline"
@@ -534,9 +692,9 @@ export default function CustomerPOsPage() {
                     >
                       <XCircle className="h-4 w-4" /> Batalkan PO
                     </Button>
-                  )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Data Header */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-lg border border-border">

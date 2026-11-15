@@ -15,12 +15,13 @@ import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, Column } from "@/components/data-table/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { inventoryApi, WarehouseItem } from "@/lib/api/inventory";
-import { productsApi, ProductItem } from "@/lib/api/products";
+import { productsApi, ProductItem, isProductActive } from "@/lib/api/products";
 import { useConfirm } from "@/components/shared/confirm-modal";
 
 interface StockTransfer {
   id: string;
   transferNumber: string;
+  productId?: string;
   sourceWH: string;
   destWH: string;
   transferDate: string;
@@ -34,7 +35,9 @@ export default function TransfersPage() {
   const [transfers, setTransfers] = React.useState<StockTransfer[]>([]);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [warehouses, setWarehouses] = React.useState<WarehouseItem[]>([]);
-  const [products, setProducts] = React.useState<ProductItem[]>([]);
+  const [allProducts, setAllProducts] = React.useState<ProductItem[]>([]);
+  const productMap = React.useMemo(() => new Map(allProducts.map((p) => [p.id, p])), [allProducts]);
+  const products = React.useMemo(() => allProducts.filter(isProductActive), [allProducts]);
   const [isNewOpen, setIsNewOpen] = React.useState(false);
   const [productId, setProductId] = React.useState("");
   const [sourceWH, setSourceWH] = React.useState("");
@@ -49,10 +52,11 @@ export default function TransfersPage() {
     inventoryApi
       .listTransfers({ perPage: 50 })
       .then((res) => {
-                  setTransfers(
+          setTransfers(
             (res.data || []).map((t) => ({
               id: t.id,
               transferNumber: t.id.slice(0, 8).toUpperCase(),
+              productId: t.productId,
               sourceWH: t.fromWarehouseName,
               destWH: t.toWarehouseName,
               transferDate: t.createdAt ? t.createdAt.slice(0, 10) : "",
@@ -80,8 +84,8 @@ export default function TransfersPage() {
     fetchTransfers();
 
     productsApi
-      .list({ perPage: 200 })
-      .then((res) => setProducts(res.data || []))
+      .list({ perPage: 500 })
+      .then((res) => setAllProducts(res.data || []))
       .catch((err) => console.warn("Failed to load products", err));
   }, [fetchTransfers]);
 
@@ -219,6 +223,15 @@ export default function TransfersPage() {
     },
   ];
 
+  const displayedTransfers = React.useMemo(() => {
+    if (allProducts.length === 0) return transfers;
+    return transfers.filter((t) => {
+      if (!t.productId) return true;
+      const p = productMap.get(t.productId);
+      return p ? isProductActive(p) : false;
+    });
+  }, [transfers, allProducts, productMap]);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -242,7 +255,7 @@ export default function TransfersPage() {
       )}
       <DataTable
         columns={columns}
-        data={transfers}
+        data={displayedTransfers}
         searchKey="transferNumber"
         searchPlaceholder="Search transfer number..."
       />

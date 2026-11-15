@@ -45,6 +45,62 @@ export function canApproveModule(
   return role === "manager";
 }
 
+export function canCreateModule(
+  module: string,
+  account: { role: string; roleId?: string | null },
+  permissions: PermissionItem[] | null,
+): boolean {
+  const role = account.role.toLowerCase();
+  if (role === "admin") return true;
+  if (account.roleId && permissions) {
+    const perm = permissions.find((p) => p.module === module);
+    return perm ? Boolean(perm.canCreate || perm.canManage) : false;
+  }
+  return true;
+}
+
+export function canEditModule(
+  module: string,
+  account: { role: string; roleId?: string | null },
+  permissions: PermissionItem[] | null,
+): boolean {
+  const role = account.role.toLowerCase();
+  if (role === "admin") return true;
+  if (account.roleId && permissions) {
+    const perm = permissions.find((p) => p.module === module);
+    return perm ? Boolean(perm.canEdit || perm.canManage) : false;
+  }
+  return true;
+}
+
+export function canDeleteModule(
+  module: string,
+  account: { role: string; roleId?: string | null },
+  permissions: PermissionItem[] | null,
+): boolean {
+  const role = account.role.toLowerCase();
+  if (role === "admin") return true;
+  if (account.roleId && permissions) {
+    const perm = permissions.find((p) => p.module === module);
+    return perm ? Boolean(perm.canDelete) : false;
+  }
+  return role === "manager";
+}
+
+export function canSubmitModule(
+  module: string,
+  account: { role: string; roleId?: string | null },
+  permissions: PermissionItem[] | null,
+): boolean {
+  const role = account.role.toLowerCase();
+  if (role === "admin") return true;
+  if (account.roleId && permissions) {
+    const perm = permissions.find((p) => p.module === module);
+    return perm ? Boolean(perm.canSubmit || perm.canCreate || perm.canManage) : false;
+  }
+  return true;
+}
+
 // Confidential Pricing check: hides pricing/cost fields from staff/operators
 export function canViewPricesModule(
   module: string,
@@ -60,4 +116,20 @@ export function canViewPricesModule(
     }
   }
   return role === "manager";
+}
+
+export function canEditPricesModule(
+  module: string,
+  account: { role: string; roleId?: string | null },
+  permissions: PermissionItem[] | null,
+): boolean {
+  const role = account.role.toLowerCase();
+  if (role === "admin" || role === "owner" || role === "superadmin") return true;
+  if (account.roleId && permissions) {
+    const perm = permissions.find((p) => p.module === module);
+    if (perm && perm.canEditPrices !== undefined) {
+      return perm.canEditPrices;
+    }
+  }
+  return role === "manager" || role === "finance";
 }

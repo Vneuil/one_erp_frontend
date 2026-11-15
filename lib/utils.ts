@@ -6,10 +6,11 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(amount: number, currency: string = "IDR"): string {
+  const c = currency || "IDR";
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
-    currency: currency,
-    maximumFractionDigits: 0,
+    currency: c,
+    maximumFractionDigits: c === "IDR" ? 0 : 2,
   }).format(amount);
 }
 

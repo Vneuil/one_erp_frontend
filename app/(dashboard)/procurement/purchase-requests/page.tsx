@@ -15,7 +15,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, Column } from "@/components/data-table/data-table";
 import { procurementApi, PurchaseRequestLineInput } from "@/lib/api/procurement";
 import { salesApi, SalesOrderItem as ApiSO } from "@/lib/api/sales";
-import { productsApi, ProductItem } from "@/lib/api/products";
+import { productsApi, ProductItem, isProductActive } from "@/lib/api/products";
 import { inventoryApi, StockLevelItem } from "@/lib/api/inventory";
 import { hrmApi } from "@/lib/api/hrm";
 import { approvalApi, ApprovalRequest } from "@/lib/api/approval";
@@ -24,6 +24,7 @@ import { useConfirm, useAlert, usePrompt } from "@/components/shared/confirm-mod
 import { ApprovalTimeline, canUserApprove } from "@/components/shared/approval-timeline";
 import { MoneyDisplay } from "@/components/shared/money-display";
 import { useNavigationAccess } from "@/providers/navigation-access";
+import { usePermission } from "@/lib/hooks/use-permission";
 
 interface PurchaseRequest {
   id: string;
@@ -99,7 +100,8 @@ function PRCategoryBadge({ category }: { category?: string }) {
 
 export default function PurchaseRequestsPage() {
   const { canApprove, canViewPrices, roleName } = useNavigationAccess();
-  const mayApprove = canApprove("procurement");
+  const { canCreate: canCreatePR, canApprove: canApprovePR, canSubmit: canSubmitPR } = usePermission("procurement");
+  const mayApprove = canApprovePR || canApprove("procurement");
   const pricesAllowed = canViewPrices("procurement");
   const { currentUser, currentCompany } = useAppStore();
   const confirm = useConfirm();
@@ -136,7 +138,9 @@ export default function PurchaseRequestsPage() {
   } | null>(null);
   const [department, setDepartment] = React.useState("");
   const [requiredDate, setRequiredDate] = React.useState("");
-  const [products, setProducts] = React.useState<ProductItem[]>([]);
+  const [allProducts, setAllProducts] = React.useState<ProductItem[]>([]);
+  const productMap = React.useMemo(() => new Map(allProducts.map((p) => [p.id, p])), [allProducts]);
+  const products = React.useMemo(() => allProducts.filter(isProductActive), [allProducts]);
   const [prLines, setPrLines] = React.useState<PurchaseRequestLineInput[]>([]);
   const [lineProductId, setLineProductId] = React.useState("");
   const [lineQty, setLineQty] = React.useState("1");
@@ -162,24 +166,24 @@ export default function PurchaseRequestsPage() {
   const selectedPrTotalNominal = React.useMemo(() => {
     if (!selectedPr || !selectedPr.lines) return 0;
     return selectedPr.lines.reduce((sum, l) => {
-      const product = products.find((p) => p.id === l.productId);
+      const product = productMap.get(l.productId);
       return sum + l.quantity * (product?.costPrice || 0);
     }, 0);
-  }, [selectedPr, products]);
+  }, [selectedPr, productMap]);
 
   const createPrTotalNominal = React.useMemo(() => {
     return prLines.reduce((sum, l) => {
-      const product = products.find((p) => p.id === l.productId);
+      const product = productMap.get(l.productId);
       return sum + l.quantity * (product?.costPrice || 0);
     }, 0);
-  }, [prLines, products]);
+  }, [prLines, productMap]);
 
   const editPrTotalNominal = React.useMemo(() => {
     return editLines.reduce((sum, l) => {
-      const product = products.find((p) => p.id === l.productId);
+      const product = productMap.get(l.productId);
       return sum + l.quantity * (product?.costPrice || 0);
     }, 0);
-  }, [editLines, products]);
+  }, [editLines, productMap]);
 
   const fetchPRs = React.useCallback(() => {
     setIsLoading(true);
@@ -240,8 +244,8 @@ export default function PurchaseRequestsPage() {
 
   React.useEffect(() => {
     productsApi
-      .list({ perPage: 200 })
-      .then((res) => setProducts(res.data || []))
+      .list({ perPage: 500 })
+      .then((res) => setAllProducts(res.data || []))
       .catch((err) => console.warn("Failed to load products for PR line items", err));
 
     salesApi
@@ -309,7 +313,7 @@ export default function PurchaseRequestsPage() {
       }
 
       const analysisItems = so.lines.map((line) => {
-        const product = products.find((p) => p.id === line.productId);
+        const product = productMap.get(line.productId);
         let available = 0;
         if (so?.warehouseId) {
           const whStock = stockLevels.find(
@@ -949,7 +953,7 @@ export default function PurchaseRequestsPage() {
             align: "right" as const,
             render: (pr: PurchaseRequest) => {
               const total = (pr.lines || []).reduce((sum, l) => {
-                const prod = products.find((p) => p.id === l.productId);
+                const prod = productMap.get(l.productId);
                 return sum + l.quantity * (prod?.costPrice || 0);
               }, 0);
               return (
@@ -1087,25 +1091,38 @@ export default function PurchaseRequestsPage() {
     },
   ];
 
+  const displayedPRs = React.useMemo(() => {
+    if (allProducts.length === 0) return prs;
+    return prs.filter((pr) => {
+      if (!pr.lines || pr.lines.length === 0) return true;
+      return pr.lines.every((l) => {
+        const p = productMap.get(l.productId);
+        return p ? isProductActive(p) : false;
+      });
+    });
+  }, [prs, allProducts, productMap]);
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Permintaan Pembelian"
         description="Permintaan internal dari tim produksi, perawatan, atau gudang."
       >
-        <Button
-          variant="gradient"
-          size="sm"
-          className="h-9 gap-1.5 text-xs font-semibold"
-          onClick={() => {
-            setSelectedSalesOrderId("");
-            setSoAnalysis(null);
-            setPrLines([]);
-            setIsNewOpen(true);
-          }}
-        >
-          <Plus className="h-3.5 w-3.5" /> Ajukan Permintaan Pembelian
-        </Button>
+        {canCreatePR && (
+          <Button
+            variant="gradient"
+            size="sm"
+            className="h-9 gap-1.5 text-xs font-semibold"
+            onClick={() => {
+              setSelectedSalesOrderId("");
+              setSoAnalysis(null);
+              setPrLines([]);
+              setIsNewOpen(true);
+            }}
+          >
+            <Plus className="h-3.5 w-3.5" /> Ajukan Permintaan Pembelian
+          </Button>
+        )}
       </PageHeader>
 
       {loadError && (
@@ -1125,7 +1142,7 @@ export default function PurchaseRequestsPage() {
       ) : (
         <DataTable
           columns={columns}
-          data={prs}
+          data={displayedPRs}
           searchKey="prNumber"
           searchPlaceholder="Search PR number..."
           onRowClick={(item) => setSelectedPr(item)}
@@ -1355,7 +1372,7 @@ export default function PurchaseRequestsPage() {
                     <table className="w-full text-xs">
                       <tbody className="divide-y divide-border">
                         {prLines.map((l) => {
-                          const product = products.find((p) => p.id === l.productId);
+                          const product = productMap.get(l.productId);
                           const subtotal = l.quantity * (product?.costPrice || 0);
                           return (
                             <tr key={l.productId}>
@@ -1517,7 +1534,7 @@ export default function PurchaseRequestsPage() {
                       </thead>
                       <tbody className="divide-y divide-border">
                         {editLines.map((l) => {
-                          const product = products.find((p) => p.id === l.productId);
+                          const product = productMap.get(l.productId);
                           const subtotal = l.quantity * (product?.costPrice || 0);
                           return (
                             <tr key={l.productId}>
@@ -1709,7 +1726,7 @@ export default function PurchaseRequestsPage() {
                   <tbody className="divide-y divide-border">
                     {selectedPr.lines && selectedPr.lines.length > 0 ? (
                       selectedPr.lines.map((l, idx) => {
-                        const product = products.find((p) => p.id === l.productId);
+                        const product = productMap.get(l.productId);
                         const unitPrice = product?.costPrice || 0;
                         const subtotal = l.quantity * unitPrice;
                         return (
@@ -1976,7 +1993,7 @@ export default function PurchaseRequestsPage() {
                   <tbody>
                     {selectedPr.lines && selectedPr.lines.length > 0 ? (
                       selectedPr.lines.map((l, idx) => {
-                        const product = products.find((p) => p.id === l.productId);
+                        const product = productMap.get(l.productId);
                         const unitPrice = product?.costPrice || 0;
                         const subtotal = l.quantity * unitPrice;
                         return (

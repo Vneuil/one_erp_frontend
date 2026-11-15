@@ -1,18 +1,21 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Download, Mail, Phone, Pencil, Power, ChevronDown, ChevronRight } from "lucide-react";
+import Link from "next/link";
+import { Plus, Download, Mail, Phone, Pencil, Power, ChevronDown, ChevronRight, Building2, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, Column } from "@/components/data-table/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { suppliersApi, SupplierItem, VendorTypeOption } from "@/lib/api/suppliers";
+import { suppliersApi, supplierCodesApi, SupplierItem, SupplierCodeItem, VendorTypeOption } from "@/lib/api/suppliers";
 import { pricingApi, PaymentTermItem } from "@/lib/api/pricing";
+import { productCategoriesApi, ProductCategoryItem } from "@/lib/api/products";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { downloadCsv } from "@/lib/utils/csv";
 import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
 import { useRole } from "@/lib/hooks/use-role";
+import { usePermission } from "@/lib/hooks/use-permission";
 
 const DEFAULT_CITY = "Semarang";
 const FALLBACK_TYPES: VendorTypeOption[] = [
@@ -53,7 +56,7 @@ const emptyForm = (vendorType: string): FormState => ({
   contactPerson: "",
   email: "",
   phone: "",
-  category: "Raw Materials",
+  category: "",
   address: "",
   city: DEFAULT_CITY,
   province: "",
@@ -102,10 +105,12 @@ export default function SuppliersPage() {
   const confirm = useConfirm();
   const alert = useAlert();
   const { canManageMasterData } = useRole();
+  const { canCreate: canCreateSupplier, canEdit: canEditSupplier, canDelete: canDeleteSupplier } = usePermission("suppliers");
 
   const [suppliers, setSuppliers] = React.useState<SupplierItem[]>([]);
   const [vendorTypes, setVendorTypes] = React.useState<VendorTypeOption[]>(FALLBACK_TYPES);
   const [paymentTerms, setPaymentTerms] = React.useState<PaymentTermItem[]>([]);
+  const [categories, setCategories] = React.useState<ProductCategoryItem[]>([]);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
 
@@ -114,6 +119,16 @@ export default function SuppliersPage() {
   const [form, setForm] = React.useState<FormState>(emptyForm("PRD"));
   const [showAddressDetails, setShowAddressDetails] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+
+  // Quick Add Vendor Code modal state
+  const [addCodeOpen, setAddCodeOpen] = React.useState(false);
+  const [targetSupplier, setTargetSupplier] = React.useState<SupplierItem | null>(null);
+  const [newCodeType, setNewCodeType] = React.useState("PRD");
+  const [newCodeVal, setNewCodeVal] = React.useState("");
+  const [newBatchCode, setNewBatchCode] = React.useState("");
+  const [newCodeDesc, setNewCodeDesc] = React.useState("");
+  const [isAddingCode, setIsAddingCode] = React.useState(false);
+  const [addCodeError, setAddCodeError] = React.useState<string | null>(null);
 
   const set = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
 
@@ -132,11 +147,17 @@ export default function SuppliersPage() {
     fetchSuppliers();
     suppliersApi.types().then((r) => r.data?.length && setVendorTypes(r.data)).catch(() => undefined);
     pricingApi.listPaymentTerms().then((r) => setPaymentTerms(r.data || [])).catch(() => undefined);
+    productCategoriesApi.list().then((r) => setCategories(r.data || [])).catch(() => undefined);
   }, [fetchSuppliers]);
 
   const openCreate = () => {
     setEditingId(null);
-    setForm(emptyForm(vendorTypes[0]?.code ?? "PRD"));
+    const initial = emptyForm("");
+    initial.vendorType = "";
+    if (categories.length > 0) {
+      initial.category = categories[0].name;
+    }
+    setForm(initial);
     setShowAddressDetails(false);
     setDialogOpen(true);
   };
@@ -148,12 +169,66 @@ export default function SuppliersPage() {
     setDialogOpen(true);
   };
 
+  const openAddCode = (s: SupplierItem) => {
+    setTargetSupplier(s);
+    setNewCodeType(vendorTypes[0]?.code || "PRD");
+    setNewCodeVal("");
+    setNewBatchCode(s.batchCode || "");
+    setNewCodeDesc("");
+    setAddCodeError(null);
+    setAddCodeOpen(true);
+  };
+
+  const handleAddCodeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetSupplier) return;
+    setIsAddingCode(true);
+    setAddCodeError(null);
+    try {
+      await supplierCodesApi.create({
+        supplierId: targetSupplier.id,
+        vendorType: newCodeType,
+        code: newCodeVal.trim() || undefined,
+        batchCode: newBatchCode.trim() || undefined,
+        description: newCodeDesc.trim() || undefined,
+      });
+      setAddCodeOpen(false);
+      fetchSuppliers();
+    } catch (err) {
+      setAddCodeError(err instanceof Error ? err.message : "Gagal menambahkan kode vendor.");
+    } finally {
+      setIsAddingCode(false);
+    }
+  };
+
+  const editingSupplier = React.useMemo(() => {
+    return suppliers.find((s) => s.id === editingId) || null;
+  }, [suppliers, editingId]);
+
+  const editingSupplierCodes: SupplierCodeItem[] = React.useMemo(() => {
+    if (!editingSupplier) return [];
+    if (editingSupplier.codes && editingSupplier.codes.length > 0) {
+      return editingSupplier.codes;
+    }
+    if (editingSupplier.code) {
+      return [
+        {
+          id: editingSupplier.id,
+          supplierId: editingSupplier.id,
+          code: editingSupplier.code,
+          batchCode: editingSupplier.batchCode,
+          vendorType: editingSupplier.vendorType || "",
+          status: editingSupplier.status,
+        },
+      ];
+    }
+    return [];
+  }, [editingSupplier]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     const payload = {
-      vendorType: form.vendorType || undefined,
-      batchCode: form.batchCode.trim().toUpperCase(),
       name: form.name,
       contactPerson: form.contactPerson,
       email: form.email,
@@ -169,15 +244,13 @@ export default function SuppliersPage() {
     };
     try {
       if (editingId) {
-        // The code is sent too: changing it (e.g. PCK-001 -> VD-PCK-001) is saved.
         const res = await suppliersApi.update(editingId, {
           ...payload,
-          code: form.code,
           ...(canManageMasterData ? { status: form.status } : {}),
         });
         setSuppliers((prev) => prev.map((s) => (s.id === editingId ? { ...s, ...res.data } : s)));
       } else {
-        await suppliersApi.create({ ...payload, code: form.code.trim() || undefined });
+        await suppliersApi.create(payload);
         fetchSuppliers();
       }
       setDialogOpen(false);
@@ -224,16 +297,45 @@ export default function SuppliersPage() {
       key: "code",
       header: "Kode Vendor",
       sortable: true,
-      render: (s) => (
-        <div>
-          <span className="font-mono text-xs font-bold text-brand-primary">{s.code}</span>
-          {s.batchCode && (
-            <span className="block mt-0.5 text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 w-fit">
-              Trace: {s.batchCode}
-            </span>
-          )}
-        </div>
-      ),
+      render: (s) => {
+        const codes =
+          s.codes && s.codes.length > 0
+            ? s.codes
+            : s.code
+            ? [{ id: s.id, code: s.code, batchCode: s.batchCode, vendorType: s.vendorType, status: s.status }]
+            : [];
+        return (
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center gap-1">
+              {codes.length === 0 ? (
+                <span className="text-[11px] text-muted-foreground italic">Belum ada kode</span>
+              ) : (
+                codes.map((c) => (
+                  <span
+                    key={c.id || c.code}
+                    className="inline-flex items-center gap-1 font-mono text-xs font-bold text-brand-primary bg-brand-primary/10 px-1.5 py-0.5 rounded border border-brand-primary/20"
+                    title={c.vendorType ? `Tipe: ${c.vendorType}` : undefined}
+                  >
+                    {c.code}
+                    {c.batchCode && (
+                      <span className="text-[10px] text-emerald-800 bg-emerald-50 px-1 rounded border border-emerald-200">
+                        {c.batchCode}
+                      </span>
+                    )}
+                  </span>
+                ))
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => openAddCode(s)}
+              className="text-[10px] text-brand-primary hover:underline font-semibold flex items-center gap-0.5"
+            >
+              + Tambah Kode
+            </button>
+          </div>
+        );
+      },
     },
     {
       key: "name",
@@ -307,15 +409,36 @@ export default function SuppliersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Master Vendor"
-        description="Kelola vendor/pemasok, payment term, dan status aktif. Kode vendor: VD-PRD / VD-PCK / VD-ATK."
+        description="Kelola profil vendor/pemasok, payment term, dan status aktif. Satu vendor dapat memiliki beberapa kode vendor (PRD/PCK/ATK)."
       >
         <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs" onClick={handleExport}>
           <Download className="h-3.5 w-3.5" /> Ekspor
         </Button>
-        <Button onClick={openCreate} variant="gradient" size="sm" className="h-9 gap-1.5 text-xs font-semibold">
-          <Plus className="h-3.5 w-3.5" /> Tambah Vendor
-        </Button>
+        {canCreateSupplier && (
+          <Button onClick={openCreate} variant="gradient" size="sm" className="h-9 gap-1.5 text-xs font-semibold">
+            <Plus className="h-3.5 w-3.5" /> Tambah Vendor
+          </Button>
+        )}
       </PageHeader>
+
+      {/* Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-border pb-2">
+        <Link
+          href="/master-data/suppliers"
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-primary text-white shadow-xs"
+        >
+          <Building2 className="h-3.5 w-3.5" />
+          Profil Perusahaan Vendor
+          <span className="ml-1 text-[10px] bg-white/20 px-1.5 py-0.2 rounded-full">{suppliers.length}</span>
+        </Link>
+        <Link
+          href="/master-data/supplier-codes"
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        >
+          <Tag className="h-3.5 w-3.5" />
+          Kelola Kode Vendor
+        </Link>
+      </div>
 
       {loadError && (
         <div role="alert" className="m-3 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">
@@ -330,80 +453,77 @@ export default function SuppliersPage() {
           data={suppliers}
           isLoading={isLoading}
           searchKey="name"
+          searchKeys={["name", "category", "code", "contactPerson"]}
           searchPlaceholder="Cari vendor berdasarkan nama atau kategori..."
         />
       )}
 
+      {/* Modal Tambah / Edit Profil Vendor */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingId ? "Edit Vendor" : "Tambah Vendor Baru"}</DialogTitle>
+            <DialogTitle>{editingId ? "Edit Profil Vendor" : "Tambah Vendor Baru"}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Tipe Vendor *" hint="menentukan kode">
+            <Field label="Nama Vendor / Perusahaan *">
+              <Input
+                value={form.name}
+                onChange={(e) => set({ name: e.target.value })}
+                placeholder="PT / CV / UD Nama Vendor"
+                required
+              />
+            </Field>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field label="Contact Person">
+                <Input
+                  value={form.contactPerson}
+                  onChange={(e) => set({ contactPerson: e.target.value })}
+                  placeholder="Nama PIC"
+                />
+              </Field>
+              <Field label="Kategori Pasokan">
                 <select
                   className={selectClass}
-                  value={form.vendorType}
-                  onChange={(e) => set({ vendorType: e.target.value })}
-                  required={!editingId}
+                  value={form.category}
+                  onChange={(e) => set({ category: e.target.value })}
                 >
-                  {editingId && <option value="">-</option>}
-                  {vendorTypes.map((t) => (
-                    <option key={t.code} value={t.code}>
-                      {t.code} — {t.label}
+                  <option value="">— Pilih Kategori dari Master —</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.name}>
+                      {c.name}
                     </option>
                   ))}
-                  {form.vendorType && !vendorTypes.some((t) => t.code === form.vendorType) && (
-                    <option value={form.vendorType}>{form.vendorType} — Kustom</option>
+                  {form.category && !categories.some((c) => c.name === form.category) && (
+                    <option value={form.category}>{form.category}</option>
                   )}
                 </select>
+                {categories.length === 0 && (
+                  <p className="text-[10px] text-muted-foreground">
+                    Belum ada Kategori. Tambahkan di Master Data › Kategori &amp; Satuan.
+                  </p>
+                )}
               </Field>
-              <Field label="Kode Vendor" hint={editingId ? "format VD-XXX-NNN" : "kosongkan = otomatis"}>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field label="Email">
                 <Input
-                  value={form.code}
-                  onChange={(e) => {
-                    const nextCode = e.target.value.toUpperCase();
-                    const derivedType = extractVendorTypeFromCode(nextCode);
-                    set({
-                      code: nextCode,
-                      ...(derivedType ? { vendorType: derivedType } : {}),
-                    });
-                  }}
-                  placeholder={codePreview}
-                  className="font-mono"
-                  required={!!editingId}
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => set({ email: e.target.value })}
+                  placeholder="email@vendor.com"
+                />
+              </Field>
+              <Field label="Telepon">
+                <Input
+                  value={form.phone}
+                  onChange={(e) => set({ phone: e.target.value })}
+                  placeholder="0812xxxx / +62"
                 />
               </Field>
             </div>
-            <Field label="Kode Traceability Supplier" hint="2 huruf (cth: PW)">
-              <Input
-                value={form.batchCode}
-                onChange={(e) => set({ batchCode: e.target.value.toUpperCase() })}
-                maxLength={4}
-                placeholder="e.g. PW"
-                className="font-mono uppercase font-bold"
-              />
-            </Field>
-            <Field label="Nama Vendor / Perusahaan *">
-              <Input value={form.name} onChange={(e) => set({ name: e.target.value })} required />
-            </Field>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="Contact Person">
-                <Input value={form.contactPerson} onChange={(e) => set({ contactPerson: e.target.value })} />
-              </Field>
-              <Field label="Kategori">
-                <Input value={form.category} onChange={(e) => set({ category: e.target.value })} />
-              </Field>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="Email">
-                <Input type="email" value={form.email} onChange={(e) => set({ email: e.target.value })} />
-              </Field>
-              <Field label="Telepon">
-                <Input value={form.phone} onChange={(e) => set({ phone: e.target.value })} />
-              </Field>
-            </div>
+
             <Field label="Payment Term">
               <select className={selectClass} value={form.paymentTerm} onChange={(e) => set({ paymentTerm: e.target.value })}>
                 <option value="">— Pilih payment term —</option>
@@ -420,9 +540,11 @@ export default function SuppliersPage() {
                 <p className="text-[10px] text-muted-foreground">Belum ada Payment Term. Tambahkan di Master Data › Term of Payment (TOP).</p>
               )}
             </Field>
+
             <Field label="Kota" hint="default Semarang">
               <Input value={form.city} onChange={(e) => set({ city: e.target.value })} placeholder={DEFAULT_CITY} />
             </Field>
+
             <div className="rounded-lg border border-border/70 bg-muted/20 p-2.5 space-y-2.5">
               <button
                 type="button"
@@ -448,6 +570,16 @@ export default function SuppliersPage() {
                 </div>
               )}
             </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="NPWP">
+                <Input value={form.npwp} onChange={(e) => set({ npwp: e.target.value })} placeholder="15 atau 16 digit" inputMode="numeric" />
+              </Field>
+              <Field label="NIK">
+                <Input value={form.nik} onChange={(e) => set({ nik: e.target.value })} placeholder="16 digit (jika tanpa NPWP)" inputMode="numeric" />
+              </Field>
+            </div>
+
             {editingId && canManageMasterData && (
               <Field label="Status Vendor" hint="khusus Manager / Admin">
                 <select
@@ -460,14 +592,101 @@ export default function SuppliersPage() {
                 </select>
               </Field>
             )}
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="NPWP">
-                <Input value={form.npwp} onChange={(e) => set({ npwp: e.target.value })} placeholder="15 atau 16 digit" inputMode="numeric" />
-              </Field>
-              <Field label="NIK">
-                <Input value={form.nik} onChange={(e) => set({ nik: e.target.value })} placeholder="16 digit (jika tanpa NPWP)" inputMode="numeric" />
-              </Field>
-            </div>
+
+            {/* Bagian Kode Vendor Terkait */}
+            {editingId ? (
+              <div className="rounded-lg border border-border bg-slate-50/70 p-3.5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
+                    <Tag className="h-4 w-4 text-brand-primary" />
+                    <span>Kode Vendor Terkait</span>
+                  </div>
+                  <span className="text-[11px] text-muted-foreground">
+                    {editingSupplierCodes.length} kode terdaftar
+                  </span>
+                </div>
+
+                {editingSupplierCodes.length === 0 ? (
+                  <div className="rounded-md border border-dashed border-border bg-white p-3 text-center text-xs text-muted-foreground">
+                    Belum ada kode vendor untuk vendor ini.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {editingSupplierCodes.map((c) => (
+                      <div
+                        key={c.id || c.code}
+                        className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-border text-xs"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono font-bold text-xs text-brand-primary bg-brand-primary/10 px-2 py-0.5 rounded border border-brand-primary/20">
+                            {c.code}
+                          </span>
+                          {c.batchCode && (
+                            <span className="font-mono text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                              {c.batchCode}
+                            </span>
+                          )}
+                          <span className="text-[11px] text-muted-foreground">
+                            {c.vendorType ? `Tipe: ${c.vendorType}` : ""}
+                          </span>
+                          {c.description && (
+                            <span className="text-[11px] text-muted-foreground italic truncate max-w-[160px]">
+                              — {c.description}
+                            </span>
+                          )}
+                        </div>
+                        <span
+                          className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
+                            c.status?.toLowerCase() === "active"
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                              : "bg-slate-100 text-slate-600 border border-slate-200"
+                          }`}
+                        >
+                          {c.status?.toLowerCase() === "active" ? "Aktif" : "Non-Aktif"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (editingSupplier) {
+                        openAddCode(editingSupplier);
+                      }
+                    }}
+                    className="h-7 text-xs gap-1 font-semibold text-brand-primary border-brand-primary/30 hover:bg-brand-primary/5"
+                  >
+                    <Plus className="h-3 w-3" /> Tambah Kode Vendor
+                  </Button>
+                  <Link
+                    href="/master-data/supplier-codes"
+                    className="text-[11px] text-muted-foreground hover:text-brand-primary hover:underline flex items-center gap-1"
+                  >
+                    Kelola di Master Kode Vendor →
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-border bg-slate-50/70 p-3 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
+                    <Tag className="h-3.5 w-3.5 text-brand-primary" />
+                    <span>Kode Vendor</span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">Dikelola terpisah</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Satu vendor dapat memiliki beberapa kode vendor (misal untuk Bahan Baku PRD, Kemasan PCK, atau ATK).
+                  Setelah profil vendor ini disimpan, Anda dapat menambahkan kode-kode vendor terkait melalui tombol <strong>+ Tambah Kode</strong> pada tabel atau menu <strong>Kelola Kode Vendor</strong>.
+                </p>
+              </div>
+            )}
+
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" size="sm" onClick={() => setDialogOpen(false)}>
                 Batal
@@ -477,6 +696,112 @@ export default function SuppliersPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Quick Add Kode Vendor ke Vendor Ini */}
+      <Dialog open={addCodeOpen} onOpenChange={setAddCodeOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Tag className="h-4 w-4 text-brand-primary" />
+              Tambah Kode Vendor Baru
+            </DialogTitle>
+          </DialogHeader>
+          {targetSupplier && (
+            <form onSubmit={handleAddCodeSubmit} className="space-y-4 text-xs">
+              <div className="rounded-lg bg-muted/40 p-3 border border-border/60 text-xs">
+                <p className="text-[11px] text-muted-foreground">Vendor / Perusahaan:</p>
+                <p className="font-semibold text-foreground text-sm flex items-center gap-1.5 mt-0.5">
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                  {targetSupplier.name}
+                </p>
+                {targetSupplier.category && (
+                  <span className="inline-block mt-1 text-[10px] text-muted-foreground bg-white px-2 py-0.5 rounded border border-border">
+                    {targetSupplier.category}
+                  </span>
+                )}
+                <div className="mt-2 pt-2 border-t border-border/60">
+                  <span className="text-[10px] text-muted-foreground font-medium">Kode terdaftar:</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {(!targetSupplier.codes || targetSupplier.codes.length === 0) ? (
+                      <span className="text-[10px] text-muted-foreground italic">
+                        {targetSupplier.code ? (
+                          <span className="font-mono text-[10px] font-bold text-brand-primary bg-white px-1.5 py-0.5 rounded border border-border">
+                            {targetSupplier.code}
+                          </span>
+                        ) : "Belum ada kode"}
+                      </span>
+                    ) : (
+                      targetSupplier.codes.map((c) => (
+                        <span key={c.id || c.code} className="font-mono text-[10px] font-bold text-brand-primary bg-white px-1.5 py-0.5 rounded border border-border">
+                          {c.code} {c.batchCode ? `(${c.batchCode})` : ""}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {addCodeError && (
+                <div role="alert" className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">
+                  {addCodeError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Tipe Vendor *" hint="menentukan prefix">
+                  <select
+                    className={selectClass}
+                    value={newCodeType}
+                    onChange={(e) => setNewCodeType(e.target.value)}
+                    required
+                  >
+                    {vendorTypes.map((t) => (
+                      <option key={t.code} value={t.code}>
+                        {t.code} — {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Kode Vendor" hint="kosongkan = otomatis">
+                  <Input
+                    value={newCodeVal}
+                    onChange={(e) => setNewCodeVal(e.target.value.toUpperCase())}
+                    placeholder={`VD-${newCodeType}-###`}
+                    className="font-mono uppercase"
+                  />
+                </Field>
+              </div>
+
+              <Field label="Kode Traceability Supplier" hint="2-4 huruf (cth: PW)">
+                <Input
+                  value={newBatchCode}
+                  onChange={(e) => setNewBatchCode(e.target.value.toUpperCase())}
+                  maxLength={4}
+                  placeholder="E.G. PW"
+                  className="font-mono uppercase font-bold"
+                />
+              </Field>
+
+              <Field label="Keterangan / Deskripsi (Opsional)">
+                <Input
+                  value={newCodeDesc}
+                  onChange={(e) => setNewCodeDesc(e.target.value)}
+                  placeholder="Cth: Suplai Gula Kelapa Organik / Kemasan Pouch"
+                />
+              </Field>
+
+              <DialogFooter className="pt-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => setAddCodeOpen(false)}>
+                  Batal
+                </Button>
+                <Button type="submit" variant="gradient" size="sm" className="font-semibold" disabled={isAddingCode}>
+                  {isAddingCode ? "Menyimpan..." : "Simpan Kode"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>

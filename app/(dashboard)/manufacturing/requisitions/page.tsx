@@ -32,7 +32,7 @@ import {
   MaterialRequisitionLineItem,
   LiquidSugarDispensingItem,
 } from "@/lib/api/manufacturing";
-import { productsApi, ProductItem } from "@/lib/api/products";
+import { productsApi, ProductItem, isProductActive } from "@/lib/api/products";
 
 const selectCls = "w-full h-9 px-3 rounded-lg border border-border bg-white text-xs text-foreground focus:ring-1 focus:ring-primary";
 
@@ -40,11 +40,13 @@ export default function RequisitionsPage() {
   const [reload, setReload] = React.useState(0);
   const [activeTab, setActiveTab] = React.useState<RequisitionType>("raw_material");
 
-  // Load products for dropdown
+  // Load products for dropdown and lookup
   const { data: rawProducts } = useReport<ProductItem[]>("products-catalog-cached", () =>
-    productsApi.list({ perPage: 100 }).then((r) => r.data || [])
+    productsApi.list({ perPage: 500 }).then((r) => r.data || [])
   );
-  const products: ProductItem[] = rawProducts ?? [];
+  const allProducts: ProductItem[] = rawProducts ?? [];
+  const productMap = React.useMemo(() => new Map(allProducts.map((p) => [p.id, p])), [allProducts]);
+  const products: ProductItem[] = React.useMemo(() => allProducts.filter(isProductActive), [allProducts]);
 
   // Load requisitions
   const { data: rawList, loading, error } = useReport(
@@ -52,6 +54,17 @@ export default function RequisitionsPage() {
     () => manufacturingApi.listRequisitions({ type: activeTab }).then((r) => r.data || [])
   );
   const requisitions: MaterialRequisitionItem[] = rawList ?? [];
+  const displayedRequisitions = React.useMemo(() => {
+    if (allProducts.length === 0) return requisitions;
+    return requisitions.filter((req) => {
+      if (!req.lines || req.lines.length === 0) return true;
+      return req.lines.every((it) => {
+        if (!it.productId) return true;
+        const p = productMap.get(it.productId);
+        return p ? isProductActive(p) : false;
+      });
+    });
+  }, [requisitions, allProducts, productMap]);
 
   // Print state
   const [printDoc, setPrintDoc] = React.useState<MaterialRequisitionItem | null>(null);
@@ -402,7 +415,7 @@ export default function RequisitionsPage() {
       <div className="print:hidden">
         <DataTable
           columns={columns}
-          data={requisitions}
+          data={displayedRequisitions}
           isLoading={loading}
 
         />

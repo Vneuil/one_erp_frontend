@@ -19,10 +19,28 @@ import { downloadCsv } from "@/lib/utils/csv";
 import { InvoiceAdjustmentsFields } from "@/components/shared/invoice-adjustments";
 import { InvoiceAdjustments, noAdjustments, adjustmentPayload } from "@/lib/utils/invoice-amounts";
 import { salesApi, InvoiceItem, SalesOrderItem } from "@/lib/api/sales";
+import { pricingApi, PaymentTermItem } from "@/lib/api/pricing";
+
+function parseDaysFromTerm(term: string): number {
+  if (!term) return 0;
+  const lower = term.toLowerCase();
+  if (lower.includes("cod") || lower.includes("cash") || lower.includes("tunai")) return 0;
+  const match = lower.match(/\d+/);
+  return match ? parseInt(match[0], 10) : 30;
+}
+
+const calcDueDate = (days: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split("T")[0];
+};
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = React.useState<InvoiceItem[]>([]);
   const [salesOrders, setSalesOrders] = React.useState<SalesOrderItem[]>([]);
+  const [paymentTerms, setPaymentTerms] = React.useState<PaymentTermItem[]>([]);
+  const [paymentTermId, setPaymentTermId] = React.useState("");
+  const [paymentTerm, setPaymentTerm] = React.useState("");
   const [isIssueOpen, setIsIssueOpen] = React.useState(false);
   const [customerName, setCustomerName] = React.useState("");
   const [totalAmount, setTotalAmount] = React.useState("");
@@ -57,16 +75,21 @@ export default function InvoicesPage() {
       .listOrders({ perPage: 100 })
       .then((res) => setSalesOrders(res.data || []))
       .catch((err) => console.warn("Failed to load sales orders for invoice form", err));
+    pricingApi
+      .listPaymentTerms()
+      .then((res) => setPaymentTerms(res.data || []))
+      .catch((err) => console.warn("Failed to load payment terms", err));
   }, [fetchInvoices]);
 
   const handleExport = () => {
     downloadCsv(
       "sales-invoices.csv",
-      ["Invoice No.", "Customer", "Invoice Date", "Due Date", "Total", "Paid", "Status"],
+      ["Invoice No.", "Customer", "Invoice Date", "Termin (TOP)", "Due Date", "Total", "Paid", "Status"],
       invoices.map((inv) => [
         inv.invoiceNumber,
         inv.customerName,
         inv.invoiceDate,
+        inv.paymentTerm || "-",
         inv.dueDate,
         inv.totalAmount,
         inv.paidAmount,
@@ -88,12 +111,16 @@ export default function InvoicesPage() {
         ...adjustmentPayload(adjust),
         dueDate,
         salesOrderId: salesOrderId || undefined,
+        paymentTermId: paymentTermId || undefined,
+        paymentTerm: paymentTerm || undefined,
       });
       fetchInvoices();
       setIsIssueOpen(false);
       setCustomerName("");
       setTotalAmount("");
       setDueDate("");
+      setPaymentTermId("");
+      setPaymentTerm("");
       setAdjust(noAdjustments);
       setSalesOrderId("");
     } catch (err) {
@@ -142,6 +169,15 @@ export default function InvoicesPage() {
       key: "invoiceDate",
       header: "Invoice Date",
       render: (inv) => <span className="text-xs text-muted-foreground">{inv.invoiceDate}</span>,
+    },
+    {
+      key: "paymentTerm",
+      header: "Termin (TOP)",
+      render: (inv) => (
+        <span className="text-xs font-medium text-foreground">
+          {inv.paymentTerm || <span className="text-muted-foreground italic">-</span>}
+        </span>
+      ),
     },
     {
       key: "dueDate",
@@ -250,6 +286,17 @@ export default function InvoicesPage() {
                   if (so) {
                     setCustomerName(so.customerName);
                     setTotalAmount(String(so.totalAmount));
+                    if (so.paymentTerm) {
+                      setPaymentTerm(so.paymentTerm);
+                      const matched = paymentTerms.find((t) => t.name === so.paymentTerm || t.id === so.paymentTermId);
+                      if (matched) {
+                        setPaymentTermId(matched.id);
+                        setDueDate(calcDueDate(matched.days));
+                      } else {
+                        const days = parseDaysFromTerm(so.paymentTerm);
+                        setDueDate(calcDueDate(days));
+                      }
+                    }
                   }
                 }}
                 className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-xs shadow-sm"
@@ -257,7 +304,7 @@ export default function InvoicesPage() {
                 <option value="">Tanpa referensi Sales Order</option>
                 {salesOrders.map((so) => (
                   <option key={so.id} value={so.id}>
-                    {so.orderNumber} · {so.customerName}
+                    {so.orderNumber} · {so.customerName} {so.paymentTerm ? `(${so.paymentTerm})` : ""}
                   </option>
                 ))}
               </select>
@@ -265,6 +312,30 @@ export default function InvoicesPage() {
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-foreground">Customer Name</label>
               <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="PT Example Customer" required />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">Termin Pembayaran (TOP)</label>
+              <select
+                value={paymentTermId}
+                onChange={(e) => {
+                  const term = paymentTerms.find((t) => t.id === e.target.value);
+                  setPaymentTermId(e.target.value);
+                  if (term) {
+                    setPaymentTerm(term.name);
+                    setDueDate(calcDueDate(term.days));
+                  } else {
+                    setPaymentTerm("");
+                  }
+                }}
+                className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-xs shadow-sm"
+              >
+                <option value="">Pilih Termin Pembayaran...</option>
+                {paymentTerms.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.days} hari)
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-foreground">Jumlah sebelum diskon (Subtotal)</label>

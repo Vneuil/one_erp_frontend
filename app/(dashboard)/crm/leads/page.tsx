@@ -49,6 +49,7 @@ interface LeadItem {
 
 import { crmApi, LeadItem as ApiLead } from "@/lib/api/crm";
 import { crmPlusApi, CrmTagItem } from "@/lib/api/crmplus";
+import { currencyApi } from "@/lib/api/currency";
 import { CrmActivityPanel } from "@/components/crm/activity-panel";
 import { useAppStore } from "@/stores/app-store";
 
@@ -56,6 +57,7 @@ import { useAppStore } from "@/stores/app-store";
 export default function LeadsPage() {
   const { currentUser } = useAppStore();
   const [leads, setLeads] = React.useState<LeadItem[]>([]);
+  const [baseCurrency, setBaseCurrency] = React.useState("IDR");
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -123,6 +125,10 @@ export default function LeadsPage() {
       })
       .finally(() => setIsLoading(false));
     crmPlusApi.tags().then((res) => setTags(res.data ?? [])).catch(() => setTags([]));
+    currencyApi.list().then((r) => {
+      const base = (r.data || []).find((c) => c.isBase);
+      if (base) setBaseCurrency(base.code);
+    }).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -265,7 +271,7 @@ export default function LeadsPage() {
       header: "Estimasi Nilai",
       render: (row) => (
         <div className="font-bold text-xs">
-          <MoneyDisplay amount={row.estimatedValue} />
+          <MoneyDisplay amount={row.estimatedValue} currency={baseCurrency} />
         </div>
       ),
     },
@@ -351,7 +357,7 @@ export default function LeadsPage() {
           <CardContent className="p-4 space-y-1">
             <span className="text-xs text-muted-foreground font-semibold">Estimasi Nilai Pipeline</span>
             <div className="text-2xl font-black text-brand-indigo">
-              <MoneyDisplay amount={totalPipeline} />
+              <MoneyDisplay amount={totalPipeline} currency={baseCurrency} />
             </div>
             <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
               <ArrowUpRight className="h-3 w-3" /> Potensi Omset Penjualan
@@ -363,7 +369,7 @@ export default function LeadsPage() {
           <CardContent className="p-4 space-y-1">
             <span className="text-xs text-muted-foreground font-semibold">Total Deal Won (Closing)</span>
             <div className="text-2xl font-black text-emerald-600">
-              <MoneyDisplay amount={totalWon} />
+              <MoneyDisplay amount={totalWon} currency={baseCurrency} />
             </div>
             <span className="text-[11px] text-muted-foreground">Telah konversi jadi Sales Order</span>
           </CardContent>
@@ -548,7 +554,7 @@ export default function LeadsPage() {
             </div>
 
             <div className="space-y-1">
-              <label className="font-bold text-foreground">Estimasi Nilai Proyek / Order (IDR)</label>
+              <label className="font-bold text-foreground">Estimasi Nilai Proyek / Order ({baseCurrency})</label>
               <Input
                 type="number"
                 value={newValue}

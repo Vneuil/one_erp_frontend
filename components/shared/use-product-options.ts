@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { productsApi, ProductItem } from "@/lib/api/products";
+import { productsApi, ProductItem, isProductActive } from "@/lib/api/products";
 import { useReport } from "@/components/reports/report-ui";
 
 /**
@@ -16,7 +16,9 @@ export function useProductOptions() {
   const options = React.useMemo(() => {
     const byId = new Map<string, ProductItem>(Object.entries(known));
     (found.data ?? []).forEach((p) => byId.set(p.id, p));
-    return [...byId.values()].sort((a, b) => a.sku.localeCompare(b.sku));
+    return [...byId.values()]
+      .filter(isProductActive)
+      .sort((a, b) => a.sku.localeCompare(b.sku));
   }, [found.data, known]);
   const pick = React.useCallback(
     (id: string) => {

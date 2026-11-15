@@ -127,6 +127,8 @@ interface SalesOrder {
   rejectionReason?: string;
   rejectedBy?: string;
   totalAmount: number;
+  currency?: string;
+  baseAmount?: number;
   paymentTerms: string;
   status: string;
   createdByEmail?: string;
@@ -139,20 +141,25 @@ interface SalesOrder {
 }
 
 import { salesApi, SalesOrderItem as ApiSO, SalesOrderLineInput, SalesOrderRevision, PackagingAvailability, CoaStatus, ProductionStatus } from "@/lib/api/sales";
+import { currencyApi, CurrencyItem } from "@/lib/api/currency";
+import { formatCurrency } from "@/lib/utils";
 import { useRole } from "@/lib/hooks/use-role";
 import { useIsOwnDocument } from "@/lib/hooks/use-own-document";
 import { marketplaceApi } from "@/lib/api/marketplace";
-import { productsApi, ProductItem } from "@/lib/api/products";
+import { productsApi, ProductItem, isProductActive } from "@/lib/api/products";
 import { inventoryApi, WarehouseItem, StockLevelItem } from "@/lib/api/inventory";
 import { customersApi, CustomerItem } from "@/lib/api/customers";
+import { pricingApi, PaymentTermItem, TaxRateItem } from "@/lib/api/pricing";
 import { useConfirm, useAlert, usePrompt } from "@/components/shared/confirm-modal";
 import { useAppStore } from "@/stores/app-store";
 import { approvalApi, ApprovalRequest } from "@/lib/api/approval";
 import { ApprovalTimeline, canUserApprove } from "@/components/shared/approval-timeline";
+import { usePermission } from "@/lib/hooks/use-permission";
 
 export default function SalesOrdersPage() {
   const { canApprove, canViewPrices, roleName } = useNavigationAccess();
-  const mayApprove = canApprove("sales");
+  const { canCreate: canCreateSales, canApprove: canApproveSales, canViewPrices: canViewPricesSales, canEditPrices: canEditPricesSales } = usePermission("sales");
+  const mayApprove = canApproveSales || canApprove("sales");
   const isOwn = useIsOwnDocument();
   const currentUser = useAppStore((s) => s.currentUser);
   const { canEditPrices, canSeePrices } = useRole();
@@ -205,9 +212,13 @@ export default function SalesOrdersPage() {
   const [customersError, setCustomersError] = React.useState(false);
   const [customerReload, setCustomerReload] = React.useState(0);
   const [newDeliveryDate, setNewDeliveryDate] = React.useState("");
-  const [products, setProducts] = React.useState<ProductItem[]>([]);
+  const [allProducts, setAllProducts] = React.useState<ProductItem[]>([]);
+  const productMap = React.useMemo(() => new Map(allProducts.map((p) => [p.id, p])), [allProducts]);
+  const products = React.useMemo(() => allProducts.filter(isProductActive), [allProducts]);
   const [warehouses, setWarehouses] = React.useState<WarehouseItem[]>([]);
   const [newWarehouseId, setNewWarehouseId] = React.useState("");
+  const [currencies, setCurrencies] = React.useState<CurrencyItem[]>([]);
+  const [orderCurrency, setOrderCurrency] = React.useState("IDR");
   const [orderLines, setOrderLines] = React.useState<SalesOrderLineInput[]>([]);
   const [lineProductId, setLineProductId] = React.useState("");
   const [lineQty, setLineQty] = React.useState("1");
@@ -295,7 +306,7 @@ export default function SalesOrdersPage() {
         totalPages = res.meta?.totalPages || 1;
         page += 1;
       } while (page <= totalPages);
-      setProducts(allProducts);
+      setAllProducts(allProducts);
     })()
       .catch((err) => console.warn("Failed to load products for SO line items", err));
     inventoryApi
@@ -309,12 +320,42 @@ export default function SalesOrdersPage() {
         setNewWarehouseId((prev) => (list.some((w) => w.id === prev) ? prev : list[0]?.id || ""));
       })
       .catch((err) => console.warn("Failed to load warehouses for SO", err));
+
+    currencyApi
+      .list()
+      .then((res) => {
+        const list = res.data || [];
+        setCurrencies(list);
+        const base = list.find((c) => c.isBase);
+        if (base) {
+          setOrderCurrency(base.code);
+        } else if (list.length > 0 && !list.some((c) => c.code === "IDR")) {
+          setOrderCurrency(list[0].code);
+        }
+      })
+      .catch((err) => console.warn("Failed to load currencies for SO", err));
+    pricingApi.listPaymentTerms().then((res) => setPaymentTerms(res.data || [])).catch(() => {});
+    pricingApi.listTaxRates().then((res) => {
+      const list = res.data || [];
+      setTaxRates(list);
+      const def = list.find((t) => t.isDefault) || list[0];
+      if (def) {
+        setSelectedTaxRateId((prev) => prev || def.id);
+        setSelectedVatRate((prev) => (prev !== 11 ? prev : def.rate));
+      }
+    }).catch(() => {});
   }, []);
 
   React.useEffect(() => {
     loadCatalog();
   }, [loadCatalog]);
 
+  const [paymentTerms, setPaymentTerms] = React.useState<PaymentTermItem[]>([]);
+  const [taxRates, setTaxRates] = React.useState<TaxRateItem[]>([]);
+  const [selectedPaymentTermId, setSelectedPaymentTermId] = React.useState("");
+  const [selectedPaymentTerm, setSelectedPaymentTerm] = React.useState("");
+  const [selectedTaxRateId, setSelectedTaxRateId] = React.useState("");
+  const [selectedVatRate, setSelectedVatRate] = React.useState(11);
   const [applyPpn, setApplyPpn] = React.useState(true);
   const [discountPercent, setDiscountPercent] = React.useState("0");
 
@@ -327,8 +368,8 @@ export default function SalesOrdersPage() {
     [subtotalAmount, discountPercent]
   );
   const ppnAmount = React.useMemo(
-    () => (applyPpn ? Math.round((subtotalAmount - discountAmount) * 0.11) : 0),
-    [subtotalAmount, discountAmount, applyPpn]
+    () => (applyPpn ? Math.round((subtotalAmount - discountAmount) * (selectedVatRate / 100)) : 0),
+    [subtotalAmount, discountAmount, applyPpn, selectedVatRate]
   );
   const newTotalAmount = subtotalAmount - discountAmount + ppnAmount;
 
@@ -782,7 +823,7 @@ export default function SalesOrdersPage() {
     const dpVal = Math.round((so.totalAmount * targetPercent) / 100);
     const ok = await confirm({
       title: "Konfirmasi Penerimaan DP",
-      message: `Konfirmasi bahwa Down Payment (DP) ${targetPercent}% sebesar Rp ${dpVal.toLocaleString("id-ID")} untuk pesanan ${so.orderNumber} telah diterima dari customer?`,
+      message: `Konfirmasi bahwa Down Payment (DP) ${targetPercent}% sebesar ${formatCurrency(dpVal, so.currency)} untuk pesanan ${so.orderNumber} telah diterima dari customer?`,
       confirmText: "Ya, DP Diterima",
       cancelText: "Batal",
     });
@@ -880,18 +921,20 @@ export default function SalesOrdersPage() {
             rejectionReason: o.rejectionReason,
             rejectedBy: o.rejectedBy,
             totalAmount: o.totalAmount,
-            paymentTerms: o.paymentStatus || "Paid",
+            currency: o.currency || "IDR",
+            baseAmount: o.baseAmount,
+            paymentTerms: o.paymentTerm || o.paymentStatus || "-",
             status: o.status.toLowerCase(),
             // Editable mirrors the backend's own UpdateOrder restriction:
             // neither a marketplace-synced order nor a POS sale may be
             // edited here (see usecase.UpdateOrder for why).
             editable: !platform && !isPos,
             items: (o.lines || []).map((l) => {
-              const product = products.find((p) => p.id === l.productId);
+              const product = productMap.get(l.productId);
               return {
                 productId: l.productId,
                 sku: product?.sku || l.productId.slice(0, 8),
-                name: product?.name || `Produk ${l.productId.slice(0, 8)}`,
+                name: product?.name || (l.productId ? `Produk ${l.productId.slice(0, 8)}` : "-"),
                 qty: l.quantity,
                 unit: product?.unit || "Unit",
                 unitPrice: l.unitPrice,
@@ -1035,6 +1078,15 @@ export default function SalesOrdersPage() {
   // Filter orders by channel tab & status filter
   const filteredOrders = React.useMemo(() => {
     let result = orders;
+    if (allProducts.length > 0) {
+      result = result.filter((so) => {
+        if (!so.items || so.items.length === 0) return true;
+        return so.items.every((it) => {
+          const p = productMap.get(it.productId);
+          return p ? isProductActive(p) : false;
+        });
+      });
+    }
     if (selectedChannel === "marketplace") {
       result = result.filter((so) => so.source === "marketplace");
     } else if (selectedChannel !== "all") {
@@ -1162,7 +1214,7 @@ export default function SalesOrdersPage() {
 
     const orderDate = new Date().toISOString().slice(0, 16).replace("T", " ");
     const itemsForDisplay: SalesOrderItem[] = orderLines.map((l) => {
-      const product = products.find((p) => p.id === l.productId);
+      const product = productMap.get(l.productId);
       return {
         productId: l.productId,
         sku: product?.sku || "-",
@@ -1180,8 +1232,15 @@ export default function SalesOrdersPage() {
 
     try {
       const res = await salesApi.createOrder({
+        customerId: customer.id,
         customerName: customer.name,
+        paymentTermId: selectedPaymentTermId || undefined,
+        paymentTerm: selectedPaymentTerm || undefined,
+        taxRateId: selectedTaxRateId || undefined,
+        vatRate: applyPpn ? selectedVatRate : 0,
+        vatAmount: ppnAmount,
         totalAmount: newTotalAmount,
+        currency: orderCurrency || "IDR",
         warehouseId: newWarehouseId || undefined,
         customerPoNumber: finalDocNumber,
         customerPoAttachment: finalDocAttachment,
@@ -1214,7 +1273,9 @@ export default function SalesOrdersPage() {
           shippingCourier: o.shippingCourier || shippingCourier,
           shippingAddress: o.shippingAddress || shippingAddress,
           totalAmount: o.totalAmount,
-          paymentTerms: o.paymentStatus || "Pending",
+          currency: o.currency || "IDR",
+          baseAmount: o.baseAmount,
+          paymentTerms: o.paymentTerm || o.paymentStatus || "-",
           status: (o.status || "Confirmed").toLowerCase(),
           customerPoNumber: o.customerPoNumber || customerPoNumber,
           customerPoAttachment: o.customerPoAttachment || customerPoAttachment,
@@ -1414,14 +1475,14 @@ export default function SalesOrdersPage() {
         if (!canViewPrices("sales")) {
           return <span className="text-xs text-muted-foreground">—</span>;
         }
-        return <MoneyDisplay amount={so.totalAmount} highlight className="text-xs font-bold" />;
+        return <MoneyDisplay amount={so.totalAmount} currency={so.currency || "IDR"} highlight className="text-xs font-bold" />;
       },
     },
     {
       key: "paymentTerms",
-      header: "Payment Method / Terms",
+      header: "Termin (TOP)",
       render: (so) => (
-        <span className="text-xs text-muted-foreground font-medium">{so.paymentTerms}</span>
+        <span className="text-xs text-foreground font-medium">{so.paymentTerms || "-"}</span>
       ),
     },
     {
@@ -1438,11 +1499,11 @@ export default function SalesOrdersPage() {
               </span>
             ) : so.dpPaid ? (
               <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[9px] font-bold border border-emerald-300">
-                DP {pct}% Lunas {so.dpAmount ? `(Rp ${Math.round(so.dpAmount).toLocaleString("id-ID")})` : ""}
+                DP {pct}% Lunas {so.dpAmount ? `(${formatCurrency(Math.round(so.dpAmount), so.currency)})` : ""}
               </span>
             ) : (
               <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-bold border border-amber-300">
-                Menunggu DP {pct}% {so.dpAmount ? `(Rp ${Math.round(so.dpAmount).toLocaleString("id-ID")})` : ""}
+                Menunggu DP {pct}% {so.dpAmount ? `(${formatCurrency(Math.round(so.dpAmount), so.currency)})` : ""}
               </span>
             )}
             {so.invoiceDocAttachment ? (
@@ -1591,14 +1652,16 @@ export default function SalesOrdersPage() {
         <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs" onClick={handleExportOrders}>
           <Download className="h-3.5 w-3.5" /> Export Orders
         </Button>
-        <Button
-          variant="gradient"
-          size="sm"
-          className="h-9 gap-1.5 text-xs font-semibold"
-          onClick={() => { resetCustomerOptions(); setWarehouseStock(null); setIsCreateOpen(true); }}
-        >
-          <Plus className="h-3.5 w-3.5" /> Create Sales Order
-        </Button>
+        {canCreateSales && (
+          <Button
+            variant="gradient"
+            size="sm"
+            className="h-9 gap-1.5 text-xs font-semibold"
+            onClick={() => { resetCustomerOptions(); setWarehouseStock(null); setIsCreateOpen(true); }}
+          >
+            <Plus className="h-3.5 w-3.5" /> Create Sales Order
+          </Button>
+        )}
       </PageHeader>
 
       {syncSuccessMessage && (
@@ -1926,7 +1989,7 @@ export default function SalesOrdersPage() {
                     {selectedOrder.dpPercent != null ? `${selectedOrder.dpPercent}%` : selectedOrder.dpPaid ? "50%" : "0%"}
                   </span>
                   <span className="text-[10px] text-muted-foreground block">
-                    {canSeePrices ? `Rp ${(selectedOrder.dpAmount || 0).toLocaleString("id-ID")}` : ""}
+                    {canSeePrices ? formatCurrency(selectedOrder.dpAmount || 0, selectedOrder.currency) : ""}
                   </span>
                 </div>
                 <div>
@@ -2184,7 +2247,7 @@ export default function SalesOrdersPage() {
                       <ul className="space-y-1">
                         {revisions.filter((r) => r.salesOrderId === selectedOrder.id).map((r) => (
                           <li key={r.id} className="rounded border border-border bg-white p-2">
-                            <span className="font-mono font-semibold">Rev {r.revision}</span> · {r.changedBy || "-"} · total sebelumnya Rp {r.totalAmount.toLocaleString("id-ID")}
+                            <span className="font-mono font-semibold">Rev {r.revision}</span> · {r.changedBy || "-"} · total sebelumnya {formatCurrency(r.totalAmount, selectedOrder.currency)}
                             {r.reason && <span className="block text-muted-foreground">Alasan: {r.reason}</span>}
                           </li>
                         ))}
@@ -2200,7 +2263,7 @@ export default function SalesOrdersPage() {
                   <h4 className="text-xs font-bold text-foreground">Ordered Line Items</h4>
                   {(() => {
                     const totalOrderWeight = selectedOrder.items.reduce((sum, item) => {
-                      const p = products.find((pr) => pr.id === item.productId || pr.sku === item.sku);
+                      const p = allProducts.find((pr) => pr.id === item.productId || pr.sku === item.sku);
                       const w = p ? getProductWeightKg(p) : extractUnitWeightKg(item.name);
                       return sum + (w ? item.qty * w : 0);
                     }, 0);
@@ -2227,7 +2290,7 @@ export default function SalesOrdersPage() {
                     </thead>
                     <tbody className="divide-y divide-border">
                       {selectedOrder.items.map((item, idx) => {
-                        const matchedProduct = products.find((p) => p.id === item.productId || p.sku === item.sku);
+                        const matchedProduct = allProducts.find((p) => p.id === item.productId || p.sku === item.sku);
                         const unitKg = matchedProduct ? getProductWeightKg(matchedProduct) : extractUnitWeightKg(item.name);
                         const totalItemWeight = unitKg ? item.qty * unitKg : null;
 
@@ -2261,12 +2324,12 @@ export default function SalesOrdersPage() {
                             </td>
                             {canSeePrices && (
                               <td className="py-2 px-3 text-right text-muted-foreground">
-                                <MoneyDisplay amount={item.unitPrice} />
+                                <MoneyDisplay amount={item.unitPrice} currency={selectedOrder.currency || "IDR"} />
                               </td>
                             )}
                             {canSeePrices && (
                               <td className="py-2 px-3 text-right font-bold text-foreground">
-                                <MoneyDisplay amount={item.subtotal} />
+                                <MoneyDisplay amount={item.subtotal} currency={selectedOrder.currency || "IDR"} />
                               </td>
                             )}
                           </tr>
@@ -2290,6 +2353,7 @@ export default function SalesOrdersPage() {
                     <span className="text-xs text-muted-foreground block">Order Grand Total:</span>
                     <MoneyDisplay
                       amount={selectedOrder.totalAmount}
+                      currency={selectedOrder.currency || "IDR"}
                       highlight
                       className="text-base font-bold"
                     />
@@ -2495,6 +2559,14 @@ export default function SalesOrdersPage() {
                 onChange={(e) => {
                   setNewCustomerId(e.target.value);
                   const c = customers.find((x) => x.id === e.target.value);
+                  if (c?.paymentTermId) {
+                    setSelectedPaymentTermId(c.paymentTermId);
+                    setSelectedPaymentTerm(c.paymentTermName || "");
+                  } else if (c?.paymentTermName) {
+                    setSelectedPaymentTerm(c.paymentTermName);
+                    const matched = paymentTerms.find((p) => p.name === c.paymentTermName);
+                    if (matched) setSelectedPaymentTermId(matched.id);
+                  }
                   const def = c?.shippingAddresses?.find((a) => a.isDefault) || c?.shippingAddresses?.[0];
                   const text = def ? [def.address, def.city, def.province, def.postalCode].filter(Boolean).join(", ") : c ? [c.address, c.city, c.province, c.postalCode].filter(Boolean).join(", ") : "";
                   setShippingAddress(text);
@@ -2520,6 +2592,48 @@ export default function SalesOrdersPage() {
               ) : null}
             </div>
 
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Term of Payment (TOP)</label>
+                <select
+                  value={selectedPaymentTermId}
+                  onChange={(e) => {
+                    const pt = paymentTerms.find((p) => p.id === e.target.value);
+                    setSelectedPaymentTermId(e.target.value);
+                    setSelectedPaymentTerm(pt ? pt.name : "");
+                  }}
+                  className="flex h-10 w-full min-w-0 rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30"
+                >
+                  <option value="">-- Pilih TOP --</option>
+                  {paymentTerms.map((pt) => (
+                    <option key={pt.id} value={pt.id}>
+                      {pt.name} ({pt.days} hari)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Tarif Pajak (PPN)</label>
+                <select
+                  value={selectedTaxRateId}
+                  onChange={(e) => {
+                    const tr = taxRates.find((t) => t.id === e.target.value);
+                    setSelectedTaxRateId(e.target.value);
+                    if (tr) setSelectedVatRate(tr.rate);
+                  }}
+                  className="flex h-10 w-full min-w-0 rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30"
+                  disabled={!applyPpn}
+                >
+                  <option value="">-- Pilih Tarif Pajak --</option>
+                  {taxRates.map((tr) => (
+                    <option key={tr.id} value={tr.id}>
+                      {tr.name} ({tr.rate}%)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               <label htmlFor="sales-order-warehouse" className="text-xs font-medium text-foreground">Warehouse (stok akan dipotong dari sini)</label>
               <select
@@ -2542,12 +2656,34 @@ export default function SalesOrdersPage() {
               <p className="text-xs text-muted-foreground">Mengganti gudang akan mengosongkan item pesanan.</p>
             </div>
 
+            <div className="space-y-1.5">
+              <label htmlFor="sales-order-currency" className="text-xs font-medium text-foreground">Mata Uang (Currency)</label>
+              <select
+                id="sales-order-currency"
+                value={orderCurrency}
+                onChange={(e) => setOrderCurrency(e.target.value)}
+                className="flex h-10 w-full min-w-0 rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30 focus-visible:border-brand-primary"
+              >
+                {currencies.length === 0 ? (
+                  <option value="IDR">IDR - Indonesian Rupiah</option>
+                ) : (
+                  currencies
+                    .filter((c) => c.isActive !== false)
+                    .map((c) => (
+                      <option key={c.id || c.code} value={c.code}>
+                        {c.code} - {c.name} {c.symbol ? `(${c.symbol})` : ""}
+                      </option>
+                    ))
+                )}
+              </select>
+            </div>
+
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-medium text-foreground">Item Pesanan</label>
                 {(() => {
                   const totalKg = orderLines.reduce((sum, l) => {
-                    const p = products.find((pr) => pr.id === l.productId);
+                    const p = productMap.get(l.productId);
                     const w = getProductWeightKg(p);
                     return sum + (w ? l.quantity * w : 0);
                   }, 0);
@@ -2580,7 +2716,7 @@ export default function SalesOrdersPage() {
                       </thead>
                       <tbody className="divide-y divide-border">
                         {orderLines.map((l) => {
-                          const product = products.find((p) => p.id === l.productId);
+                          const product = productMap.get(l.productId);
                           const stockInfo = warehouseProducts.find((p) => p.id === l.productId);
                           const isLowStock = (stockInfo?.stock ?? 0) < l.quantity;
                           const unitKg = getProductWeightKg(product);
@@ -2654,7 +2790,7 @@ export default function SalesOrdersPage() {
                                 </td>
                               )}
                               <td className="py-2 px-3 text-right font-semibold whitespace-nowrap">
-                                Rp {(l.quantity * l.unitPrice).toLocaleString("id-ID")}
+                                {formatCurrency(l.quantity * l.unitPrice, orderCurrency)}
                               </td>
                               <td className="py-2 px-3 text-center whitespace-nowrap">
                                 <div className="flex items-center justify-center gap-1.5">
@@ -2688,23 +2824,23 @@ export default function SalesOrdersPage() {
                     <div className="px-3 py-2 bg-slate-50 border-t border-border text-xs space-y-1">
                       <div className="flex justify-between text-muted-foreground">
                         <span>Subtotal ({orderLines.length} item)</span>
-                        <span>Rp {subtotalAmount.toLocaleString("id-ID")}</span>
+                        <span>{formatCurrency(subtotalAmount, orderCurrency)}</span>
                       </div>
                       {discountAmount > 0 && (
                         <div className="flex justify-between text-rose-600">
                           <span>Diskon ({discountPercent}%)</span>
-                          <span>- Rp {discountAmount.toLocaleString("id-ID")}</span>
+                          <span>- {formatCurrency(discountAmount, orderCurrency)}</span>
                         </div>
                       )}
                       {applyPpn && (
                         <div className="flex justify-between text-muted-foreground">
-                          <span>PPN 11%</span>
-                          <span>+ Rp {ppnAmount.toLocaleString("id-ID")}</span>
+                          <span>PPN {selectedVatRate}%</span>
+                          <span>+ {formatCurrency(ppnAmount, orderCurrency)}</span>
                         </div>
                       )}
                       <div className="flex justify-between font-bold text-foreground pt-1 border-t border-border/70">
                         <span>Total</span>
-                        <span>Rp {newTotalAmount.toLocaleString("id-ID")}</span>
+                        <span>{formatCurrency(newTotalAmount, orderCurrency)}</span>
                       </div>
                     </div>
                   </>
@@ -2719,7 +2855,7 @@ export default function SalesOrdersPage() {
                     onChange={(e) => setApplyPpn(e.target.checked)}
                     className="h-3.5 w-3.5 accent-brand-primary"
                   />
-                  <span className="text-foreground font-medium">Kena PPN 11% <span className="text-muted-foreground font-normal">(nonaktifkan untuk ekspor)</span></span>
+                  <span className="text-foreground font-medium">Kena PPN {selectedVatRate}% <span className="text-muted-foreground font-normal">(nonaktifkan untuk ekspor)</span></span>
                 </label>
                 <div className="flex items-center gap-1.5">
                   <span className="text-foreground font-medium">Diskon</span>
@@ -3078,7 +3214,7 @@ export default function SalesOrdersPage() {
                   Skema Down Payment (DP)
                 </h4>
                 <span className="text-xs font-bold font-mono text-brand-primary bg-white px-2 py-0.5 rounded border border-border">
-                  {dpPercent}% (Rp {Math.round((newTotalAmount * dpPercent) / 100).toLocaleString("id-ID")})
+                  {dpPercent}% ({formatCurrency(Math.round((newTotalAmount * dpPercent) / 100), orderCurrency)})
                 </span>
               </div>
               
@@ -3183,7 +3319,7 @@ export default function SalesOrdersPage() {
                 <label className="text-xs font-semibold text-foreground">Item Pesanan</label>
                 {(() => {
                   const totalEditKg = editLines.reduce((sum, l) => {
-                    const p = products.find((pr) => pr.id === l.productId);
+                    const p = productMap.get(l.productId);
                     const w = getProductWeightKg(p);
                     return sum + (w ? l.quantity * w : 0);
                   }, 0);
@@ -3197,7 +3333,7 @@ export default function SalesOrdersPage() {
               </div>
               <div className="rounded-lg border border-border bg-slate-50/60 p-3 space-y-3">
                 {editLines.map((line, index) => {
-                  const product = products.find((p) => p.id === line.productId);
+                  const product = productMap.get(line.productId);
                   const unitKg = getProductWeightKg(product);
                   const lineKg = unitKg ? line.quantity * unitKg : null;
 
@@ -3281,7 +3417,7 @@ export default function SalesOrdersPage() {
                 >
                   <Plus className="h-4 w-4 mr-1" />Add Item
                 </Button>
-                <div className="text-right text-sm font-semibold">Total: <MoneyDisplay amount={Number.isFinite(editTotalAmount) ? editTotalAmount : 0} /></div>
+                <div className="text-right text-sm font-semibold">Total: <MoneyDisplay amount={Number.isFinite(editTotalAmount) ? editTotalAmount : 0} currency={editingOrder?.currency || "IDR"} /></div>
               </div>
             </div>
 
@@ -3293,7 +3429,7 @@ export default function SalesOrdersPage() {
                   Skema & Status Down Payment (DP)
                 </span>
                 <span className="text-xs font-bold font-mono text-brand-primary">
-                  {editDpPercent}% (Rp {Math.round((editTotalAmount * editDpPercent) / 100).toLocaleString("id-ID")})
+                  {editDpPercent}% ({formatCurrency(Math.round((editTotalAmount * editDpPercent) / 100), editingOrder?.currency || "IDR")})
                 </span>
               </div>
               <div className="flex items-center gap-1.5 pt-1 flex-wrap">

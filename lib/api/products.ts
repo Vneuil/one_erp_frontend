@@ -1,4 +1,4 @@
-import { apiClient, ApiResponse } from "./client";
+import { apiClient, apiClientDownload, ApiResponse } from "./client";
 import { TenantItem } from "./tenants";
 
 export interface ProductItem {
@@ -75,20 +75,39 @@ export interface CertificationItem {
   code: string;
   name: string;
   description?: string;
+  attachment?: string;
+  attachmentName?: string;
 }
 
 export const certificationsApi = {
   list: async (): Promise<ApiResponse<CertificationItem[]>> => {
     return apiClient<CertificationItem[]>("/product-certifications");
   },
-  create: async (data: { code: string; name: string; description?: string }): Promise<ApiResponse<CertificationItem>> => {
+  create: async (data: { code: string; name: string; description?: string; attachment?: string; attachmentName?: string }): Promise<ApiResponse<CertificationItem>> => {
     return apiClient<CertificationItem>("/product-certifications", { method: "POST", body: JSON.stringify(data) });
   },
-  update: async (id: string, data: { code?: string; name?: string; description?: string }): Promise<ApiResponse<CertificationItem>> => {
+  update: async (id: string, data: { code?: string; name?: string; description?: string; attachment?: string; attachmentName?: string }): Promise<ApiResponse<CertificationItem>> => {
     return apiClient<CertificationItem>(`/product-certifications/${id}`, { method: "PUT", body: JSON.stringify(data) });
   },
   remove: async (id: string): Promise<ApiResponse<null>> => {
     return apiClient<null>(`/product-certifications/${id}`, { method: "DELETE" });
+  },
+  uploadAttachment: async (file: File): Promise<ApiResponse<{ key: string; filename: string; size: number; contentType: string }>> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiClient<{ key: string; filename: string; size: number; contentType: string }>(
+      "/product-certifications/upload-attachment",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+  },
+  downloadAttachment: async (id: string): Promise<{ blob: Blob; filename: string | null } | ApiResponse<unknown>> => {
+    return apiClientDownload(`/product-certifications/${id}/attachment`);
+  },
+  downloadAttachmentByKey: async (key: string): Promise<{ blob: Blob; filename: string | null } | ApiResponse<unknown>> => {
+    return apiClientDownload(`/product-certifications/attachment/download?key=${encodeURIComponent(key)}`);
   },
 };
 
@@ -122,6 +141,12 @@ export const unitsOfMeasureApi = {
   },
 };
 
+export const isProductActive = (p?: ProductItem | { status?: string } | null): boolean => {
+  if (!p) return false;
+  const s = (p.status || "").toLowerCase().trim();
+  return s !== "inactive" && s !== "non-aktif" && s !== "nonaktif";
+};
+
 export const productsApi = {
   copySources: () => apiClient<TenantItem[]>("/products/copy-sources"),
   copySourceProducts: (tenantId: string) => apiClient<ProductItem[]>(`/products/copy-sources/${tenantId}`),
@@ -145,6 +170,13 @@ export const productsApi = {
     return apiClient<ProductItem>(`/products/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),
+    });
+  },
+
+  setStatus: async (id: string, status: "Active" | "Inactive"): Promise<ApiResponse<ProductItem>> => {
+    return apiClient<ProductItem>(`/products/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ status }),
     });
   },
 

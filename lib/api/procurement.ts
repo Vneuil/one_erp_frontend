@@ -61,6 +61,11 @@ export interface PurchaseOrderItem {
   orderNo: string;
   supplierId: string;
   supplierName: string;
+  paymentTermId?: string;
+  paymentTerm?: string;
+  taxRateId?: string;
+  vatRate?: number;
+  vatAmount?: number;
   purchaseRequestId?: string | null;
   orderDate: string;
   expectedDate: string;
@@ -89,6 +94,11 @@ export interface CreatePurchaseOrderInput {
   supplierId: string;
   supplierName?: string;
   notes?: string;
+  paymentTermId?: string;
+  paymentTerm?: string;
+  taxRateId?: string;
+  vatRate?: number;
+  vatAmount?: number;
   purchaseRequestId?: string | null;
   salesOrderId?: string;
   salesOrderNo?: string;
@@ -170,6 +180,9 @@ export interface PurchaseInvoiceItem {
   id: string;
   supplierId: string;
   supplierName: string;
+  paymentTermId?: string;
+  paymentTerm?: string;
+  taxRateId?: string;
   purchaseOrderId?: string | null;
   purchaseOrderNumber?: string;
   invoiceNumber: string;
@@ -204,6 +217,9 @@ export interface CreatePurchaseInvoiceInput {
   supplierName?: string;
   notes?: string;
   purchaseOrderId?: string | null;
+  paymentTermId?: string;
+  paymentTerm?: string;
+  taxRateId?: string;
   invoiceNumber?: string;
   invoiceDate?: string;
   dueDate?: string;

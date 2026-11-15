@@ -17,8 +17,16 @@ export interface SalesOrderLineInput {
 export interface SalesOrderItem {
   id: string;
   orderNumber: string;
+  customerId?: string;
   customerName: string;
+  paymentTermId?: string;
+  paymentTerm?: string;
+  dueDate?: string;
+  taxRateId?: string;
+  vatRate?: number;
+  vatAmount?: number;
   totalAmount: number;
+  currency?: string;
   /** Order value in the company base currency (IDR); what billing terms split. */
   baseAmount?: number;
   status: string;
@@ -70,7 +78,14 @@ export interface SalesOrderRevision {
 }
 
 export interface UpdateSalesOrderInput {
+  customerId?: string;
   customerName: string;
+  paymentTermId?: string;
+  paymentTerm?: string;
+  dueDate?: string;
+  taxRateId?: string;
+  vatRate?: number;
+  vatAmount?: number;
   customerPoNumber?: string;
   customerPoAttachment?: string;
   dpPaid?: boolean;
@@ -93,8 +108,16 @@ export interface UpdateSalesOrderInput {
 
 export interface CreateSalesOrderInput {
   orderNumber?: string;
+  customerId?: string;
   customerName: string;
+  paymentTermId?: string;
+  paymentTerm?: string;
+  dueDate?: string;
+  taxRateId?: string;
+  vatRate?: number;
+  vatAmount?: number;
   totalAmount: number;
+  currency?: string;
   channel?: string;
   paymentStatus?: string;
   status?: string;
@@ -132,11 +155,21 @@ export interface QuotationLine extends QuotationLineInput {
 
 export interface QuotationItem {
   leadId?: string;
+  customerId?: string;
+  customerPoId?: string;
+  customerPoNumber?: string;
   lines?: QuotationLine[];
   id: string;
   quotationNumber: string;
   customerName: string;
+  paymentTermId?: string;
+  paymentTerm?: string;
+  taxRateId?: string;
+  vatRate?: number;
+  vatAmount?: number;
+  vatExempt?: boolean;
   totalAmount: number;
+  currency?: string;
   status: string;
   validUntil: string;
   notes?: string;
@@ -150,10 +183,20 @@ export interface QuotationItem {
 
 export interface CreateQuotationInput {
   leadId?: string;
+  customerId?: string;
+  customerPoId?: string;
+  customerPoNumber?: string;
   lines: QuotationLineInput[];
   quotationNumber?: string;
   customerName: string;
+  paymentTermId?: string;
+  paymentTerm?: string;
+  taxRateId?: string;
+  vatRate?: number;
+  vatAmount?: number;
+  vatExempt?: boolean;
   totalAmount: number;
+  currency?: string;
   validUntil?: string;
   notes?: string;
   parentQuotationId?: string;
@@ -162,8 +205,18 @@ export interface CreateQuotationInput {
 }
 
 export interface UpdateQuotationInput {
+  customerId?: string;
+  customerPoId?: string;
+  customerPoNumber?: string;
   lines?: QuotationLineInput[];
   customerName?: string;
+  paymentTermId?: string;
+  paymentTerm?: string;
+  taxRateId?: string;
+  vatRate?: number;
+  vatAmount?: number;
+  vatExempt?: boolean;
+  currency?: string;
   validUntil?: string;
   status?: string;
   notes?: string;
@@ -196,11 +249,18 @@ export interface CustomerPOItem {
   poDate: string;
   attachment?: string;
   currency: string;
+  paymentTermId?: string;
+  paymentTerm?: string;
+  taxRateId?: string;
+  vatRate?: number;
+  vatAmount?: number;
   totalAmount: number;
   status: "Pending" | "Agreed" | "Negotiating" | "Cancelled";
   notes?: string;
   quotationId?: string;
+  quotationNumber?: string;
   tradeInvoiceId?: string;
+  tradeInvoiceNumber?: string;
   lines: CustomerPOLine[];
   createdAt?: string;
   updatedAt?: string;
@@ -213,6 +273,11 @@ export interface CreateCustomerPOInput {
   poDate?: string;
   attachment?: string;
   currency?: string;
+  paymentTermId?: string;
+  paymentTerm?: string;
+  taxRateId?: string;
+  vatRate?: number;
+  vatAmount?: number;
   notes?: string;
   lines: CustomerPOLineInput[];
 }
@@ -224,6 +289,11 @@ export interface UpdateCustomerPOInput {
   poDate?: string;
   attachment?: string;
   currency?: string;
+  paymentTermId?: string;
+  paymentTerm?: string;
+  taxRateId?: string;
+  vatRate?: number;
+  vatAmount?: number;
   notes?: string;
   status?: string;
   lines?: CustomerPOLineInput[];
@@ -232,7 +302,11 @@ export interface UpdateCustomerPOInput {
 export interface InvoiceItem {
   id: string;
   invoiceNumber: string;
+  customerId?: string;
   customerName: string;
+  paymentTermId?: string;
+  paymentTerm?: string;
+  taxRateId?: string;
   invoiceDate: string;
   dueDate: string;
   totalAmount: number;
@@ -272,7 +346,11 @@ export interface BillingTermInput {
 
 export interface CreateInvoiceInput {
   invoiceNumber?: string;
+  customerId?: string;
   customerName: string;
+  paymentTermId?: string;
+  paymentTerm?: string;
+  taxRateId?: string;
   /** Amount before adjustments; also the final total when none are given. */
   totalAmount: number;
   discountPercent?: number;
@@ -483,6 +561,10 @@ export const salesApi = {
     return apiClient<QuotationItem[]>("/sales/quotations", { params });
   },
 
+  getQuotation: async (id: string): Promise<ApiResponse<QuotationItem>> => {
+    return apiClient<QuotationItem>(`/sales/quotations/${id}`);
+  },
+
   createQuotation: async (data: CreateQuotationInput): Promise<ApiResponse<QuotationItem>> => {
     return apiClient<QuotationItem>("/sales/quotations", {
       method: "POST",
@@ -580,6 +662,7 @@ export interface TradeInvoice {
   id: string;
   kind: TradeKind;
   number: string;
+  customerPoId?: string;
   /** The customer's incoming PO (PO Masuk) this document answers. */
   customerPoNumber?: string;
   customerPoAttachment?: string;
@@ -588,13 +671,16 @@ export interface TradeInvoice {
   dpAmount?: number;
   salesOrderId?: string;
   quotationId?: string;
+  quotationNumber?: string;
   parentId?: string;
   customerName: string;
   billingAddress?: string;
   shippingAddress?: string;
   currency: string;
   issueDate: string;
+  paymentTermId?: string;
   paymentTerm?: string;
+  taxRateId?: string;
   incoterm?: string;
   notes?: string;
   vatExempt: boolean;
@@ -612,18 +698,22 @@ export interface TradeInvoice {
 
 export interface CreateTradeInvoiceInput {
   kind: TradeKind;
+  customerPoId?: string;
   customerPoNumber?: string;
   customerPoAttachment?: string;
   dpPercent?: number;
   /** At most one source; with none, customerName + lines are required (raised from a PO Masuk). */
   salesOrderId?: string;
   quotationId?: string;
+  quotationNumber?: string;
   parentId?: string;
   customerName?: string;
   billingAddress?: string;
   shippingAddress?: string;
   currency?: string;
+  paymentTermId?: string;
   paymentTerm?: string;
+  taxRateId?: string;
   incoterm?: string;
   notes?: string;
   vatExempt?: boolean;

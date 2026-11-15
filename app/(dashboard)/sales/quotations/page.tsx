@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Download, Trash2, Pencil, XCircle, Copy, FilePlus2, X, CheckCircle2, History, Layers, AlertCircle } from "lucide-react";
+import { Plus, Download, Trash2, Pencil, XCircle, Copy, FilePlus2, X, CheckCircle2, History, Layers, AlertCircle, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,8 +19,12 @@ import { MoneyDisplay } from "@/components/shared/money-display";
 import { downloadCsv } from "@/lib/utils/csv";
 import { salesApi, customerPosApi, CustomerPOItem, QuotationLine, QuotationLineInput } from "@/lib/api/sales";
 import { customersApi, CustomerItem } from "@/lib/api/customers";
-import { productsApi, ProductItem } from "@/lib/api/products";
+import { productsApi, ProductItem, isProductActive } from "@/lib/api/products";
+import { currencyApi, CurrencyItem } from "@/lib/api/currency";
+import { pricingApi, PaymentTermItem, TaxRateItem } from "@/lib/api/pricing";
 import { ApiResponse } from "@/lib/api/client";
+import { QuotationPrintDialog } from "@/components/sales/quotation-print-dialog";
+import { usePermission } from "@/lib/hooks/use-permission";
 
 async function allPages<T>(fetchPage: (params: { page: number; perPage: number }) => Promise<ApiResponse<T[]>>) {
   const items: T[] = [];
@@ -37,10 +41,18 @@ interface Quotation {
   lines: QuotationLine[];
   id: string;
   quotationNumber: string;
+  customerId?: string;
   customerName: string;
+  paymentTermId?: string;
+  paymentTerm?: string;
+  taxRateId?: string;
+  vatRate?: number;
+  vatAmount?: number;
+  vatExempt?: boolean;
   issueDate: string;
   expiryDate: string;
   totalAmount: number;
+  currency?: string;
   status: string;
   notes?: string;
   cancellationReason?: string;
@@ -48,6 +60,8 @@ interface Quotation {
   parentQuotationNumber?: string;
   revisionNumber?: number;
   isSuperseded?: boolean;
+  customerPoId?: string;
+  customerPoNumber?: string;
 }
 
 function QuotationStatusBadge({ status }: { status: string }) {
@@ -81,6 +95,7 @@ function QuotationStatusBadge({ status }: { status: string }) {
 }
 
 export default function QuotationsPage() {
+  const { canCreate: canCreateSales } = usePermission("sales");
   const [quotations, setQuotations] = React.useState<Quotation[]>([]);
   const [isAddOpen, setIsAddOpen] = React.useState(false);
 
@@ -92,7 +107,11 @@ export default function QuotationsPage() {
 
   const [customers, setCustomers] = React.useState<CustomerItem[]>([]);
   const [customerPOs, setCustomerPOs] = React.useState<CustomerPOItem[]>([]);
-  const [products, setProducts] = React.useState<ProductItem[]>([]);
+  const [allProducts, setAllProducts] = React.useState<ProductItem[]>([]);
+  const productMap = React.useMemo(() => new Map(allProducts.map((p) => [p.id, p])), [allProducts]);
+  const products = React.useMemo(() => allProducts.filter(isProductActive), [allProducts]);
+  const [currencies, setCurrencies] = React.useState<CurrencyItem[]>([]);
+  const [currency, setCurrency] = React.useState("IDR");
   const [referenceLoading, setReferenceLoading] = React.useState(false);
   const [referenceError, setReferenceError] = React.useState<string | null>(null);
 
@@ -105,31 +124,54 @@ export default function QuotationsPage() {
       : manualCustomerName
   ).trim();
 
+  const [paymentTerms, setPaymentTerms] = React.useState<PaymentTermItem[]>([]);
+  const [taxRates, setTaxRates] = React.useState<TaxRateItem[]>([]);
+  const [paymentTermId, setPaymentTermId] = React.useState("");
+  const [paymentTerm, setPaymentTerm] = React.useState("");
+  const [taxRateId, setTaxRateId] = React.useState("");
+  const [vatRate, setVatRate] = React.useState(11);
+  const [applyVat, setApplyVat] = React.useState(true);
+
   const loadReferences = React.useCallback(async () => {
     setReferenceLoading(true);
     setReferenceError(null);
     try {
-      const [custRes, poRes, items] = await Promise.all([
+      const [custRes, poRes, items, curRes, ptRes, trRes] = await Promise.all([
         customersApi.list({ perPage: 200 }),
         customerPosApi.list({ perPage: 100 }),
         allPages(productsApi.list),
+        currencyApi.list().catch(() => ({ data: [] })),
+        pricingApi.listPaymentTerms().catch(() => ({ data: [] })),
+        pricingApi.listTaxRates().catch(() => ({ data: [] })),
       ]);
       setCustomers((custRes.data || []).filter((c) => c.status?.toLowerCase() !== "inactive"));
       setCustomerPOs(poRes.data || []);
-      setProducts(items);
+      setAllProducts(items);
+      setCurrencies(curRes.data || []);
+      setPaymentTerms(ptRes.data || []);
+      const trList = trRes.data || [];
+      setTaxRates(trList);
+      const defTr = trList.find((t) => t.isDefault) || trList[0];
+      if (defTr) {
+        setTaxRateId((prev) => prev || defTr.id);
+        setVatRate((prev) => (prev !== 11 ? prev : defTr.rate));
+      }
     } catch (error) {
-      setReferenceError(error instanceof Error ? error.message : "Gagal memuat master pelanggan dan barang");
+      setReferenceError(error instanceof Error ? error.message : "Gagal memuat master pelanggan, barang, dan mata uang");
     } finally {
       setReferenceLoading(false);
     }
   }, []);
   const [lines, setLines] = React.useState<QuotationLineInput[]>([{ productId: "", description: "", unit: "pcs", quantity: 1, unitPrice: 0 }]);
   const [selected, setSelected] = React.useState<Quotation | null>(null);
+  const [printingQuotation, setPrintingQuotation] = React.useState<Quotation | null>(null);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [isConverting, setIsConverting] = React.useState(false);
   const [convertError, setConvertError] = React.useState<string | null>(null);
   const subtotal = (line: QuotationLineInput) => Math.round(line.quantity * line.unitPrice * 100) / 100;
   const totalAmount = Math.round(lines.reduce((sum, line) => sum + subtotal(line), 0) * 100) / 100;
+  const vatAmount = applyVat ? Math.round(totalAmount * (vatRate / 100) * 100) / 100 : 0;
+  const grandTotal = totalAmount + vatAmount;
   const updateLine = (index: number, patch: Partial<QuotationLineInput>) => setLines(current => current.map((line, i) => i === index ? { ...line, ...patch } : line));
   const [expiryDate, setExpiryDate] = React.useState("");
   const [refPoNumber, setRefPoNumber] = React.useState<string>("");
@@ -140,6 +182,7 @@ export default function QuotationsPage() {
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editCustomerName, setEditCustomerName] = React.useState("");
   const [editLines, setEditLines] = React.useState<QuotationLineInput[]>([]);
+  const [editCurrency, setEditCurrency] = React.useState("IDR");
   const [editValidUntil, setEditValidUntil] = React.useState("");
   const [isEditSubmitting, setIsEditSubmitting] = React.useState(false);
   const [editError, setEditError] = React.useState<string | null>(null);
@@ -164,10 +207,18 @@ export default function QuotationsPage() {
             id: q.id,
             lines: q.lines || [],
             quotationNumber: q.quotationNumber,
+            customerId: q.customerId,
             customerName: q.customerName,
+            paymentTermId: q.paymentTermId,
+            paymentTerm: q.paymentTerm,
+            taxRateId: q.taxRateId,
+            vatRate: q.vatRate,
+            vatAmount: q.vatAmount,
+            vatExempt: q.vatExempt,
             issueDate: q.createdAt ? q.createdAt.slice(0, 10) : "",
             expiryDate: q.validUntil,
             totalAmount: q.totalAmount,
+            currency: q.currency,
             status: q.status,
             notes: q.notes,
             cancellationReason: q.cancellationReason,
@@ -175,6 +226,8 @@ export default function QuotationsPage() {
             parentQuotationNumber: q.parentQuotationNumber,
             revisionNumber: q.revisionNumber,
             isSuperseded: q.isSuperseded,
+            customerPoId: q.customerPoId,
+            customerPoNumber: q.customerPoNumber,
           }))
         );
       })
@@ -187,12 +240,23 @@ export default function QuotationsPage() {
   );
 
   const displayedQuotations = React.useMemo(
-    () => quotations.filter((q) => showRevisedHistory || (!q.isSuperseded && q.status !== "Revised")),
-    [quotations, showRevisedHistory]
+    () =>
+      quotations.filter((q) => {
+        if (!showRevisedHistory && (q.isSuperseded || q.status === "Revised")) return false;
+        if (allProducts.length === 0) return true;
+        if (!q.lines || q.lines.length === 0) return true;
+        return q.lines.every((l) => {
+          if (!l.productId) return true;
+          const p = productMap.get(l.productId);
+          return p ? isProductActive(p) : false;
+        });
+      }),
+    [quotations, showRevisedHistory, allProducts, productMap]
   );
 
   React.useEffect(() => {
     fetchQuotations();
+    productsApi.list({ perPage: 500 }).then((res) => setAllProducts(res.data || [])).catch(() => undefined);
   }, [fetchQuotations]);
 
   React.useEffect(() => {
@@ -299,10 +363,23 @@ export default function QuotationsPage() {
     setIsSubmitting(true);
     setFormError(null);
     try {
+      const resolvedCustomerPoId = (sourceType === "po" && selectedPoId) ? selectedPoId : (revisingQuotation?.customerPoId || undefined);
+      const resolvedCustomerPoNumber = refPoNumber || (revisingQuotation?.customerPoNumber || undefined);
+
       await salesApi.createQuotation({
+        customerId: customerId || undefined,
         customerName,
+        customerPoId: resolvedCustomerPoId,
+        customerPoNumber: resolvedCustomerPoNumber,
+        paymentTermId: paymentTermId || undefined,
+        paymentTerm: paymentTerm || undefined,
+        taxRateId: taxRateId || undefined,
+        vatRate: applyVat ? vatRate : 0,
+        vatAmount,
+        vatExempt: !applyVat,
         lines,
-        totalAmount,
+        totalAmount: grandTotal,
+        currency: currency || "IDR",
         validUntil,
         notes,
         parentQuotationId: revisingQuotation ? revisingQuotation.id : undefined,
@@ -330,6 +407,7 @@ export default function QuotationsPage() {
       setSelectedPoId("");
       setManualCustomerName("");
       setRefPoNumber("");
+      setCurrency("IDR");
       setLines([{ productId: "", description: "", unit: "pcs", quantity: 1, unitPrice: 0 }]);
       setExpiryDate("");
     } catch (err) {
@@ -342,6 +420,7 @@ export default function QuotationsPage() {
   const handleOpenEdit = (quotation: Quotation) => {
     setEditingId(quotation.id);
     setEditCustomerName(quotation.customerName);
+    setEditCurrency(quotation.currency || "IDR");
     setEditValidUntil(quotation.expiryDate);
     setEditLines(
       quotation.lines.length
@@ -366,6 +445,7 @@ export default function QuotationsPage() {
       await salesApi.updateQuotation(editingId, {
         customerName: editCustomerName.trim(),
         lines: editLines,
+        currency: editCurrency || "IDR",
         validUntil: editValidUntil,
       });
       fetchQuotations();
@@ -381,16 +461,26 @@ export default function QuotationsPage() {
 
   const handleRevise = (quotation: Quotation) => {
     setRevisingQuotation(quotation);
-    // Match customer from Master Pelanggan
-    const matchedCustomer = customers.find(
-      (c) => c.name.toLowerCase() === quotation.customerName.toLowerCase()
-    );
-    if (matchedCustomer) {
-      setSourceType("customer");
-      setCustomerId(matchedCustomer.id);
+    setCurrency(quotation.currency || "IDR");
+    if (quotation.customerPoId) {
+      setSourceType("po");
+      setSelectedPoId(quotation.customerPoId);
+      setRefPoNumber(quotation.customerPoNumber || "");
     } else {
-      setSourceType("manual");
-      setManualCustomerName(quotation.customerName);
+      // Match customer from Master Pelanggan
+      const matchedCustomer = customers.find(
+        (c) => c.name.toLowerCase() === quotation.customerName.toLowerCase()
+      );
+      if (matchedCustomer) {
+        setSourceType("customer");
+        setCustomerId(matchedCustomer.id);
+      } else {
+        setSourceType("manual");
+        setManualCustomerName(quotation.customerName);
+      }
+      if (quotation.customerPoNumber) {
+        setRefPoNumber(quotation.customerPoNumber);
+      }
     }
     // Prefill lines
     setLines(
@@ -462,6 +552,14 @@ export default function QuotationsPage() {
               </span>
             )}
           </div>
+          {q.customerPoNumber ? (
+            <span
+              className="text-[10px] text-emerald-700 font-semibold block truncate max-w-[200px]"
+              title={`Menjawab PO Masuk #${q.customerPoNumber}`}
+            >
+              PO: #{q.customerPoNumber}
+            </span>
+          ) : null}
           {q.parentQuotationNumber ? (
             <span
               className="text-[10px] text-amber-800 font-medium block truncate max-w-[200px]"
@@ -484,6 +582,11 @@ export default function QuotationsPage() {
       render: (q) => <span className="text-xs font-semibold text-foreground">{q.customerName}</span>,
     },
     {
+      key: "paymentTerm",
+      header: "Termin (TOP)",
+      render: (q) => <span className="text-xs text-foreground font-medium">{q.paymentTerm || "-"}</span>,
+    },
+    {
       key: "issueDate",
       header: "Date Issued",
       render: (q) => <span className="text-xs text-muted-foreground">{q.issueDate}</span>,
@@ -498,7 +601,7 @@ export default function QuotationsPage() {
       header: "Total Estimate",
       align: "right",
       sortable: true,
-      render: (q) => <MoneyDisplay amount={q.totalAmount} className="text-xs font-bold" />,
+      render: (q) => <MoneyDisplay amount={q.totalAmount} currency={q.currency || "IDR"} className="text-xs font-bold" />,
     },
     {
       key: "status",
@@ -513,6 +616,19 @@ export default function QuotationsPage() {
         const isActionable = q.status !== "Converted" && q.status !== "Cancelled" && q.status !== "Revised" && !q.isSuperseded;
         return (
           <div className="flex items-center justify-end gap-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-[11px] gap-1 text-slate-700 hover:bg-slate-100 border-slate-300 shadow-2xs"
+              onClick={(e) => {
+                e.stopPropagation();
+                setPrintingQuotation(q);
+              }}
+              title="Cetak atau simpan ke PDF dokumen penawaran harga resmi"
+            >
+              <Printer className="h-3 w-3 text-emerald-600" /> PDF
+            </Button>
             {isActionable ? (
               <>
                 <Button
@@ -522,7 +638,8 @@ export default function QuotationsPage() {
                   className="h-7 px-2 text-[11px] gap-1 font-semibold"
                   onClick={(e) => {
                     e.stopPropagation();
-                    window.location.href = `/sales/trade-invoices?tab=PI&fromQuotationId=${q.id}`;
+                    const custPoParam = q.customerPoId ? `&fromCustomerPoId=${q.customerPoId}` : "";
+                    window.location.href = `/sales/trade-invoices?tab=PI&fromQuotationId=${q.id}${custPoParam}`;
                   }}
                   title="Pembeli sepakat (Agree): Lanjut terbitkan Proforma Invoice dengan DP (0-100%)"
                 >
@@ -598,14 +715,16 @@ export default function QuotationsPage() {
         <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs" onClick={handleExport}>
           <Download className="h-3.5 w-3.5" /> Export
         </Button>
-        <Button
-          variant="gradient"
-          size="sm"
-          className="h-9 gap-1.5 text-xs font-semibold"
-          onClick={() => { setIsAddOpen(true); void loadReferences(); }}
-        >
-          <Plus className="h-3.5 w-3.5" /> New Quotation
-        </Button>
+        {canCreateSales && (
+          <Button
+            variant="gradient"
+            size="sm"
+            className="h-9 gap-1.5 text-xs font-semibold"
+            onClick={() => { setIsAddOpen(true); void loadReferences(); }}
+          >
+            <Plus className="h-3.5 w-3.5" /> New Quotation
+          </Button>
+        )}
       </PageHeader>
 
       {loadError && <div role="alert" className="text-sm text-rose-700">{loadError} <Button variant="outline" onClick={fetchQuotations}>Retry</Button></div>}
@@ -716,7 +835,17 @@ export default function QuotationsPage() {
                     onChange={(e) => {
                       setCustomerId(e.target.value);
                       const c = customers.find((item) => item.id === e.target.value);
-                      if (c) setManualCustomerName(c.name);
+                      if (c) {
+                        setManualCustomerName(c.name);
+                        if (c.paymentTermId) {
+                          setPaymentTermId(c.paymentTermId);
+                          setPaymentTerm(c.paymentTermName || "");
+                        } else if (c.paymentTermName) {
+                          setPaymentTerm(c.paymentTermName);
+                          const matched = paymentTerms.find((p) => p.name === c.paymentTermName);
+                          if (matched) setPaymentTermId(matched.id);
+                        }
+                      }
                     }}
                     required={sourceType === "customer"}
                     disabled={referenceLoading || isSubmitting}
@@ -749,6 +878,19 @@ export default function QuotationsPage() {
                       if (po) {
                         setManualCustomerName(po.customerName);
                         setRefPoNumber(po.poNumber);
+                        if (po.paymentTermId) {
+                          setPaymentTermId(po.paymentTermId);
+                          setPaymentTerm(po.paymentTerm || "");
+                        } else if (po.paymentTerm) {
+                          setPaymentTerm(po.paymentTerm);
+                          const matched = paymentTerms.find((p) => p.name === po.paymentTerm);
+                          if (matched) setPaymentTermId(matched.id);
+                        }
+                        if (po.taxRateId) {
+                          setTaxRateId(po.taxRateId);
+                          if (po.vatRate) setVatRate(po.vatRate);
+                        }
+                        if (po.currency) setCurrency(po.currency);
                         if (po.lines && po.lines.length > 0) {
                           setLines(
                             po.lines.map((l) => ({
@@ -836,17 +978,104 @@ export default function QuotationsPage() {
                     <Input aria-label={`Unit price ${index + 1}`} type="number" min="0" max="9999999999999.99" step="0.01" value={line.unitPrice} onChange={e => updateLine(index, { unitPrice: e.target.valueAsNumber })} required />
                   </label>
                   <div className="col-span-2 md:col-span-12 flex items-center justify-between text-sm">
-                    <span>Subtotal: <MoneyDisplay amount={Number.isFinite(subtotal(line)) ? subtotal(line) : 0} /></span>
+                    <span>Subtotal: <MoneyDisplay amount={Number.isFinite(subtotal(line)) ? subtotal(line) : 0} currency={currency} /></span>
                     <Button type="button" variant="ghost" size="sm" aria-label={`Remove item ${index + 1}`} disabled={lines.length === 1} onClick={() => setLines(current => current.filter((_, i) => i !== index))}><Trash2 className="h-4 w-4" /></Button>
                   </div>
                 </div>
               ))}
               <Button type="button" variant="outline" size="sm" onClick={() => setLines(current => [...current, { productId: "", description: "", unit: "pcs", quantity: 1, unitPrice: 0 }])}><Plus className="h-4 w-4 mr-1" />Add Item</Button>
-              <div className="text-right font-semibold">Total Estimate: <MoneyDisplay amount={Number.isFinite(totalAmount) ? totalAmount : 0} /></div>
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t text-xs">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={applyVat}
+                    onChange={(e) => setApplyVat(e.target.checked)}
+                    className="h-3.5 w-3.5 accent-brand-primary"
+                  />
+                  <span className="text-foreground font-medium">Kena PPN {vatRate}% <span className="text-muted-foreground font-normal">(nonaktifkan untuk ekspor)</span></span>
+                </label>
+                <div className="text-right space-y-0.5 font-semibold">
+                  <div className="text-muted-foreground text-xs font-normal">Subtotal: <MoneyDisplay amount={Number.isFinite(totalAmount) ? totalAmount : 0} currency={currency} /></div>
+                  {applyVat && (
+                    <div className="text-muted-foreground text-xs font-normal">
+                      PPN {vatRate}%: +<MoneyDisplay amount={vatAmount} currency={currency} />
+                    </div>
+                  )}
+                  <div className="text-sm font-bold text-foreground">Total Estimate: <MoneyDisplay amount={Number.isFinite(grandTotal) ? grandTotal : 0} currency={currency} /></div>
+                </div>
+              </div>
             </fieldset>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-foreground">Valid Until</label>
-              <Input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Term of Payment (TOP)</label>
+                <select
+                  value={paymentTermId}
+                  onChange={(e) => {
+                    const pt = paymentTerms.find((p) => p.id === e.target.value);
+                    setPaymentTermId(e.target.value);
+                    setPaymentTerm(pt ? pt.name : "");
+                  }}
+                  className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+                >
+                  <option value="">-- Pilih TOP --</option>
+                  {paymentTerms.map((pt) => (
+                    <option key={pt.id} value={pt.id}>
+                      {pt.name} ({pt.days} hari)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Tarif Pajak (PPN)</label>
+                <select
+                  value={taxRateId}
+                  onChange={(e) => {
+                    const tr = taxRates.find((t) => t.id === e.target.value);
+                    setTaxRateId(e.target.value);
+                    if (tr) setVatRate(tr.rate);
+                  }}
+                  className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+                  disabled={!applyVat}
+                >
+                  <option value="">-- Pilih Tarif Pajak --</option>
+                  {taxRates.map((tr) => (
+                    <option key={tr.id} value={tr.id}>
+                      {tr.name} ({tr.rate}%)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Mata Uang (Currency)</label>
+                <select
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+                >
+                  {currencies.length > 0 ? (
+                    currencies.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code} — {c.name} {c.symbol ? `(${c.symbol})` : ""}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="IDR">IDR — Indonesian Rupiah (Rp)</option>
+                      <option value="USD">USD — US Dollar ($)</option>
+                      <option value="EUR">EUR — Euro (€)</option>
+                      <option value="CNY">CNY — Chinese Yuan (¥)</option>
+                    </>
+                  )}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Valid Until</label>
+                <Input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+              </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setIsAddOpen(false)}>
@@ -886,8 +1115,13 @@ export default function QuotationsPage() {
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Tanggal Terbit: {selected.issueDate} · Berlaku Hingga: {selected.expiryDate}
                 </p>
+                {selected.customerPoNumber && (
+                  <p className="text-xs text-emerald-800 mt-1 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md inline-block mr-1">
+                    <Layers className="h-3 w-3 inline mr-1 text-emerald-600" />Menjawab PO Masuk: #{selected.customerPoNumber}
+                  </p>
+                )}
                 {selected.notes && (
-                  <p className="text-xs text-blue-700 mt-1 font-medium bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md inline-block">
+                  <p className="text-xs text-blue-700 mt-1 font-medium bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md inline-block mr-1">
                     <History className="h-3 w-3 inline mr-1" />{selected.notes}
                   </p>
                 )}
@@ -979,8 +1213,8 @@ export default function QuotationsPage() {
                         <td className="p-2.5 font-medium whitespace-pre-wrap">{line.description}</td>
                         <td className="p-2.5 text-right">{line.quantity}</td>
                         <td className="p-2.5 text-muted-foreground">{line.unit}</td>
-                        <td className="p-2.5 text-right"><MoneyDisplay amount={line.unitPrice} /></td>
-                        <td className="p-2.5 text-right font-semibold"><MoneyDisplay amount={line.subtotal} /></td>
+                        <td className="p-2.5 text-right"><MoneyDisplay amount={line.unitPrice} currency={selected.currency || "IDR"} /></td>
+                        <td className="p-2.5 text-right font-semibold"><MoneyDisplay amount={line.subtotal} currency={selected.currency || "IDR"} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -992,7 +1226,7 @@ export default function QuotationsPage() {
 
             <div className="text-right text-base font-bold flex items-center justify-end gap-2">
               <span className="text-sm font-normal text-muted-foreground">Total Penawaran:</span>
-              <MoneyDisplay amount={selected.totalAmount} />
+              <MoneyDisplay amount={selected.totalAmount} currency={selected.currency || "IDR"} />
             </div>
 
             {/* Kotak Tindak Lanjut Keputusan Internal Staf Manna */}
@@ -1015,7 +1249,8 @@ export default function QuotationsPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      window.location.href = `/sales/trade-invoices?tab=PI&fromQuotationId=${selected.id}`;
+                      const custPoParam = selected.customerPoId ? `&fromCustomerPoId=${selected.customerPoId}` : "";
+                      window.location.href = `/sales/trade-invoices?tab=PI&fromQuotationId=${selected.id}${custPoParam}`;
                     }}
                     className="flex flex-col items-start text-left p-3 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-50 hover:border-emerald-500 transition-all shadow-xs group"
                   >
@@ -1086,17 +1321,30 @@ export default function QuotationsPage() {
               )}
             </div>
 
-            <DialogFooter className="flex items-center justify-between gap-2 border-t pt-3 mt-4">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => handleOpenEdit(selected)}
-                disabled={selected.status === "Converted" || selected.status === "Cancelled" || selected.status === "Revised"}
-              >
-                <Pencil className="h-3.5 w-3.5" /> Koreksi / Edit Teks
-              </Button>
+            <DialogFooter className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 mt-4">
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs"
+                  onClick={() => {
+                    setPrintingQuotation(selected);
+                  }}
+                >
+                  <Printer className="h-3.5 w-3.5" /> Cetak / Export PDF
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => handleOpenEdit(selected)}
+                  disabled={selected.status === "Converted" || selected.status === "Cancelled" || selected.status === "Revised"}
+                >
+                  <Pencil className="h-3.5 w-3.5" /> Koreksi / Edit Teks
+                </Button>
+              </div>
               <Button type="button" variant="outline" size="sm" onClick={() => setSelected(null)}>
                 Tutup
               </Button>
@@ -1213,17 +1461,42 @@ export default function QuotationsPage() {
                     <Input aria-label={`Edit unit price ${index + 1}`} type="number" min="0" max="9999999999999.99" step="0.01" value={line.unitPrice} onChange={e => updateEditLine(index, { unitPrice: e.target.valueAsNumber })} required />
                   </label>
                   <div className="col-span-2 md:col-span-12 flex items-center justify-between text-sm">
-                    <span>Subtotal: <MoneyDisplay amount={Number.isFinite(editSubtotal(line)) ? editSubtotal(line) : 0} /></span>
+                    <span>Subtotal: <MoneyDisplay amount={Number.isFinite(editSubtotal(line)) ? editSubtotal(line) : 0} currency={editCurrency} /></span>
                     <Button type="button" variant="ghost" size="sm" aria-label={`Remove edit item ${index + 1}`} disabled={editLines.length === 1} onClick={() => setEditLines(current => current.filter((_, i) => i !== index))}><Trash2 className="h-4 w-4" /></Button>
                   </div>
                 </div>
               ))}
               <Button type="button" variant="outline" size="sm" onClick={() => setEditLines(current => [...current, { productId: "", description: "", unit: "pcs", quantity: 1, unitPrice: 0 }])}><Plus className="h-4 w-4 mr-1" />Add Item</Button>
-              <div className="text-right font-semibold">Total Estimate: <MoneyDisplay amount={Number.isFinite(editTotalAmount) ? editTotalAmount : 0} /></div>
+              <div className="text-right font-semibold">Total Estimate: <MoneyDisplay amount={Number.isFinite(editTotalAmount) ? editTotalAmount : 0} currency={editCurrency} /></div>
             </fieldset>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-foreground">Valid Until</label>
-              <Input type="date" value={editValidUntil} onChange={(e) => setEditValidUntil(e.target.value)} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Mata Uang (Currency)</label>
+                <select
+                  value={editCurrency}
+                  onChange={(e) => setEditCurrency(e.target.value)}
+                  className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+                >
+                  {currencies.length > 0 ? (
+                    currencies.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code} — {c.name} {c.symbol ? `(${c.symbol})` : ""}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="IDR">IDR — Indonesian Rupiah (Rp)</option>
+                      <option value="USD">USD — US Dollar ($)</option>
+                      <option value="EUR">EUR — Euro (€)</option>
+                      <option value="CNY">CNY — Chinese Yuan (¥)</option>
+                    </>
+                  )}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Valid Until</label>
+                <Input type="date" value={editValidUntil} onChange={(e) => setEditValidUntil(e.target.value)} />
+              </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setIsEditOpen(false)}>
@@ -1236,6 +1509,15 @@ export default function QuotationsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <QuotationPrintDialog
+        open={!!printingQuotation}
+        onOpenChange={(open) => !open && setPrintingQuotation(null)}
+        quotation={printingQuotation}
+        customers={customers}
+        products={products}
+        currencies={currencies}
+      />
     </div>
   );
 }

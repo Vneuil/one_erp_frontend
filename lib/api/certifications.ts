@@ -1,4 +1,4 @@
-import { apiClient, ApiResponse } from "./client";
+import { apiClient, apiClientDownload, ApiResponse } from "./client";
 
 export type CertEffectiveStatus = "active" | "suspended" | "revoked" | "expired" | "not_yet_valid";
 
@@ -80,4 +80,21 @@ export const certificationsApi = {
     apiClient<CertificateItem>(`/certifications/${id}/revoke`, { method: "POST", body: JSON.stringify({ reason }) }),
   traceLot: (lot: string): Promise<ApiResponse<LotTrace>> =>
     apiClient<LotTrace>(`/traceability/lot/${encodeURIComponent(lot)}`),
+  uploadAttachment: async (file: File): Promise<ApiResponse<{ key: string; filename: string; size: number; contentType: string }>> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiClient<{ key: string; filename: string; size: number; contentType: string }>(
+      "/certifications/upload-attachment",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+  },
+  downloadAttachment: async (id: string): Promise<{ blob: Blob; filename: string | null } | ApiResponse<unknown>> => {
+    return apiClientDownload(`/certifications/${id}/attachment`);
+  },
+  downloadAttachmentByKey: async (key: string): Promise<{ blob: Blob; filename: string | null } | ApiResponse<unknown>> => {
+    return apiClientDownload(`/certifications/attachment/download?key=${encodeURIComponent(key)}`);
+  },
 };

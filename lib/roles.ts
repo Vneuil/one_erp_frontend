@@ -13,12 +13,9 @@ export const isSuperAdmin = (role?: string | null) => SUPER.has((role ?? "").toL
 export const canManageMasterData = (role?: string | null) => MANAGER.has((role ?? "").toLowerCase());
 
 /**
- * Master Produk no longer carries prices (feedback Tim Manna, 12 Nov 2026):
- * prices are typed per line on the Sales Order by superadmin / admin.
- * The product record keeps its cost/selling price columns for existing reports;
- * flip this on only if the master price columns ever need to come back.
+ * Master Produk carries standard cost and selling prices.
  */
-export const SHOW_PRICE_IN_PRODUCT_MASTER = false;
+export const SHOW_PRICE_IN_PRODUCT_MASTER = true;
 
 // Mirrors the backend (actor.TradeDocRoles / MaySeePrices). The server stays authoritative.
 const TRADE_DOCS = new Set([

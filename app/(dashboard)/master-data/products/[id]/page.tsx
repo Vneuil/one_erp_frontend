@@ -4,7 +4,7 @@ import { SHOW_PRICE_IN_PRODUCT_MASTER } from "@/lib/roles";
 import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Edit, Warehouse, History, Award, Box, Coins, PackageCheck } from "lucide-react";
+import { ArrowLeft, Edit, Warehouse, History, Award, Box, Coins, PackageCheck, Power } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   productsApi,
+  isProductActive,
   productCategoriesApi,
   unitsOfMeasureApi,
   certificationsApi,
@@ -33,6 +34,7 @@ import { inventoryApi } from "@/lib/api/inventory";
 import { fetchAllPages } from "@/lib/api/pagination";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigationAccess } from "@/providers/navigation-access";
+import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -44,6 +46,8 @@ export default function ProductDetailPage() {
 }
 
 function ProductDetail() {
+  const confirm = useConfirm();
+  const alert = useAlert();
   const { canViewPrices } = useNavigationAccess();
   const params = useParams();
   const productId = params.id as string;
@@ -149,6 +153,7 @@ function ProductDetail() {
   const product = productQuery.data;
   const [isEditOpen, setIsEditOpen] = React.useState(false);
   const [editName, setEditName] = React.useState<string | null>(null);
+  const [editStatus, setEditStatus] = React.useState<string>("Active");
   const [editCostPrice, setEditCostPrice] = React.useState<string | null>(null);
   const [editSellingPrice, setEditSellingPrice] = React.useState<string | null>(null);
   const [isSaving, setIsSaving] = React.useState(false);
@@ -179,11 +184,38 @@ function ProductDetail() {
     setBufferWarehouse("");
     setBufferMessage("");
     setEditName(product.name);
+    setEditStatus(isProductActive(product) ? "Active" : "Inactive");
     setEditCostPrice(String(product.costPrice || 0));
     setEditSellingPrice(String(product.sellingPrice || 0));
     setSaveError(null);
     setIsEditOpen(true);
   }, [product]);
+
+  const handleToggleStatus = async () => {
+    if (!product) return;
+    const active = isProductActive(product);
+    const ok = await confirm({
+      title: active ? "Nonaktifkan Produk" : "Aktifkan Produk",
+      message: active
+        ? `Nonaktifkan produk "${product.name}" (${product.sku})? Produk ini akan disembunyikan dari tabel katalog aktif dan seluruh pilihan transaksi (Quotation, PO Masuk, PI, SO, PR/PO). Riwayat transaksi tetap tersimpan.`
+        : `Aktifkan kembali produk "${product.name}" (${product.sku})? Produk ini akan kembali muncul di tabel katalog dan pilihan transaksi.`,
+      confirmText: active ? "Nonaktifkan" : "Aktifkan",
+      variant: active ? "destructive" : "default",
+    });
+    if (!ok) return;
+
+    const newStatus = active ? "Inactive" : "Active";
+    try {
+      const res = await productsApi.setStatus(product.id, newStatus);
+      queryClient.setQueryData(["product", productId], res.data);
+    } catch (err) {
+      await alert({
+        title: "Gagal Mengubah Status",
+        message: "Gagal mengubah status produk: " + (err instanceof Error ? err.message : "Kesalahan server"),
+        variant: "destructive",
+      });
+    }
+  };
 
   const toggleEditCert = (code: string) => {
     setEditSelectedCerts((prev) =>
@@ -207,6 +239,7 @@ function ProductDetail() {
         name: (editName ?? product?.name ?? "").trim(),
         costPrice,
         sellingPrice,
+        status: editStatus,
         grade: editGrade || undefined,
         certifications: certificationsStr || undefined,
         ...editFields,
@@ -243,7 +276,9 @@ function ProductDetail() {
     .map((c) => c.trim())
     .filter(Boolean);
 
-  const isPackagingCategory = (editFields.category || product.category) === "Packaging";
+  const isPackagingCategory =
+    (editFields.category || product.category || "").toLowerCase().includes("pack") ||
+    (editFields.category || product.category || "").toLowerCase().includes("kemas");
 
   return (
     <div className="space-y-6">
@@ -261,7 +296,23 @@ function ProductDetail() {
           product.grade ? ` • Grade: ${product.grade}` : ""
         }${product.currency ? ` • Mata Uang: ${product.currency}` : ""}`}
       >
-        <StatusBadge status={product.status} />
+        <StatusBadge
+          status={isProductActive(product) ? "active" : "inactive"}
+          label={isProductActive(product) ? "Aktif" : "Non-Aktif"}
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          className={`h-9 gap-1.5 text-xs font-semibold ${
+            isProductActive(product)
+              ? "text-rose-700 hover:bg-rose-50 border-rose-300"
+              : "text-emerald-700 hover:bg-emerald-50 border-emerald-300"
+          }`}
+          onClick={handleToggleStatus}
+        >
+          <Power className="h-3.5 w-3.5" />
+          {isProductActive(product) ? "Nonaktifkan Produk" : "Aktifkan Produk"}
+        </Button>
         <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs" onClick={handleOpenEdit}>
           <Edit className="h-3.5 w-3.5" /> Edit Product
         </Button>
@@ -278,35 +329,23 @@ function ProductDetail() {
           </CardContent>
         </Card>
 
-        {SHOW_PRICE_IN_PRODUCT_MASTER && canViewPrices("products") && (
+        {(SHOW_PRICE_IN_PRODUCT_MASTER || canViewPrices("products")) && (
           <Card>
             <CardContent className="p-4">
               <span className="text-xs text-muted-foreground font-semibold uppercase">Cost Price</span>
               <p className="text-xl font-bold text-foreground mt-1">
-                {product.currency && product.currency !== "IDR" ? (
-                  <span className="font-mono">
-                    {product.currency} {formatNumber(product.costPrice)}
-                  </span>
-                ) : (
-                  <MoneyDisplay amount={product.costPrice} />
-                )}
+                <MoneyDisplay amount={product.costPrice} currency={product.currency || "IDR"} />
               </p>
             </CardContent>
           </Card>
         )}
 
-        {SHOW_PRICE_IN_PRODUCT_MASTER && canViewPrices("products") && (
+        {(SHOW_PRICE_IN_PRODUCT_MASTER || canViewPrices("products")) && (
           <Card>
             <CardContent className="p-4">
               <span className="text-xs text-muted-foreground font-semibold uppercase">Selling Price</span>
               <p className="text-xl font-bold text-brand-primary mt-1">
-                {product.currency && product.currency !== "IDR" ? (
-                  <span className="font-mono text-brand-primary">
-                    {product.currency} {formatNumber(product.sellingPrice)}
-                  </span>
-                ) : (
-                  <MoneyDisplay amount={product.sellingPrice} highlight />
-                )}
+                <MoneyDisplay amount={product.sellingPrice} currency={product.currency || "IDR"} highlight />
               </p>
             </CardContent>
           </Card>
@@ -581,16 +620,27 @@ function ProductDetail() {
                   maxLength={100}
                 />
               </label>
-              <label className="text-xs font-medium">
-                Kategori *
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium">Kategori *</label>
+                  <Link
+                    href="/master-data/categories-units"
+                    target="_blank"
+                    className="text-[10px] text-brand-primary hover:underline"
+                  >
+                    + Kelola
+                  </Link>
+                </div>
                 <select
-                  className="h-10 w-full rounded-lg border px-3 bg-white"
+                  className="h-10 w-full rounded-lg border px-3 bg-white text-xs"
                   value={editFields.category ?? product.category}
                   onChange={(e) => setEditFields((current) => ({ ...current, category: e.target.value }))}
                   required
-                  disabled={categoriesQuery.isPending || categoriesQuery.isError}
+                  disabled={categoriesQuery.isPending}
                 >
-                  <option value={product.category}>{product.category}</option>
+                  {product.category && (
+                    <option value={product.category}>{product.category}</option>
+                  )}
                   {categoriesQuery.data
                     ?.filter((item) => item.name !== product.category)
                     .map((item) => (
@@ -599,7 +649,7 @@ function ProductDetail() {
                       </option>
                     ))}
                 </select>
-              </label>
+              </div>
               <label className="text-xs font-medium">
                 UoM / Satuan *
                 <select
@@ -621,7 +671,7 @@ function ProductDetail() {
               </label>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <label className="text-xs font-medium">
                 Grade Mutu Gula Kelapa
                 <select
@@ -654,7 +704,48 @@ function ProductDetail() {
                   {!currenciesQuery.data?.some((c) => c.code === "CNY") && <option value="CNY">CNY</option>}
                 </select>
               </label>
+
+              <label className="text-xs font-medium">
+                Status Keaktifan
+                <select
+                  className="h-10 w-full rounded-lg border px-3 bg-white font-semibold"
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value)}
+                >
+                  <option value="Active">Aktif (Tampil di Katalog &amp; Transaksi)</option>
+                  <option value="Inactive">Non-Aktif (Sembunyikan dari Seluruh Tabel)</option>
+                </select>
+              </label>
             </div>
+
+            {(SHOW_PRICE_IN_PRODUCT_MASTER || canViewPrices("products")) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="text-xs font-medium">
+                  Standard Cost Price ({editFields.currency ?? product.currency ?? "IDR"})
+                  <Input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={editCostPrice ?? String(product.costPrice ?? 0)}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setEditCostPrice(e.target.value)}
+                    placeholder="0"
+                  />
+                </label>
+                <label className="text-xs font-medium">
+                  Standard Selling Price ({editFields.currency ?? product.currency ?? "IDR"})
+                  <Input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={editSellingPrice ?? String(product.sellingPrice ?? 0)}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setEditSellingPrice(e.target.value)}
+                    placeholder="0"
+                  />
+                </label>
+              </div>
+            )}
 
             {/* Sertifikasi Selection */}
             <div className="space-y-1.5 pt-2">
@@ -786,40 +877,6 @@ function ProductDetail() {
                     placeholder="mis. Kraft coklat 150 GSM, printing logo"
                   />
                 </label>
-              </div>
-            )}
-
-            {/* Price Inputs (Only shown if authorized; no 'Rahasia' text shown to staff) */}
-            {SHOW_PRICE_IN_PRODUCT_MASTER && canViewPrices("products") && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-foreground">
-                    Cost Price ({editFields.currency ?? product.currency ?? "IDR"})
-                  </label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={editCostPrice ?? String(product.costPrice)}
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => setEditCostPrice(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-foreground">
-                    Selling Price ({editFields.currency ?? product.currency ?? "IDR"})
-                  </label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={editSellingPrice ?? String(product.sellingPrice)}
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => setEditSellingPrice(e.target.value)}
-                    required
-                  />
-                </div>
               </div>
             )}
 

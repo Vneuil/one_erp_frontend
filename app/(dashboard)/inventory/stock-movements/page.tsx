@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { downloadCsv } from "@/lib/utils/csv";
 import { inventoryApi, WarehouseItem, MovementItem } from "@/lib/api/inventory";
-import { productsApi, ProductItem } from "@/lib/api/products";
+import { productsApi, ProductItem, isProductActive, productCategoriesApi, ProductCategoryItem } from "@/lib/api/products";
 import { useAppStore } from "@/stores/app-store";
 
 interface StockMovementRow {
@@ -52,7 +52,10 @@ export default function StockMovementsPage() {
   const [rawMovements, setRawMovements] = React.useState<MovementItem[]>([]);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
-  const [products, setProducts] = React.useState<ProductItem[]>([]);
+  const [allProducts, setAllProducts] = React.useState<ProductItem[]>([]);
+  const productMap = React.useMemo(() => new Map(allProducts.map((p) => [p.id, p])), [allProducts]);
+  const products = React.useMemo(() => allProducts.filter(isProductActive), [allProducts]);
+  const [categories, setCategories] = React.useState<ProductCategoryItem[]>([]);
   const [warehouses, setWarehouses] = React.useState<WarehouseItem[]>([]);
 
   // View state: "card" (Kartu Stok KSB per Item) or "ledger" (Semua Mutasi Global)
@@ -60,6 +63,19 @@ export default function StockMovementsPage() {
   const [selectedProductId, setSelectedProductId] = React.useState<string>("");
   const [selectedWarehouseId, setSelectedWarehouseId] = React.useState<string>("");
   const [categoryFilter, setCategoryFilter] = React.useState<string>("all");
+
+  const filteredProducts = React.useMemo(() => {
+    if (categoryFilter === "all") return products;
+    return products.filter((p) => (p.category || "").toLowerCase() === categoryFilter.toLowerCase());
+  }, [products, categoryFilter]);
+
+  const handleCategoryFilterChange = (cat: string) => {
+    setCategoryFilter(cat);
+    const list = cat === "all" ? products : products.filter((p) => (p.category || "").toLowerCase() === cat.toLowerCase());
+    if (list.length > 0 && !list.some((p) => p.id === selectedProductId)) {
+      setSelectedProductId(list[0].id);
+    }
+  };
 
   // Dialog state
   const [dialogMode, setDialogMode] = React.useState<"in" | "out" | "reject" | null>(null);
@@ -90,13 +106,19 @@ export default function StockMovementsPage() {
   React.useEffect(() => {
     fetchMovements();
     productsApi
-      .list({ perPage: 200 })
+      .list({ perPage: 500 })
       .then((res) => {
-        const list = res.data || [];
-        setProducts(list);
-        if (list.length > 0) setSelectedProductId((prev) => prev || list[0].id);
+        const full = res.data || [];
+        setAllProducts(full);
+        const active = full.filter(isProductActive);
+        if (active.length > 0) setSelectedProductId((prev) => prev || active[0].id);
       })
       .catch((err) => console.warn("Failed to load products", err));
+
+    productCategoriesApi
+      .list()
+      .then((res) => setCategories(res.data || []))
+      .catch((err) => console.warn("Failed to load categories", err));
 
     inventoryApi
       .listWarehouses({ perPage: 100 })
@@ -110,34 +132,41 @@ export default function StockMovementsPage() {
 
   // Transform raw movements to formatted table rows
   const allMovementRows: StockMovementRow[] = React.useMemo(() => {
-    return rawMovements.map((m) => {
-      const isReject = m.type === "reject";
-      const isIn = m.quantity > 0 && !isReject;
-      const isOut = m.quantity < 0 && !isReject;
+    return rawMovements
+      .filter((m) => {
+        if (allProducts.length === 0) return true;
+        const p = productMap.get(m.productId);
+        return p ? isProductActive(p) : false;
+      })
+      .map((m) => {
+        const isReject = m.type === "reject";
+        const isIn = m.quantity > 0 && !isReject;
+        const isOut = m.quantity < 0 && !isReject;
 
-      const dateStr = m.createdAt ? m.createdAt.slice(0, 10) : "-";
+        const dateStr = m.createdAt ? m.createdAt.slice(0, 10) : "-";
+        const p = productMap.get(m.productId);
 
-      return {
-        id: m.id,
-        timestamp: m.createdAt || "-",
-        dateOnly: dateStr,
-        sku: m.productSku,
-        productName: m.productName,
-        productId: m.productId,
-        movementType: movementTypeLabels[m.type] || m.type,
-        rawType: m.type,
-        refDocument: m.reference || "-",
-        batchNo: m.batchNo || "-",
-        warehouse: m.warehouseName,
-        warehouseId: m.warehouseId,
-        qtyIn: isIn ? m.quantity : 0,
-        qtyOut: isOut ? Math.abs(m.quantity) : 0,
-        qtyReject: isReject ? Math.abs(m.quantity) : 0,
-        balanceAfter: m.balance,
-        operator: m.createdBy || "-",
-      };
-    });
-  }, [rawMovements]);
+        return {
+          id: m.id,
+          timestamp: m.createdAt || "-",
+          dateOnly: dateStr,
+          sku: m.productSku || p?.sku || "-",
+          productName: m.productName || p?.name || "-",
+          productId: m.productId,
+          movementType: movementTypeLabels[m.type] || m.type,
+          rawType: m.type,
+          refDocument: m.reference || "-",
+          batchNo: m.batchNo || "-",
+          warehouse: m.warehouseName,
+          warehouseId: m.warehouseId,
+          qtyIn: isIn ? m.quantity : 0,
+          qtyOut: isOut ? Math.abs(m.quantity) : 0,
+          qtyReject: isReject ? Math.abs(m.quantity) : 0,
+          balanceAfter: m.balance,
+          operator: m.createdBy || "-",
+        };
+      });
+  }, [rawMovements, allProducts, productMap]);
 
   // Movements filtered for specific Kartu Stok (KSB) per Product & Warehouse
   const ksbRows: StockMovementRow[] = React.useMemo(() => {
@@ -509,17 +538,40 @@ export default function StockMovementsPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700">Filter Kategori</label>
+            <select
+              value={categoryFilter}
+              onChange={(e) => handleCategoryFilterChange(e.target.value)}
+              className="w-full h-9 px-2.5 rounded-lg border border-slate-300 bg-white text-xs text-slate-900 font-medium"
+            >
+              <option value="all">Semua Kategori ({products.length})</option>
+              {categories.map((c) => {
+                const count = products.filter((p) => (p.category || "").toLowerCase() === c.name.toLowerCase()).length;
+                return (
+                  <option key={c.id} value={c.name}>
+                    {c.name} ({count})
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          <div className="space-y-1">
             <label className="text-xs font-semibold text-slate-700">Pilih Produk / Bahan</label>
             <select
               value={selectedProductId}
               onChange={(e) => setSelectedProductId(e.target.value)}
               className="w-full h-9 px-2.5 rounded-lg border border-slate-300 bg-white text-xs text-slate-900 font-medium focus:ring-1 focus:ring-brand-primary"
             >
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.sku} — {p.name} ({p.unit})
-                </option>
-              ))}
+              {filteredProducts.length === 0 ? (
+                <option value="">Tidak ada produk pada kategori ini</option>
+              ) : (
+                filteredProducts.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.sku} — {p.name} ({p.unit})
+                  </option>
+                ))
+              )}
             </select>
           </div>
 
@@ -535,26 +587,6 @@ export default function StockMovementsPage() {
                   {w.code} — {w.name}
                 </option>
               ))}
-            </select>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-700">Filter Kategori</label>
-            <select
-              value={categoryFilter}
-              onChange={(e) => {
-                setCategoryFilter(e.target.value);
-                if (e.target.value !== "all") {
-                  const match = products.find((p) => p.category.toLowerCase().includes(e.target.value.toLowerCase()));
-                  if (match) setSelectedProductId(match.id);
-                }
-              }}
-              className="w-full h-9 px-2.5 rounded-lg border border-slate-300 bg-white text-xs text-slate-900 font-medium"
-            >
-              <option value="all">Semua Kategori</option>
-              <option value="bahan">Bahan Baku (Gula / VCO - KSB-BB)</option>
-              <option value="kemas">Barang Kemas (Plastik / Box - KSB-BK)</option>
-              <option value="brontol">WIP / Brontol (KSB-Brontol)</option>
             </select>
           </div>
         </div>
@@ -635,7 +667,7 @@ export default function StockMovementsPage() {
                 <option value="">Pilih produk...</option>
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.sku} — {p.name} ({p.unit})
+                    [{p.category}] {p.sku} — {p.name} ({p.unit})
                   </option>
                 ))}
               </select>

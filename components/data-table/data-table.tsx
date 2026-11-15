@@ -34,6 +34,7 @@ interface DataTableProps<T> {
   data: T[];
   isLoading?: boolean;
   searchKey?: string;
+  searchKeys?: string[];
   searchPlaceholder?: string;
   filterSlot?: React.ReactNode;
   actionSlot?: React.ReactNode;
@@ -46,6 +47,7 @@ export function DataTable<T extends object>({
   data,
   isLoading = false,
   searchKey,
+  searchKeys,
   searchPlaceholder,
   filterSlot,
   actionSlot,
@@ -60,13 +62,17 @@ export function DataTable<T extends object>({
 
   // Filter
   const filteredData = React.useMemo(() => {
-    if (!search.trim() || !searchKey) return data;
+    const hasSearchKeys = searchKeys && searchKeys.length > 0;
+    if (!search.trim() || (!searchKey && !hasSearchKeys)) return data;
     const q = search.toLowerCase();
+    const keys = hasSearchKeys ? searchKeys! : [searchKey!];
     return data.filter((item) => {
-      const val = (item as Record<string, unknown>)[searchKey];
-      return val ? String(val).toLowerCase().includes(q) : false;
+      return keys.some((k) => {
+        const val = (item as Record<string, unknown>)[k];
+        return val ? String(val).toLowerCase().includes(q) : false;
+      });
     });
-  }, [data, search, searchKey]);
+  }, [data, search, searchKey, searchKeys]);
 
   // Sort
   const sortedData = React.useMemo(() => {

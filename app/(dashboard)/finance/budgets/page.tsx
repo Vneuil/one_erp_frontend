@@ -25,6 +25,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DataTable, Column } from "@/components/data-table/data-table";
 import { MoneyDisplay } from "@/components/shared/money-display";
 import { financeApi, AccountItem } from "@/lib/api/finance";
+import { currencyApi } from "@/lib/api/currency";
 import { useConfirm, usePrompt } from "@/components/shared/confirm-modal";
 
 interface BudgetItem {
@@ -42,6 +43,7 @@ interface BudgetItem {
 export default function BudgetControlPage() {
   const confirm = useConfirm();
   const prompt = usePrompt();
+  const [baseCurrency, setBaseCurrency] = React.useState("IDR");
   const [budgets, setBudgets] = React.useState<BudgetItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
@@ -126,12 +128,20 @@ export default function BudgetControlPage() {
       .listAccounts({ perPage: 500 })
       .then((res) => setAccounts((res.data || []).filter((a) => a.type === "expense" && a.isActive)))
       .catch(() => setAccounts([]));
+
+    currencyApi
+      .list()
+      .then((res) => {
+        const base = (res.data || []).find((c) => c.isBase);
+        if (base) setBaseCurrency(base.code);
+      })
+      .catch(() => undefined);
   }, []);
 
   const handleEditAmount = async (row: BudgetItem) => {
     const raw = await prompt({
       title: "Ubah Pagu Anggaran",
-      message: `Pagu baru untuk ${row.department} — ${row.accountCategory} (Rp):`,
+      message: `Pagu baru untuk ${row.department} — ${row.accountCategory} (${baseCurrency}):`,
       defaultValue: String(row.allocatedBudget),
       placeholder: "Contoh: 15000000",
       confirmText: "Simpan Pagu",
@@ -325,7 +335,7 @@ export default function BudgetControlPage() {
             </div>
 
             <div className="space-y-1">
-              <label className="font-bold text-foreground">Pagu Anggaran (Rp) *</label>
+              <label className="font-bold text-foreground">Pagu Anggaran ({baseCurrency}) *</label>
               <Input
                 type="number"
                 value={allocatedBudget}

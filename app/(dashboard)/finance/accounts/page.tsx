@@ -140,11 +140,16 @@ export default function AccountsPage() {
       render: (a) => <span className="text-xs text-muted-foreground">{a.category ? CATEGORY_LABELS[a.category] ?? a.category : "-"}</span>,
     },
     {
+      key: "currency",
+      header: "Currency",
+      render: (a) => <span className="font-mono text-xs font-bold text-muted-foreground">{a.currency || "IDR"}</span>,
+    },
+    {
       key: "balance",
       header: "Current Ledger Balance",
       align: "right",
       sortable: true,
-      render: (a) => <MoneyDisplay amount={a.balance} highlight className="text-xs font-bold" />,
+      render: (a) => <MoneyDisplay amount={a.balance} currency={a.currency} highlight className="text-xs font-bold" />,
     },
     {
       key: "status",

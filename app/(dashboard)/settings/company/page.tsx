@@ -7,10 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { useAppStore } from "@/stores/app-store";
+import { currencyApi, CurrencyItem } from "@/lib/api/currency";
 
 export default function CompanySettingsPage() {
   const { currentCompany, setCompany } = useAppStore();
   const [saved, setSaved] = React.useState(false);
+  const [currencies, setCurrencies] = React.useState<CurrencyItem[]>([]);
+
+  React.useEffect(() => {
+    currencyApi.list().then((r) => setCurrencies(r.data || [])).catch(() => undefined);
+  }, []);
   const [form, setForm] = React.useState({
     name: currentCompany.name,
     code: currentCompany.code,
@@ -91,9 +97,19 @@ export default function CompanySettingsPage() {
                   onChange={(e) => setForm({ ...form, currency: e.target.value })}
                   className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
                 >
-                  <option value="IDR">IDR - Indonesian Rupiah (Rp)</option>
-                  <option value="USD">USD - US Dollar ($)</option>
-                  <option value="SGD">SGD - Singapore Dollar (S$)</option>
+                  {currencies.length > 0 ? (
+                    currencies.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code} - {c.name} {c.symbol ? `(${c.symbol})` : ""}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="IDR">IDR - Indonesian Rupiah (Rp)</option>
+                      <option value="USD">USD - US Dollar ($)</option>
+                      <option value="SGD">SGD - Singapore Dollar (S$)</option>
+                    </>
+                  )}
                 </select>
               </div>
             </div>

@@ -16,12 +16,14 @@ import { DataTable, Column } from "@/components/data-table/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { MoneyDisplay } from "@/components/shared/money-display";
 import { salesApi, SalesReturnItem, DeliveryItem } from "@/lib/api/sales";
-import { productsApi, ProductItem } from "@/lib/api/products";
+import { productsApi, ProductItem, isProductActive } from "@/lib/api/products";
 
 export default function SalesReturnsPage() {
   const [returns, setReturns] = React.useState<SalesReturnItem[]>([]);
   const [deliveries, setDeliveries] = React.useState<DeliveryItem[]>([]);
-  const [products, setProducts] = React.useState<ProductItem[]>([]);
+  const [allProducts, setAllProducts] = React.useState<ProductItem[]>([]);
+  const productMap = React.useMemo(() => new Map(allProducts.map((p) => [p.id, p])), [allProducts]);
+  const products = React.useMemo(() => allProducts.filter(isProductActive), [allProducts]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
 
@@ -36,11 +38,11 @@ export default function SalesReturnsPage() {
 
   const loadData = React.useCallback(() => {
     setIsLoading(true);
-    Promise.all([salesApi.listReturns(), salesApi.listDeliveries(), productsApi.list({ perPage: 100 })])
+    Promise.all([salesApi.listReturns(), salesApi.listDeliveries(), productsApi.list({ perPage: 500 })])
       .then(([retRes, dRes, pRes]) => {
         setReturns(retRes.data || []);
         setDeliveries(dRes.data || []);
-        setProducts(pRes.data || []);
+        setAllProducts(pRes.data || []);
       })
       .catch((err) => {
         console.error("Failed to load sales returns", err);
@@ -120,6 +122,18 @@ export default function SalesReturnsPage() {
     },
   ];
 
+  const displayedReturns = React.useMemo(() => {
+    if (allProducts.length === 0) return returns;
+    return returns.filter((r) => {
+      if (!r.lines || r.lines.length === 0) return true;
+      return r.lines.every((it) => {
+        if (!it.productId) return true;
+        const p = productMap.get(it.productId);
+        return p ? isProductActive(p) : false;
+      });
+    });
+  }, [returns, allProducts, productMap]);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -147,7 +161,7 @@ export default function SalesReturnsPage() {
       ) : (
         <DataTable
           columns={columns}
-          data={returns}
+          data={displayedReturns}
           searchKey="returnNo"
           searchPlaceholder="Cari nomor retur..."
         />

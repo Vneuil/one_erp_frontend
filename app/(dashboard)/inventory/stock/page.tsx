@@ -17,9 +17,12 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { formatNumber } from "@/lib/utils";
 import { downloadCsv } from "@/lib/utils/csv";
 import { inventoryApi, StockLevelItem } from "@/lib/api/inventory";
+import { productsApi, isProductActive, ProductItem } from "@/lib/api/products";
 
 export default function InventoryStockPage() {
   const [stocks, setStocks] = React.useState<StockLevelItem[]>([]);
+  const [products, setProducts] = React.useState<ProductItem[]>([]);
+  const [showInactive, setShowInactive] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
 
@@ -31,10 +34,13 @@ export default function InventoryStockPage() {
 
   const loadStocks = React.useCallback(() => {
     setIsLoading(true);
-    inventoryApi
-      .listStockLevels({ perPage: 100 })
-      .then((res) => {
-        setStocks(res.data || []);
+    Promise.all([
+      inventoryApi.listStockLevels({ perPage: 200 }),
+      productsApi.list({ perPage: 500 }).catch(() => ({ data: [] })),
+    ])
+      .then(([stockRes, prodRes]) => {
+        setStocks(stockRes.data || []);
+        setProducts(prodRes.data || []);
         setLoadError(null);
       })
       .catch((err) => {
@@ -48,11 +54,22 @@ export default function InventoryStockPage() {
     loadStocks();
   }, [loadStocks]);
 
+  const inactiveProductIds = React.useMemo(() => {
+    return new Set(products.filter((p) => !isProductActive(p)).map((p) => p.id));
+  }, [products]);
+
+  const displayedStocks = React.useMemo(() => {
+    if (showInactive) return stocks;
+    return stocks.filter((s) => !inactiveProductIds.has(s.productId));
+  }, [stocks, showInactive, inactiveProductIds]);
+
+  const hiddenCount = stocks.length - displayedStocks.length;
+
   const handleExportStockList = () => {
     downloadCsv(
       "inventory-stock.csv",
       ["SKU", "Product Name", "Location", "On-Hand", "Reserved", "Available", "Min Stock", "Max Stock", "Buffer Status"],
-      stocks.map((s) => [s.productSku, s.productName, s.warehouseName, s.quantity, s.reserved, s.available, s.minStock, s.maxStock, s.bufferStatus || ""])
+      displayedStocks.map((s) => [s.productSku, s.productName, s.warehouseName, s.quantity, s.reserved, s.available, s.minStock, s.maxStock, s.bufferStatus || ""])
     );
   };
 
@@ -171,6 +188,39 @@ export default function InventoryStockPage() {
         </Button>
       </PageHeader>
 
+      {/* Toggle Filter: Produk Aktif vs Semua */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+        <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-lg">
+          <button
+            type="button"
+            onClick={() => setShowInactive(false)}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              !showInactive
+                ? "bg-white text-emerald-800 shadow-xs border border-emerald-200"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Stok Barang Aktif Saja ({stocks.length - hiddenCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowInactive(true)}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              showInactive
+                ? "bg-white text-brand-primary shadow-xs border border-border"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Semua Stok Termasuk Non-Aktif ({stocks.length})
+          </button>
+        </div>
+        {!showInactive && hiddenCount > 0 && (
+          <span className="text-xs text-muted-foreground">
+            {hiddenCount} stok produk non-aktif disembunyikan dari tabel
+          </span>
+        )}
+      </div>
+
       {loadError && (
         <div className="px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">
           {loadError}
@@ -182,7 +232,7 @@ export default function InventoryStockPage() {
       ) : (
         <DataTable
           columns={columns}
-          data={stocks}
+          data={displayedStocks}
           searchKey="productName"
           searchPlaceholder="Search by product name or SKU..."
         />

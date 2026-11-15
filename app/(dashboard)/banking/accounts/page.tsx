@@ -25,13 +25,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DataTable, Column } from "@/components/data-table/data-table";
 import { MoneyDisplay } from "@/components/shared/money-display";
 import { bankingApi } from "@/lib/api/banking";
+import { currencyApi, CurrencyItem } from "@/lib/api/currency";
 
 interface BankAccount {
   id: string;
   bankName: string;
   accountNumber: string;
   accountHolder: string;
-  currency: "IDR" | "USD";
+  currency: string;
   currentBalance: number;
   unreconciledCount: number;
   branch: string;
@@ -49,24 +50,39 @@ export default function BankAccountsPage() {
   const [accountNumber, setAccountNumber] = React.useState("");
   const [accountHolder, setAccountHolder] = React.useState("");
   const [branch, setBranch] = React.useState("");
+  const [currencies, setCurrencies] = React.useState<CurrencyItem[]>([]);
+  const [currency, setCurrency] = React.useState("IDR");
+
+  React.useEffect(() => {
+    currencyApi
+      .list()
+      .then((res) => {
+        const list = (res.data || []).filter((c) => c.isActive !== false);
+        setCurrencies(list);
+        const base = list.find((c) => c.isBase);
+        if (base) setCurrency(base.code);
+        else if (list.length > 0) setCurrency(list[0].code);
+      })
+      .catch(() => undefined);
+  }, []);
 
   React.useEffect(() => {
     bankingApi
       .listBankAccounts()
       .then((res) => {
-                  setBanks(
-            (res.data || []).map((a) => ({
-              id: a.id,
-              bankName: a.bankName,
-              accountNumber: a.accountNumber,
-              accountHolder: a.accountHolder,
-              currency: (a.currency as "IDR" | "USD") || "IDR",
-              currentBalance: a.currentBalance,
-              unreconciledCount: a.unreconciledCount,
-              branch: a.branch,
-              status: a.status === "active" ? "Active" : "Inactive",
-            }))
-          );
+        setBanks(
+          (res.data || []).map((a) => ({
+            id: a.id,
+            bankName: a.bankName,
+            accountNumber: a.accountNumber,
+            accountHolder: a.accountHolder,
+            currency: a.currency || "IDR",
+            currentBalance: a.currentBalance,
+            unreconciledCount: a.unreconciledCount,
+            branch: a.branch,
+            status: a.status === "active" ? "Active" : "Inactive",
+          }))
+        );
       })
       .catch((err) => {
         console.error("Failed to load rekening bank", err);
@@ -84,7 +100,7 @@ export default function BankAccountsPage() {
     setIsSubmitting(true);
     setFormError(null);
     try {
-      const res = await bankingApi.createBankAccount({ bankName, accountNumber, accountHolder, branch });
+      const res = await bankingApi.createBankAccount({ bankName, accountNumber, accountHolder, branch, currency: currency || "IDR" });
       if (!res.success || !res.data) {
         throw new Error(res.message || "Gagal mendaftarkan rekening bank.");
       }
@@ -95,7 +111,7 @@ export default function BankAccountsPage() {
           bankName: a.bankName,
           accountNumber: a.accountNumber,
           accountHolder: a.accountHolder,
-          currency: (a.currency as "IDR" | "USD") || "IDR",
+          currency: a.currency || currency || "IDR",
           currentBalance: a.currentBalance,
           unreconciledCount: a.unreconciledCount,
           branch: a.branch,
@@ -134,11 +150,20 @@ export default function BankAccountsPage() {
       render: (row) => <span className="text-xs font-semibold">{row.accountHolder}</span>,
     },
     {
+      key: "currency",
+      header: "Mata Uang",
+      render: (row) => (
+        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 text-slate-800 border border-slate-200">
+          {row.currency || "IDR"}
+        </span>
+      ),
+    },
+    {
       key: "currentBalance",
       header: "Saldo Rekening",
       render: (row) => (
         <span className="font-black text-xs text-brand-dark">
-          <MoneyDisplay amount={row.currentBalance} />
+          <MoneyDisplay amount={row.currentBalance} currency={row.currency} />
         </span>
       ),
     },
@@ -225,6 +250,21 @@ export default function BankAccountsPage() {
             <div className="space-y-1">
               <label className="font-bold text-foreground">Nomor Rekening *</label>
               <Input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="e.g. 7900112233" className="h-9 text-xs" required />
+            </div>
+
+            <div className="space-y-1">
+              <label className="font-bold text-foreground">Mata Uang (Currency) *</label>
+              <select
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+                className="flex h-9 w-full rounded-lg border border-border bg-white px-3 py-1 text-xs text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30"
+              >
+                {currencies.map((c) => (
+                  <option key={c.id || c.code} value={c.code}>
+                    {c.code} - {c.name} {c.symbol ? `(${c.symbol})` : ""}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="space-y-1">

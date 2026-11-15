@@ -11,7 +11,9 @@ import { Input } from "@/components/ui/input";
 import { useConfirm, useAlert } from "@/components/shared/confirm-modal";
 import { useRole } from "@/lib/hooks/use-role";
 import { customersApi, CustomerItem } from "@/lib/api/customers";
-import { productsApi, ProductItem } from "@/lib/api/products";
+import { productsApi, ProductItem, isProductActive } from "@/lib/api/products";
+import { currencyApi, CurrencyItem } from "@/lib/api/currency";
+import { pricingApi, PaymentTermItem, TaxRateItem } from "@/lib/api/pricing";
 import {
   salesApi,
   tradeInvoicesApi,
@@ -44,7 +46,9 @@ export default function TradeInvoicesPage() {
   const [source, setSource] = React.useState<Source>("po");
   // PO Masuk: the customer's own PO, answered by a PI (prices are ours to set; they start from what that customer paid last).
   const [customers, setCustomers] = React.useState<CustomerItem[]>([]);
-  const [products, setProducts] = React.useState<ProductItem[]>([]);
+  const [allProducts, setAllProducts] = React.useState<ProductItem[]>([]);
+  const productMap = React.useMemo(() => new Map(allProducts.map((p) => [p.id, p])), [allProducts]);
+  const products = React.useMemo(() => allProducts.filter(isProductActive), [allProducts]);
   const [poCustomerId, setPoCustomerId] = React.useState("");
   const [poNumber, setPoNumber] = React.useState("");
   const [poFileKey, setPoFileKey] = React.useState("");
@@ -55,13 +59,23 @@ export default function TradeInvoicesPage() {
   const [sourceId, setSourceId] = React.useState("");
   const [orders, setOrders] = React.useState<SalesOrderItem[]>([]);
   const [quotes, setQuotes] = React.useState<QuotationItem[]>([]);
+  const [paymentTerms, setPaymentTerms] = React.useState<PaymentTermItem[]>([]);
+  const [taxRates, setTaxRates] = React.useState<TaxRateItem[]>([]);
+  const [paymentTermId, setPaymentTermId] = React.useState("");
   const [paymentTerm, setPaymentTerm] = React.useState("");
+  const [taxRateId, setTaxRateId] = React.useState("");
   const [incoterm, setIncoterm] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [vatExempt, setVatExempt] = React.useState<boolean | null>(null); // null = follow the source
+  const [currencies, setCurrencies] = React.useState<CurrencyItem[]>([]);
+  const [tradeCurrency, setTradeCurrency] = React.useState("IDR");
+  const [linkedCustomerPoId, setLinkedCustomerPoId] = React.useState<string | undefined>(undefined);
+  const [linkedQuotationNumber, setLinkedQuotationNumber] = React.useState<string | undefined>(undefined);
   const [saving, setSaving] = React.useState(false);
 
   const load = React.useCallback(() => {
+    pricingApi.listPaymentTerms().then((r) => setPaymentTerms(r.data || [])).catch(() => undefined);
+    pricingApi.listTaxRates().then((r) => setTaxRates(r.data || [])).catch(() => undefined);
     Promise.all([tradeInvoicesApi.list({ kind: tab, perPage: 100 }), tradeInvoicesApi.list({ kind: "PI", perPage: 100 })])
       .then(([cur, pis]) => {
         setItems(cur.data || []);
@@ -81,15 +95,34 @@ export default function TradeInvoicesPage() {
       const params = new URLSearchParams(window.location.search);
       const fromQuoId = params.get("fromQuotationId");
       const fromCustomerPoId = params.get("fromCustomerPoId");
+      const viewId = params.get("viewId") || params.get("id");
+
+      if (viewId) {
+        tradeInvoicesApi.get(viewId).then((res) => {
+          if (res.data) setView(res.data);
+        }).catch(() => undefined);
+      }
+
       if (fromQuoId) {
         setTab("PI");
         setSource("quotation");
         setSourceId(fromQuoId);
         setDpPercent("50");
         setCreateOpen(true);
+        if (fromCustomerPoId) setLinkedCustomerPoId(fromCustomerPoId);
+        salesApi.getQuotation(fromQuoId).then((res) => {
+          if (res.data) {
+            if (res.data.currency) setTradeCurrency(res.data.currency);
+            if (res.data.customerPoId) setLinkedCustomerPoId(res.data.customerPoId);
+            if (res.data.customerPoNumber) setPoNumber(res.data.customerPoNumber);
+            if (res.data.quotationNumber) setLinkedQuotationNumber(res.data.quotationNumber);
+          }
+        }).catch(() => undefined);
       } else if (fromCustomerPoId) {
         setTab("PI");
         setSource("po");
+        setSourceId(fromCustomerPoId);
+        setLinkedCustomerPoId(fromCustomerPoId);
         setDpPercent("50");
         setCreateOpen(true);
         customerPosApi.get(fromCustomerPoId).then((res) => {
@@ -99,6 +132,7 @@ export default function TradeInvoicesPage() {
             if (po.poNumber) setPoNumber(po.poNumber);
             if (po.attachment) setPoFileKey(po.attachment);
             if (po.notes) setNotes(po.notes);
+            if (po.currency) setTradeCurrency(po.currency);
             if (po.lines && po.lines.length > 0) {
               setPoLines(
                 po.lines.map((l) => ({
@@ -115,17 +149,23 @@ export default function TradeInvoicesPage() {
   }, []);
 
   React.useEffect(() => {
+    productsApi.list({ perPage: 500 }).then((r) => setAllProducts(r.data || [])).catch(() => undefined);
+  }, []);
+
+  React.useEffect(() => {
     if (!createOpen) return;
     salesApi.listOrders({ perPage: 100 }).then((r) => setOrders(r.data || [])).catch(() => undefined);
     salesApi.listQuotations({ perPage: 100 }).then((r) => setQuotes(r.data || [])).catch(() => undefined);
     customersApi.list({ perPage: 200 }).then((r) => setCustomers((r.data || []).filter((c) => c.status?.toLowerCase() !== "inactive"))).catch(() => undefined);
-    productsApi.list({ perPage: 500 }).then((r) => setProducts(r.data || [])).catch(() => undefined);
+    productsApi.list({ perPage: 500 }).then((r) => setAllProducts(r.data || [])).catch(() => undefined);
+    currencyApi.list().then((r) => setCurrencies(r.data || [])).catch(() => undefined);
   }, [createOpen]);
 
   const openCreate = (kind: TradeKind, fromPi?: TradeInvoice) => {
     setTab(kind);
     setSource(fromPi ? "pi" : kind === "PI" ? "po" : "order");
     setPoCustomerId(""); setPoNumber(""); setPoFileKey(""); setPoFileName(""); setDpPercent("50");
+    setTradeCurrency("IDR");
     setPoLines([{ productId: "", quantity: 1, unitPrice: 0 }]);
     setSourceId(fromPi?.id ?? "");
     setPaymentTerm("");
@@ -194,13 +234,16 @@ export default function TradeInvoicesPage() {
     try {
       await tradeInvoicesApi.create({
         kind: tab,
+        currency: tradeCurrency || undefined,
         dpPercent: tab === "PI" ? (Number(dpPercent) || 0) : undefined,
+        customerPoId: linkedCustomerPoId || (source === "po" ? sourceId : undefined),
+        customerPoNumber: poNumber.trim() || undefined,
+        quotationNumber: source === "quotation" ? linkedQuotationNumber : undefined,
         ...(source === "po"
           ? {
               customerName: poCustomer?.name,
               billingAddress: poCustomer ? [poCustomer.address, poCustomer.city].filter(Boolean).join(", ") : undefined,
               shippingAddress: (poCustomer?.shippingAddresses?.find((a) => a.isDefault) || poCustomer?.shippingAddresses?.[0])?.address,
-              customerPoNumber: poNumber.trim() || undefined,
               customerPoAttachment: poFileKey || undefined,
               lines: poLines.filter((l) => l.productId).map((l) => {
                 const p = products.find((x) => x.id === l.productId);
@@ -211,7 +254,9 @@ export default function TradeInvoicesPage() {
         salesOrderId: source === "order" ? sourceId : undefined,
         quotationId: source === "quotation" ? sourceId : undefined,
         parentId: source === "pi" ? sourceId : undefined,
+        paymentTermId: paymentTermId || undefined,
         paymentTerm: paymentTerm || undefined,
+        taxRateId: taxRateId || undefined,
         incoterm: incoterm || undefined,
         notes: notes || undefined,
         vatExempt: vatExempt ?? undefined,
@@ -301,6 +346,18 @@ export default function TradeInvoicesPage() {
         ? quotes.map((q) => ({ id: q.id, label: `${q.quotationNumber} — ${q.customerName}` }))
         : allPi.filter((p) => p.status === "issued").map((p) => ({ id: p.id, label: `${p.number} — ${p.customerName}` }));
 
+  const displayedItems = React.useMemo(() => {
+    if (allProducts.length === 0) return items;
+    return items.filter((inv) => {
+      if (!inv.lines || inv.lines.length === 0) return true;
+      return inv.lines.every((l) => {
+        if (!l.productId) return true;
+        const p = productMap.get(l.productId);
+        return p ? isProductActive(p) : false;
+      });
+    });
+  }, [items, allProducts, productMap]);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -321,7 +378,7 @@ export default function TradeInvoicesPage() {
       </div>
 
       {error && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</div>}
-      <DataTable columns={columns} data={items} isLoading={loading} searchKey="customerName" searchPlaceholder="Cari pelanggan..." />
+      <DataTable columns={columns} data={displayedItems} isLoading={loading} searchKey="customerName" searchPlaceholder="Cari pelanggan..." />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -425,10 +482,64 @@ export default function TradeInvoicesPage() {
                 </div>
               </div>
             )}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
-                <label className="font-semibold">Payment Term</label>
-                <Input value={paymentTerm} onChange={(e) => setPaymentTerm(e.target.value)} placeholder="cth: 30% DP, 70% sebelum kirim" />
+                <label className="font-semibold">Mata Uang</label>
+                <select
+                  className={selectClass}
+                  value={tradeCurrency}
+                  onChange={(e) => setTradeCurrency(e.target.value)}
+                >
+                  {currencies.length > 0 ? (
+                    currencies.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code} ({c.name})
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="IDR">IDR (Rupiah)</option>
+                      <option value="USD">USD (US Dollar)</option>
+                      <option value="EUR">EUR (Euro)</option>
+                      <option value="CNY">CNY (Chinese Yuan)</option>
+                    </>
+                  )}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="font-semibold">Term of Payment (TOP)</label>
+                <select
+                  className={selectClass}
+                  value={paymentTermId}
+                  onChange={(e) => {
+                    const pt = paymentTerms.find((p) => p.id === e.target.value);
+                    setPaymentTermId(e.target.value);
+                    setPaymentTerm(pt ? pt.name : "");
+                  }}
+                >
+                  <option value="">-- Pilih TOP --</option>
+                  {paymentTerms.map((pt) => (
+                    <option key={pt.id} value={pt.id}>
+                      {pt.name} ({pt.days} hari)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="font-semibold">Tarif Pajak (PPN)</label>
+                <select
+                  className={selectClass}
+                  value={taxRateId}
+                  onChange={(e) => setTaxRateId(e.target.value)}
+                  disabled={vatExempt === true}
+                >
+                  <option value="">-- Standar --</option>
+                  {taxRates.map((tr) => (
+                    <option key={tr.id} value={tr.id}>
+                      {tr.name} ({tr.rate}%)
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-1">
                 <label className="font-semibold">Incoterm</label>
@@ -441,7 +552,7 @@ export default function TradeInvoicesPage() {
                 checked={vatExempt === true}
                 onChange={(e) => setVatExempt(e.target.checked ? true : null)}
               />
-              <span className="font-medium">Nonaktifkan PPN 11% (ekspor)</span>
+              <span className="font-medium">Bebas PPN (nonaktifkan untuk ekspor)</span>
               <span className="text-muted-foreground">— jika tidak dicentang, mengikuti pengaturan sumber</span>
             </label>
             <div className="space-y-1">
@@ -472,6 +583,9 @@ export default function TradeInvoicesPage() {
                 {(view.customerPoNumber || view.customerPoAttachment) && (
                   <div className="col-span-2"><span className="text-muted-foreground block">PO Masuk</span>{view.customerPoNumber || "(dokumen terunggah)"}</div>
                 )}
+                {view.quotationNumber && (
+                  <div className="col-span-2"><span className="text-muted-foreground block">Berdasarkan Penawaran (Quotation)</span>{view.quotationNumber}</div>
+                )}
                 {view.kind === "PI" && !!view.dpPercent && (
                   <div className="col-span-2"><span className="text-muted-foreground block">DP ditagih</span>{view.dpPercent}% = {fmt(view.dpAmount ?? 0, view.currency)}</div>
                 )}
@@ -483,7 +597,7 @@ export default function TradeInvoicesPage() {
                 <tbody>
                   {view.lines.map((l, i) => (
                     <tr key={l.id ?? i} className="border-t border-border">
-                      <td className="p-2">{l.description || l.productId?.slice(0, 8)} {l.unit && <span className="text-muted-foreground">({l.unit})</span>}</td>
+                      <td className="p-2">{l.description || (l.productId ? productMap.get(l.productId)?.name : undefined) || l.productId?.slice(0, 8)} {l.unit && <span className="text-muted-foreground">({l.unit})</span>}</td>
                       <td className="p-2 text-right">{l.quantity}</td>
                       <td className="p-2 text-right">{fmt(l.unitPrice, view.currency)}</td>
                       <td className="p-2 text-right">{fmt(l.subtotal ?? l.quantity * l.unitPrice, view.currency)}</td>

@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/compone
 import { PurchaseOrderItem } from "@/lib/api/procurement";
 import { ProductItem } from "@/lib/api/products";
 import { SupplierItem } from "@/lib/api/suppliers";
+import { terbilangCurrency, getCurrencyWord } from "@/lib/utils/terbilang";
 
 interface PoPrintDialogProps {
   open: boolean;
@@ -79,6 +80,8 @@ function formatTanggalIndonesia(dateStr?: string): string {
 export function PoPrintDialog({ open, onOpenChange, po, products, suppliers }: PoPrintDialogProps) {
   if (!po) return null;
 
+  const currencyCode = po.currency || "IDR";
+  const currencyLabel = getCurrencyWord(currencyCode);
   const supplier = suppliers.find((s) => s.id === po.supplierId || s.name === po.supplierName);
 
   const handlePrint = () => {
@@ -220,11 +223,11 @@ export function PoPrintDialog({ open, onOpenChange, po, products, suppliers }: P
                       </th>
                       <th className="border border-black p-2 text-right font-bold w-[20%]">
                         Unit Price
-                        <span className="block text-[10px] font-normal text-black">Rupiah</span>
+                        <span className="block text-[10px] font-normal text-black">{currencyLabel}</span>
                       </th>
                       <th className="border border-black p-2 text-right font-bold w-[20%]">
                         Total Amount
-                        <span className="block text-[10px] font-normal text-black">Rupiah</span>
+                        <span className="block text-[10px] font-normal text-black">{currencyLabel}</span>
                       </th>
                     </tr>
                   </thead>
@@ -261,7 +264,7 @@ export function PoPrintDialog({ open, onOpenChange, po, products, suppliers }: P
                   <tfoot>
                     <tr className="border-t-2 border-black font-bold">
                       <td colSpan={3} className="border border-black p-2 text-left font-bold">
-                        Total : amount in Rupiah
+                        Total : amount in {currencyLabel}
                       </td>
                       <td className="border border-black p-2 text-right font-mono font-bold">
                         {po.totalAmount.toLocaleString("en-US")}
@@ -274,7 +277,7 @@ export function PoPrintDialog({ open, onOpenChange, po, products, suppliers }: P
               {/* Terbilang */}
               <div className="mt-3 text-xs text-black">
                 <span className="font-semibold">Terbilang : </span>
-                <span className="italic">{angkaKeTerbilang(po.totalAmount)}</span>
+                <span className="italic">{terbilangCurrency(po.totalAmount, po.currency)}</span>
               </div>
 
               {/* Notes / NB */}
@@ -298,13 +301,14 @@ export function PoPrintDialog({ open, onOpenChange, po, products, suppliers }: P
                 <p className="font-semibold">CV. Manna Anugerah Sejahtera</p>
 
                 {/* Signature line / stamp */}
-                <div className="h-16 flex items-center pl-4 my-1 select-none">
-                  <span
-                    className="italic text-2xl text-slate-800 tracking-wider font-serif"
-                    style={{ fontFamily: "'Brush Script MT', cursive, Georgia, serif" }}
-                  >
-                    Steven S.
-                  </span>
+                <div className="h-16 flex items-center pl-2 my-1 select-none">
+                  <Image
+                    src="/signature-steven.png"
+                    alt="Steven Santoso Signature"
+                    width={130}
+                    height={55}
+                    className="h-14 w-auto object-contain"
+                  />
                 </div>
                 <div className="w-48 border-b border-black"></div>
                 <p className="font-bold text-xs text-black mt-1">

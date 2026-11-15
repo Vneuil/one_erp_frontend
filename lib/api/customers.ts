@@ -19,6 +19,10 @@ export interface CustomerItem {
   code: string;
   /** B2B (perusahaan) -> B2B-0001, B2C (perorangan) -> B2C-0001 */
   customerType: CustomerType;
+  customerTypeId?: string;
+  customerTypeName?: string;
+  paymentTermId?: string;
+  paymentTermName?: string;
   name: string;
   email: string;
   phone: string;
@@ -45,6 +49,10 @@ export interface CreateCustomerInput {
   /** Leave empty to auto-generate B2B-NNNN / B2C-NNNN. */
   code?: string;
   customerType: CustomerType;
+  customerTypeId?: string;
+  customerTypeName?: string;
+  paymentTermId?: string;
+  paymentTermName?: string;
   name: string;
   email: string;
   phone: string;

@@ -16,7 +16,7 @@ import { DataTable, Column } from "@/components/data-table/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { procurementApi, PurchaseOrderItem, GoodsReceiptItem, GoodsReceiptLineInput } from "@/lib/api/procurement";
 import { inventoryApi, WarehouseItem } from "@/lib/api/inventory";
-import { productsApi, ProductItem } from "@/lib/api/products";
+import { productsApi, ProductItem, isProductActive } from "@/lib/api/products";
 import { useAppStore } from "@/stores/app-store";
 
 interface GoodsReceipt {
@@ -477,25 +477,35 @@ export default function ReceiptsPage() {
 
   const receipts: GoodsReceipt[] = React.useMemo(() => {
     if (rawReceipts === null) return [];
-    return rawReceipts.map((gr) => {
-      const po = purchaseOrders.find((p) => p.id === gr.purchaseOrderId);
-      const wh = warehouses.find((w) => w.id === gr.warehouseId);
-      return {
-        id: gr.id,
-        grNumber: gr.receiptNo,
-        documentCode: gr.documentCode || "GD-007-LBM",
-        poNumber: po?.orderNo || gr.purchaseOrderId,
-        vendorName: po?.supplierName || "-",
-        receivedDate: gr.receivedDate,
-        warehouse: wh?.name || "-",
-        receivedBy: gr.receivedBy || "-",
-        status: gr.status,
-        deliveryNoteNo: gr.deliveryNoteNo,
-        sugarCondition: gr.sugarCondition,
-        packageCondition: gr.packageCondition,
-      };
-    });
-  }, [rawReceipts, purchaseOrders, warehouses]);
+    return rawReceipts
+      .filter((gr) => {
+        if (!gr.lines || gr.lines.length === 0) return true;
+        if (Object.keys(productMap).length === 0) return true;
+        return gr.lines.every((l) => {
+          if (!l.productId) return true;
+          const p = productMap[l.productId];
+          return p ? isProductActive(p) : false;
+        });
+      })
+      .map((gr) => {
+        const po = purchaseOrders.find((p) => p.id === gr.purchaseOrderId);
+        const wh = warehouses.find((w) => w.id === gr.warehouseId);
+        return {
+          id: gr.id,
+          grNumber: gr.receiptNo,
+          documentCode: gr.documentCode || "GD-007-LBM",
+          poNumber: po?.orderNo || gr.purchaseOrderId,
+          vendorName: po?.supplierName || "-",
+          receivedDate: gr.receivedDate,
+          warehouse: wh?.name || "-",
+          receivedBy: gr.receivedBy || "-",
+          status: gr.status,
+          deliveryNoteNo: gr.deliveryNoteNo,
+          sugarCondition: gr.sugarCondition,
+          packageCondition: gr.packageCondition,
+        };
+      });
+  }, [rawReceipts, purchaseOrders, warehouses, productMap]);
 
   const receivablePOs = purchaseOrders.filter(
     (po) =>

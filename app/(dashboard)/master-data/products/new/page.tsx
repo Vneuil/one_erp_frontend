@@ -27,16 +27,11 @@ export default function NewProductPage() {
   const [baseProducts, setBaseProducts] = React.useState<ProductItem[]>([]);
   const [variantOf, setVariantOf] = React.useState("");
   const [variantLabel, setVariantLabel] = React.useState("");
-  const [availableCategories, setAvailableCategories] = React.useState<string[]>([
-    "Raw Material",
-    "Components",
-    "Finished Goods",
-    "Packaging",
-    "Electronics",
-  ]);
+  const [availableCategories, setAvailableCategories] = React.useState<string[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = React.useState(true);
   const [availableUnits, setAvailableUnits] = React.useState<{ name: string; symbol: string }[]>([
-    { name: "Pieces", symbol: "Pcs" },
     { name: "Kilogram", symbol: "KG" },
+    { name: "Pieces", symbol: "Pcs" },
     { name: "Roll", symbol: "Roll" },
     { name: "Unit", symbol: "Unit" },
     { name: "Box", symbol: "Box" },
@@ -58,29 +53,46 @@ export default function NewProductPage() {
     productCategoriesApi
       .list()
       .then((res) => {
-        if (res.data && res.data.length > 0) {
-          const names = res.data.map((c) => c.name);
-          setAvailableCategories((prev) => Array.from(new Set([...names, ...prev])));
+        const names = (res.data || []).map((c) => c.name);
+        setAvailableCategories(names);
+        if (names.length > 0) {
+          setFormData((prev) => {
+            const currentCatValid = names.includes(prev.category);
+            const chosen = currentCatValid ? prev.category : names[0];
+            let nextSku = prev.sku;
+            if (prev.sku === "PRD-RAW-" || prev.sku === "PRD-") {
+              const lower = chosen.toLowerCase();
+              if (lower.includes("raw") || lower.includes("bahan")) nextSku = "PRD-RAW-";
+              else if (lower.includes("finish") || lower.includes("jadi")) nextSku = "PRD-FG-";
+              else if (lower.includes("pack") || lower.includes("kemas")) nextSku = "PRD-PKG-";
+              else if (lower.includes("comp")) nextSku = "PRD-CMP-";
+              else if (lower.includes("wip") || lower.includes("brontol")) nextSku = "PRD-WIP-";
+              else nextSku = `PRD-${chosen.replace(/[^a-zA-Z0-9]/g, "").slice(0, 3).toUpperCase()}-`;
+            }
+            return {
+              ...prev,
+              category: chosen,
+              sku: nextSku,
+            };
+          });
         }
       })
-      .catch(console.error);
+      .catch((err) => console.error("Failed to load product categories", err))
+      .finally(() => setIsLoadingCategories(false));
 
     unitsOfMeasureApi
       .list()
       .then((res) => {
         if (res.data && res.data.length > 0) {
           const uoms = res.data.map((u) => ({ name: u.name, symbol: u.symbol || u.name }));
-          setAvailableUnits((prev) => {
-            const map = new Map<string, { name: string; symbol: string }>();
-            uoms.forEach((item) => map.set(item.symbol, item));
-            prev.forEach((item) => {
-              if (!map.has(item.symbol)) map.set(item.symbol, item);
-            });
-            return Array.from(map.values());
+          setAvailableUnits(uoms);
+          setFormData((prev) => {
+            const hasUnit = uoms.some((u) => u.symbol === prev.unit);
+            return hasUnit ? prev : { ...prev, unit: uoms[0].symbol };
           });
         }
       })
-      .catch(console.error);
+      .catch((err) => console.error("Failed to load units of measure", err));
 
     certificationsApi
       .list()
@@ -102,7 +114,7 @@ export default function NewProductPage() {
     barcode: "",
     name: "",
     grade: "",
-    category: "Raw Material",
+    category: "",
     unit: "KG",
     minStock: "10",
     costPrice: "",
@@ -121,14 +133,18 @@ export default function NewProductPage() {
   const handleCategoryChange = (cat: string) => {
     let nextSku = formData.sku;
     if (formData.sku.startsWith("PRD-")) {
-      if (cat === "Raw Material") nextSku = "PRD-RAW-";
-      else if (cat === "Finished Goods") nextSku = "PRD-FG-";
-      else if (cat === "Packaging") nextSku = "PRD-PKG-";
-      else if (cat === "Components") nextSku = "PRD-CMP-";
+      const lower = cat.toLowerCase();
+      if (lower.includes("raw") || lower.includes("bahan")) nextSku = "PRD-RAW-";
+      else if (lower.includes("finish") || lower.includes("jadi")) nextSku = "PRD-FG-";
+      else if (lower.includes("pack") || lower.includes("kemas")) nextSku = "PRD-PKG-";
+      else if (lower.includes("comp")) nextSku = "PRD-CMP-";
+      else if (lower.includes("wip") || lower.includes("brontol")) nextSku = "PRD-WIP-";
+      else nextSku = `PRD-${cat.replace(/[^a-zA-Z0-9]/g, "").slice(0, 3).toUpperCase()}-`;
     }
 
     // Default currency: IDR for Raw Material & Packaging
-    const nextCurrency = (cat === "Raw Material" || cat === "Packaging") ? "IDR" : formData.currency;
+    const lower = cat.toLowerCase();
+    const nextCurrency = (lower.includes("raw") || lower.includes("bahan") || lower.includes("pack") || lower.includes("kemas")) ? "IDR" : formData.currency;
 
     setFormData((prev) => ({
       ...prev,
@@ -163,6 +179,7 @@ export default function NewProductPage() {
         costPrice: Number(formData.costPrice) || 0,
         sellingPrice: Number(formData.sellingPrice) || 0,
         currency: formData.currency,
+        status: "Active",
         grade: formData.grade || undefined,
         safetyStock: Number(formData.minStock) || 0,
         certifications: certificationsStr || undefined,
@@ -170,8 +187,8 @@ export default function NewProductPage() {
         dimensionLength: formData.dimensionLength ? Number(formData.dimensionLength) : undefined,
         dimensionWidth: formData.dimensionWidth ? Number(formData.dimensionWidth) : undefined,
         dimensionHeight: formData.dimensionHeight ? Number(formData.dimensionHeight) : undefined,
-        packagingType: formData.category === "Packaging" ? formData.packagingType : undefined,
-        packagingSpec: formData.category === "Packaging" ? formData.packagingSpec : undefined,
+        packagingType: isPackaging ? formData.packagingType : undefined,
+        packagingSpec: isPackaging ? formData.packagingSpec : undefined,
         remarks: formData.remarks || undefined,
         variantOf: variantOf || undefined,
         variantLabel: variantOf ? variantLabel : undefined,
@@ -183,7 +200,7 @@ export default function NewProductPage() {
     }
   };
 
-  const isPackaging = formData.category === "Packaging";
+  const isPackaging = formData.category.toLowerCase().includes("pack") || formData.category.toLowerCase().includes("kemas");
 
   return (
     <div className="space-y-6 max-w-4xl pb-12">
@@ -283,17 +300,32 @@ export default function NewProductPage() {
                     + Kelola Kategori
                   </Link>
                 </div>
-                <select
-                  value={formData.category}
-                  onChange={(e) => handleCategoryChange(e.target.value)}
-                  className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
-                >
-                  {availableCategories.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
+                {isLoadingCategories ? (
+                  <div className="h-10 flex items-center px-3 border rounded-lg text-xs text-muted-foreground bg-slate-50">
+                    Memuat kategori dari Master Data...
+                  </div>
+                ) : availableCategories.length === 0 ? (
+                  <div className="p-2 border border-amber-200 bg-amber-50 rounded-lg text-xs text-amber-800">
+                    Belum ada kategori di Master Data. Silakan{" "}
+                    <Link href="/master-data/categories-units" className="underline font-bold">
+                      tambah kategori
+                    </Link>{" "}
+                    terlebih dahulu.
+                  </div>
+                ) : (
+                  <select
+                    value={formData.category}
+                    onChange={(e) => handleCategoryChange(e.target.value)}
+                    className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
+                    required
+                  >
+                    {availableCategories.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div className="space-y-2">
