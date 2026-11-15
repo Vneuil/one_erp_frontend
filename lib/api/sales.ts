@@ -139,22 +139,94 @@ export interface QuotationItem {
   totalAmount: number;
   status: string;
   validUntil: string;
+  notes?: string;
+  cancellationReason?: string;
+  parentQuotationId?: string;
+  parentQuotationNumber?: string;
+  revisionNumber?: number;
+  isSuperseded?: boolean;
   createdAt?: string;
 }
 
 export interface CreateQuotationInput {
-  leadId: string;
+  leadId?: string;
   lines: QuotationLineInput[];
   quotationNumber?: string;
   customerName: string;
   totalAmount: number;
   validUntil?: string;
+  notes?: string;
+  parentQuotationId?: string;
+  parentQuotationNumber?: string;
+  revisionNumber?: number;
 }
 
 export interface UpdateQuotationInput {
-  lines: QuotationLineInput[];
-  customerName: string;
+  lines?: QuotationLineInput[];
+  customerName?: string;
   validUntil?: string;
+  status?: string;
+  notes?: string;
+  isSuperseded?: boolean;
+  parentQuotationId?: string;
+  parentQuotationNumber?: string;
+  revisionNumber?: number;
+}
+
+export interface CustomerPOLineInput {
+  productId?: string;
+  productName: string;
+  unit: string;
+  quantity: number;
+  unitPrice: number;
+  notes?: string;
+}
+
+export interface CustomerPOLine extends CustomerPOLineInput {
+  id: string;
+  customerPoId: string;
+  subtotal: number;
+}
+
+export interface CustomerPOItem {
+  id: string;
+  poNumber: string;
+  customerId?: string;
+  customerName: string;
+  poDate: string;
+  attachment?: string;
+  currency: string;
+  totalAmount: number;
+  status: "Pending" | "Agreed" | "Negotiating" | "Cancelled";
+  notes?: string;
+  quotationId?: string;
+  tradeInvoiceId?: string;
+  lines: CustomerPOLine[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateCustomerPOInput {
+  poNumber: string;
+  customerId?: string;
+  customerName: string;
+  poDate?: string;
+  attachment?: string;
+  currency?: string;
+  notes?: string;
+  lines: CustomerPOLineInput[];
+}
+
+export interface UpdateCustomerPOInput {
+  poNumber?: string;
+  customerId?: string;
+  customerName?: string;
+  poDate?: string;
+  attachment?: string;
+  currency?: string;
+  notes?: string;
+  status?: string;
+  lines?: CustomerPOLineInput[];
 }
 
 export interface InvoiceItem {
@@ -431,6 +503,13 @@ export const salesApi = {
     });
   },
 
+  cancelQuotation: async (id: string, reason?: string): Promise<ApiResponse<QuotationItem>> => {
+    return apiClient<QuotationItem>(`/sales/quotations/${id}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
+  },
+
   listInvoices: async (params?: { page?: number; perPage?: number; search?: string }): Promise<ApiResponse<InvoiceItem[]>> => {
     return apiClient<InvoiceItem[]>("/sales/invoices", { params });
   },
@@ -564,4 +643,23 @@ export const tradeInvoicesApi = {
     apiClient<SalesOrderItem>(`/sales/trade-invoices/${id}/create-order`, { method: "POST", body: JSON.stringify(data) }),
   cancel: (id: string): Promise<ApiResponse<TradeInvoice>> =>
     apiClient<TradeInvoice>(`/sales/trade-invoices/${id}/cancel`, { method: "POST" }),
+};
+
+export const customerPosApi = {
+  list: (params?: { page?: number; perPage?: number; search?: string }): Promise<ApiResponse<CustomerPOItem[]>> =>
+    apiClient<CustomerPOItem[]>("/sales/customer-pos", { params }),
+  get: (id: string): Promise<ApiResponse<CustomerPOItem>> =>
+    apiClient<CustomerPOItem>(`/sales/customer-pos/${id}`),
+  create: (data: CreateCustomerPOInput): Promise<ApiResponse<CustomerPOItem>> =>
+    apiClient<CustomerPOItem>("/sales/customer-pos", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: string, data: UpdateCustomerPOInput): Promise<ApiResponse<CustomerPOItem>> =>
+    apiClient<CustomerPOItem>(`/sales/customer-pos/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  delete: (id: string): Promise<ApiResponse<null>> =>
+    apiClient<null>(`/sales/customer-pos/${id}`, { method: "DELETE" }),
+  agree: (id: string): Promise<ApiResponse<CustomerPOItem>> =>
+    apiClient<CustomerPOItem>(`/sales/customer-pos/${id}/agree`, { method: "POST" }),
+  negotiate: (id: string): Promise<ApiResponse<CustomerPOItem>> =>
+    apiClient<CustomerPOItem>(`/sales/customer-pos/${id}/negotiate`, { method: "POST" }),
+  cancel: (id: string): Promise<ApiResponse<CustomerPOItem>> =>
+    apiClient<CustomerPOItem>(`/sales/customer-pos/${id}/cancel`, { method: "POST" }),
 };

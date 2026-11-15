@@ -29,6 +29,7 @@ import {
   FileCheck,
   AlertCircle,
   AlertTriangle,
+  Scale,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -57,8 +58,41 @@ interface SalesOrderItem {
   sku: string;
   name: string;
   qty: number;
+  unit?: string;
   unitPrice: number;
   subtotal: number;
+}
+
+export function extractUnitWeightKg(specOrName?: string): number | null {
+  if (!specOrName) return null;
+  const str = specOrName.toLowerCase().replace(/,/g, ".");
+  // Pattern 1: e.g. "1x12.5 kg" or "2 x 5 kg" or "1*25kg"
+  const multMatch = str.match(/(\d+(?:\.\d+)?)\s*(?:x|\*)\s*(\d+(?:\.\d+)?)\s*(kg|kilo|gr|gram|g|ton)/i);
+  if (multMatch) {
+    const mult = parseFloat(multMatch[1]);
+    const val = parseFloat(multMatch[2]);
+    const unit = multMatch[3].toLowerCase();
+    let w = mult * val;
+    if (unit === "gr" || unit === "gram" || unit === "g") w /= 1000;
+    else if (unit === "ton") w *= 1000;
+    return w > 0 ? w : null;
+  }
+  // Pattern 2: e.g. "12.5 kg" or "25kg" or "500 gr"
+  const singleMatch = str.match(/(\d+(?:\.\d+)?)\s*(kg|kilo|gr|gram|g|ton)\b/i);
+  if (singleMatch) {
+    const val = parseFloat(singleMatch[1]);
+    const unit = singleMatch[2].toLowerCase();
+    let w = val;
+    if (unit === "gr" || unit === "gram" || unit === "g") w /= 1000;
+    else if (unit === "ton") w *= 1000;
+    return w > 0 ? w : null;
+  }
+  return null;
+}
+
+export function getProductWeightKg(product?: { name?: string; packagingSpec?: string } | null): number | null {
+  if (!product) return null;
+  return extractUnitWeightKg(product.packagingSpec) || extractUnitWeightKg(product.name);
 }
 
 interface SalesOrder {
@@ -129,6 +163,7 @@ export default function SalesOrdersPage() {
   const [activeApprovals, setActiveApprovals] = React.useState<Record<string, ApprovalRequest>>({});
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [selectedChannel, setSelectedChannel] = React.useState<string>("all");
+  const [selectedStatusFilter, setSelectedStatusFilter] = React.useState<string>("all");
   const [selectedOrder, setSelectedOrder] = React.useState<SalesOrder | null>(null);
   const [isSyncing, setIsSyncing] = React.useState(false);
   const [syncSuccessMessage, setSyncSuccessMessage] = React.useState<string | null>(null);
@@ -144,7 +179,7 @@ export default function SalesOrdersPage() {
   const [dpPaid, setDpPaid] = React.useState(false);
   const [dpPercent, setDpPercent] = React.useState<number>(30);
   const [dpAmount, setDpAmount] = React.useState("0");
-  const [invoiceDocType, setInvoiceDocType] = React.useState<"CI" | "PI">("CI");
+  const [invoiceDocType, setInvoiceDocType] = React.useState<string>("PO_MASUK");
   const [invoiceDocNumber, setInvoiceDocNumber] = React.useState("");
   const [invoiceDocAttachment, setInvoiceDocAttachment] = React.useState("");
   const [isUploadingInvoiceDoc, setIsUploadingInvoiceDoc] = React.useState(false);
@@ -152,10 +187,10 @@ export default function SalesOrdersPage() {
   const [uploadedInvoiceDocFileSize, setUploadedInvoiceDocFileSize] = React.useState<number | null>(null);
   const invoiceDocFileInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Post-approval CI / PI Upload states (when SO was approved without DP)
+  // Post-approval Upload states (when SO was approved without DP)
   const [isPostApprovalUploadOpen, setIsPostApprovalUploadOpen] = React.useState(false);
   const [postApprovalOrder, setPostApprovalOrder] = React.useState<SalesOrder | null>(null);
-  const [postDocType, setPostDocType] = React.useState<"CI" | "PI">("CI");
+  const [postDocType, setPostDocType] = React.useState<string>("PO_MASUK");
   const [postDocNumber, setPostDocNumber] = React.useState("");
   const [postDocAttachment, setPostDocAttachment] = React.useState("");
   const [postDocFileName, setPostDocFileName] = React.useState<string | null>(null);
@@ -264,12 +299,14 @@ export default function SalesOrdersPage() {
     })()
       .catch((err) => console.warn("Failed to load products for SO line items", err));
     inventoryApi
-      .listWarehouses({ perPage: 50 })
+      .listWarehouses({ perPage: 100 })
       .then((res) => {
         // Inactive warehouses (e.g. a closed Jakarta WH) must never be selectable.
-        const list = (res.data || []).filter((w) => w.isActive !== false);
+        const list = (res.data || []).filter(
+          (w) => w.isActive === true && !String(w.name || "").toLowerCase().includes("inactive")
+        );
         setWarehouses(list);
-        if (list.length > 0) setNewWarehouseId((prev) => prev || list[0].id);
+        setNewWarehouseId((prev) => (list.some((w) => w.id === prev) ? prev : list[0]?.id || ""));
       })
       .catch((err) => console.warn("Failed to load warehouses for SO", err));
   }, []);
@@ -380,6 +417,15 @@ export default function SalesOrdersPage() {
   const handleDownloadAttachment = async (order: SalesOrder) => {
     if (!order.customerPoAttachment) return;
 
+    if (!canSeePrices) {
+      await alert({
+        title: "Akses Dibatasi",
+        message: "Anda tidak memiliki wewenang untuk mengunduh dokumen PO Pembeli.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Backward compatibility jika berupa tautan eksternal
     if (order.customerPoAttachment.startsWith("http://") || order.customerPoAttachment.startsWith("https://")) {
       window.open(order.customerPoAttachment, "_blank", "noopener,noreferrer");
@@ -460,6 +506,15 @@ export default function SalesOrdersPage() {
   const handleDownloadInvoiceAttachment = async (order: SalesOrder) => {
     if (!order.invoiceDocAttachment) return;
 
+    if (!canSeePrices) {
+      await alert({
+        title: "Akses Dibatasi",
+        message: "Anda tidak memiliki wewenang untuk mengunduh dokumen transaksi ini.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (order.invoiceDocAttachment.startsWith("http://") || order.invoiceDocAttachment.startsWith("https://")) {
       window.open(order.invoiceDocAttachment, "_blank", "noopener,noreferrer");
       return;
@@ -494,10 +549,11 @@ export default function SalesOrdersPage() {
 
   const openPostApprovalUpload = (order: SalesOrder) => {
     setPostApprovalOrder(order);
-    setPostDocType((order.invoiceDocType as "CI" | "PI") || "CI");
-    setPostDocNumber(order.invoiceDocNumber || "");
-    setPostDocAttachment(order.invoiceDocAttachment || "");
-    setPostDocFileName(order.invoiceDocAttachment ? order.invoiceDocAttachment.split("/").pop() || null : null);
+    setPostDocType((order.invoiceDocType as string) || "PO_MASUK");
+    setPostDocNumber(order.invoiceDocNumber || order.customerPoNumber || "");
+    const existingFile = order.invoiceDocAttachment || order.customerPoAttachment || "";
+    setPostDocAttachment(existingFile);
+    setPostDocFileName(existingFile ? existingFile.split("/").pop() || null : null);
     setPostDocFileSize(null);
     if (postDocFileInputRef.current) postDocFileInputRef.current.value = "";
     setIsPostApprovalUploadOpen(true);
@@ -550,7 +606,7 @@ export default function SalesOrdersPage() {
     if (!postDocAttachment) {
       await alert({
         title: "Dokumen Wajib Diunggah",
-        message: "Silakan pilih dan unggah dokumen Commercial Invoice (CI) atau Proforma Invoice (PI) terlebih dahulu.",
+        message: "Silakan pilih dan unggah dokumen PO Masuk (PO Pembeli) atau PI Keluar (PI Internal) terlebih dahulu.",
         variant: "destructive",
       });
       return;
@@ -558,6 +614,7 @@ export default function SalesOrdersPage() {
 
     setIsSubmittingPostDoc(true);
     try {
+      const docLabel = postDocType === "PO_MASUK" ? "PO Masuk" : postDocType === "PI_KELUAR" ? "PI Keluar" : postDocType;
       await salesApi.attachInvoiceDocument(postApprovalOrder.id, {
         invoiceDocType: postDocType,
         invoiceDocNumber: postDocNumber || undefined,
@@ -565,7 +622,7 @@ export default function SalesOrdersPage() {
       });
       await alert({
         title: "Dokumen Berhasil Dilampirkan",
-        message: `Dokumen ${postDocType} berhasil disimpan. Sales Order ${postApprovalOrder.orderNumber} sekarang memenuhi syarat dan dapat digunakan untuk pengadaan barang di PR.`,
+        message: `Dokumen ${docLabel} berhasil disimpan. Sales Order ${postApprovalOrder.orderNumber} sekarang memenuhi syarat dan dapat digunakan untuk pengadaan barang di PR.`,
       });
       setIsPostApprovalUploadOpen(false);
       setPostApprovalOrder(null);
@@ -596,8 +653,8 @@ export default function SalesOrdersPage() {
 
   const isEligibleForPR = (so: SalesOrder): boolean => {
     const isApproved = so.status === "confirmed" || so.status === "approved";
-    const hasInvoiceDoc = Boolean(so.invoiceDocAttachment || so.customerPoAttachment);
-    return isApproved && hasInvoiceDoc;
+    const hasDocOrDp = Boolean(so.invoiceDocAttachment || so.customerPoAttachment || so.dpPaid);
+    return isApproved && hasDocOrDp;
   };
 
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
@@ -668,6 +725,9 @@ export default function SalesOrdersPage() {
   const [editingOrder, setEditingOrder] = React.useState<SalesOrder | null>(null);
   const [editCustomerName, setEditCustomerName] = React.useState("");
   const [editLines, setEditLines] = React.useState<SalesOrderLineInput[]>([]);
+  const [editDpPaid, setEditDpPaid] = React.useState(false);
+  const [editDpPercent, setEditDpPercent] = React.useState(30);
+  const [editShippingAddress, setEditShippingAddress] = React.useState("");
   const [isEditSubmitting, setIsEditSubmitting] = React.useState(false);
   const [editError, setEditError] = React.useState<string | null>(null);
   const [editReason, setEditReason] = React.useState("");
@@ -691,6 +751,9 @@ export default function SalesOrdersPage() {
     setEditingOrder(so);
     setEditCustomerName(so.customerName);
     setEditLines(so.items.map((item) => ({ productId: item.productId, quantity: item.qty, unitPrice: item.unitPrice })));
+    setEditDpPaid(Boolean(so.dpPaid));
+    setEditDpPercent(so.dpPercent ?? (so.dpPaid ? 50 : 30));
+    setEditShippingAddress(so.shippingAddress || "");
     setEditError(null);
     setEditReason("");
     setIsEditOpen(true);
@@ -715,12 +778,25 @@ export default function SalesOrdersPage() {
   };
 
   const handleMarkDpReceived = async (so: SalesOrder) => {
+    const targetPercent = so.dpPercent && so.dpPercent > 0 ? so.dpPercent : 30;
+    const dpVal = Math.round((so.totalAmount * targetPercent) / 100);
     const ok = await confirm({
-      title: "Tandai DP Diterima",
-      message: `Konfirmasi DP untuk ${so.orderNumber} sudah diterima?`,
-      confirmText: "DP Diterima",
+      title: "Konfirmasi Penerimaan DP",
+      message: `Konfirmasi bahwa Down Payment (DP) ${targetPercent}% sebesar Rp ${dpVal.toLocaleString("id-ID")} untuk pesanan ${so.orderNumber} telah diterima dari customer?`,
+      confirmText: "Ya, DP Diterima",
+      cancelText: "Batal",
     });
-    if (ok) await patchOrder(so, { dpPaid: true });
+    if (ok) {
+      await patchOrder(so, {
+        dpPaid: true,
+        dpPercent: targetPercent,
+        dpAmount: dpVal,
+      });
+      await alert({
+        title: "DP Berhasil Dikonfirmasi",
+        message: `DP untuk Sales Order ${so.orderNumber} berhasil ditandai Lunas. Status pesanan kini memenuhi syarat untuk pembuatan PR Pengadaan barang.`,
+      });
+    }
   };
 
   const handleUpdateOrder = async (e: React.FormEvent) => {
@@ -741,6 +817,10 @@ export default function SalesOrdersPage() {
       await salesApi.updateOrder(editingOrder.id, {
         customerName: editCustomerName.trim(),
         revisionReason: editReason.trim() || undefined,
+        dpPaid: editDpPaid,
+        dpPercent: editDpPercent,
+        dpAmount: Math.round((editTotalAmount * editDpPercent) / 100),
+        shippingAddress: editShippingAddress.trim() || undefined,
         lines: editLines,
       });
       fetchOrders();
@@ -813,6 +893,7 @@ export default function SalesOrdersPage() {
                 sku: product?.sku || l.productId.slice(0, 8),
                 name: product?.name || `Produk ${l.productId.slice(0, 8)}`,
                 qty: l.quantity,
+                unit: product?.unit || "Unit",
                 unitPrice: l.unitPrice,
                 subtotal: l.subtotal,
               };
@@ -951,14 +1032,57 @@ export default function SalesOrdersPage() {
     }
   };
 
-  // Filter orders by channel tab
+  // Filter orders by channel tab & status filter
   const filteredOrders = React.useMemo(() => {
-    if (selectedChannel === "all") return orders;
+    let result = orders;
     if (selectedChannel === "marketplace") {
-      return orders.filter((so) => so.source === "marketplace");
+      result = result.filter((so) => so.source === "marketplace");
+    } else if (selectedChannel !== "all") {
+      result = result.filter((so) => so.source === selectedChannel);
     }
-    return orders.filter((so) => so.source === selectedChannel);
-  }, [selectedChannel, orders]);
+
+    if (selectedStatusFilter === "rejected") {
+      result = result.filter((so) => (so.status || "").toLowerCase() === "rejected");
+    } else if (selectedStatusFilter === "draft") {
+      result = result.filter((so) => (so.status || "").toLowerCase() === "draft");
+    } else if (selectedStatusFilter === "pending_approval") {
+      result = result.filter(
+        (so) =>
+          (so.status || "").toLowerCase() === "pending_approval" ||
+          (so.status || "").toLowerCase() === "pending"
+      );
+    } else if (selectedStatusFilter === "approved") {
+      result = result.filter(
+        (so) =>
+          (so.status || "").toLowerCase() === "confirmed" ||
+          (so.status || "").toLowerCase() === "approved"
+      );
+    }
+    return result;
+  }, [selectedChannel, selectedStatusFilter, orders]);
+
+  const rejectedCount = React.useMemo(
+    () => orders.filter((so) => (so.status || "").toLowerCase() === "rejected").length,
+    [orders]
+  );
+
+  const statusCounts = React.useMemo(() => {
+    return {
+      all: orders.length,
+      draft: orders.filter((so) => (so.status || "").toLowerCase() === "draft").length,
+      pending_approval: orders.filter(
+        (so) =>
+          (so.status || "").toLowerCase() === "pending_approval" ||
+          (so.status || "").toLowerCase() === "pending"
+      ).length,
+      approved: orders.filter(
+        (so) =>
+          (so.status || "").toLowerCase() === "confirmed" ||
+          (so.status || "").toLowerCase() === "approved"
+      ).length,
+      rejected: orders.filter((so) => (so.status || "").toLowerCase() === "rejected").length,
+    };
+  }, [orders]);
 
   // Channel metrics
   const metrics = React.useMemo(() => {
@@ -1022,13 +1146,18 @@ export default function SalesOrdersPage() {
       return;
     }
 
-    if (dpPaid && !invoiceDocAttachment) {
-      await alert({
-        title: "Dokumen CI / PI Wajib Diunggah",
-        message: "Karena DP sudah dicentang dibayarkan, Anda wajib memilih dan mengunggah dokumen Commercial Invoice (CI) atau Proforma Invoice (PI) sebelum mengajukan pesanan.",
-        variant: "destructive",
+    const hasDoc = Boolean(customerPoAttachment || invoiceDocAttachment);
+    const hasDp = Boolean(dpPaid);
+    if (!hasDoc && !hasDp) {
+      const proceed = await confirm({
+        title: "Dokumen PO Masuk / PI Keluar & DP Belum Lengkap",
+        message:
+          "Pesanan belum memiliki lampiran Dokumen PO Masuk / PI Keluar atau konfirmasi DP diterima. Dokumen ini wajib diunggah dan/atau DP diterima sebelum Sales Order dapat diproses untuk pengadaan barang (PR). Tetap simpan sebagai draft?",
+        confirmText: "Simpan Draft",
+        cancelText: "Batal & Lengkapi",
+        variant: "default",
       });
-      return;
+      if (!proceed) return;
     }
 
     const orderDate = new Date().toISOString().slice(0, 16).replace("T", " ");
@@ -1039,25 +1168,29 @@ export default function SalesOrdersPage() {
         sku: product?.sku || "-",
         name: product?.name || l.productId,
         qty: l.quantity,
+        unit: product?.unit || "Unit",
         unitPrice: l.unitPrice,
         subtotal: l.quantity * l.unitPrice,
       };
     });
 
     const calculatedDp = Math.round((newTotalAmount * dpPercent) / 100);
+    const finalDocAttachment = invoiceDocAttachment || customerPoAttachment || undefined;
+    const finalDocNumber = invoiceDocNumber || customerPoNumber || undefined;
+
     try {
       const res = await salesApi.createOrder({
         customerName: customer.name,
         totalAmount: newTotalAmount,
         warehouseId: newWarehouseId || undefined,
-        customerPoNumber: customerPoNumber || undefined,
-        customerPoAttachment: customerPoAttachment || undefined,
+        customerPoNumber: finalDocNumber,
+        customerPoAttachment: finalDocAttachment,
         dpPaid,
         dpPercent,
         dpAmount: calculatedDp,
-        invoiceDocType: dpPaid ? invoiceDocType : undefined,
-        invoiceDocAttachment: dpPaid ? invoiceDocAttachment : undefined,
-        invoiceDocNumber: dpPaid ? invoiceDocNumber : undefined,
+        invoiceDocType: invoiceDocType || "PO_MASUK",
+        invoiceDocAttachment: finalDocAttachment,
+        invoiceDocNumber: finalDocNumber,
         shippingAddress: shippingAddress || undefined,
         shippingCourier: shippingCourier || undefined,
         deliveryDate: newDeliveryDate || undefined,
@@ -1213,6 +1346,31 @@ export default function SalesOrdersPage() {
                 PO Pembeli: {so.customerPoNumber}
               </span>
               {so.customerPoAttachment && (
+                canSeePrices ? (
+                  <button
+                    type="button"
+                    title="Unduh Lampiran Dokumen"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownloadAttachment(so);
+                    }}
+                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-[10px] font-medium border border-emerald-200 transition-colors"
+                  >
+                    <Paperclip className="h-3 w-3" />
+                    <span>File</span>
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-medium border border-slate-200" title="Akses unduh dibatasi untuk authorized role">
+                    <Paperclip className="h-3 w-3" />
+                    <span>Terlampir</span>
+                  </span>
+                )
+              )}
+            </div>
+          )}
+          {!so.customerPoNumber && so.customerPoAttachment && (
+            <div className="mt-0.5">
+              {canSeePrices ? (
                 <button
                   type="button"
                   title="Unduh Lampiran Dokumen"
@@ -1223,25 +1381,14 @@ export default function SalesOrdersPage() {
                   className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-[10px] font-medium border border-emerald-200 transition-colors"
                 >
                   <Paperclip className="h-3 w-3" />
-                  <span>File</span>
+                  <span>Lampiran PO</span>
                 </button>
+              ) : (
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-medium border border-slate-200" title="Akses unduh dibatasi untuk authorized role">
+                  <Paperclip className="h-3 w-3" />
+                  <span>Lampiran PO</span>
+                </span>
               )}
-            </div>
-          )}
-          {!so.customerPoNumber && so.customerPoAttachment && (
-            <div className="mt-0.5">
-              <button
-                type="button"
-                title="Unduh Lampiran Dokumen"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDownloadAttachment(so);
-                }}
-                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-[10px] font-medium border border-emerald-200 transition-colors"
-              >
-                <Paperclip className="h-3 w-3" />
-                <span>Lampiran PO</span>
-              </button>
             </div>
           )}
           {so.shippingCourier && (
@@ -1301,12 +1448,17 @@ export default function SalesOrdersPage() {
             {so.invoiceDocAttachment ? (
               <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 text-[9px] font-bold border border-blue-200 flex items-center gap-1">
                 <FileCheck className="h-2.5 w-2.5 text-blue-600" />
-                {so.invoiceDocType || "CI/PI"} Terlampir
+                {so.invoiceDocType === "PO_MASUK" ? "PO Masuk" : so.invoiceDocType === "PI_KELUAR" ? "PI Keluar" : (so.invoiceDocType || "PO Masuk / PI Keluar")} Terlampir
               </span>
-            ) : (so.status === "confirmed" || so.status === "approved") ? (
+            ) : so.customerPoAttachment ? (
+              <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 text-[9px] font-bold border border-blue-200 flex items-center gap-1">
+                <FileCheck className="h-2.5 w-2.5 text-blue-600" />
+                PO Pembeli Terlampir
+              </span>
+            ) : (so.status === "confirmed" || so.status === "approved") && !so.dpPaid ? (
               <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 text-[9px] font-bold border border-amber-300 flex items-center gap-1">
                 <AlertTriangle className="h-2.5 w-2.5 text-amber-600" />
-                Wajib Upload CI/PI
+                Upload PO Masuk / PI Keluar
               </span>
             ) : null}
           </div>
@@ -1345,25 +1497,37 @@ export default function SalesOrdersPage() {
               <Eye className="h-4 w-4" />
             </Button>
 
-            {(so.status === "confirmed" || so.status === "approved") && !so.invoiceDocAttachment && (
+            {(so.status === "confirmed" || so.status === "approved") && !so.invoiceDocAttachment && !so.customerPoAttachment && (
               <Button
                 size="sm"
                 variant="outline"
                 className="h-7 gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50/70 border-amber-300 hover:bg-amber-100"
-                title="Wajib upload dokumen CI/PI sebelum dapat diproses ke PR"
+                title="Upload dokumen PO Masuk atau PI Keluar untuk syarat pengadaan"
                 onClick={() => openPostApprovalUpload(so)}
               >
-                <Upload className="h-3 w-3" /> Upload CI/PI
+                <Upload className="h-3 w-3" /> Upload Dokumen
               </Button>
             )}
 
-            {isDraft && so.editable && (
+            {!so.dpPaid && !["rejected", "cancelled"].includes(so.status) && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50/70 border-emerald-300 hover:bg-emerald-100"
+                title="Tandai pembayaran uang muka (DP) customer telah diterima"
+                onClick={() => handleMarkDpReceived(so)}
+              >
+                <CheckCircle2 className="h-3 w-3" /> Terima DP
+              </Button>
+            )}
+
+            {(isDraft || so.status === "rejected") && so.editable && (
               <>
                 <Button
                   size="icon"
                   variant="ghost"
                   className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                  title="Edit Draft SO"
+                  title={so.status === "rejected" ? "Edit & Ajukan Ulang SO Ditolak" : "Edit Draft SO"}
                   onClick={() => handleOpenEditOrder(so)}
                 >
                   <Edit className="h-4 w-4" />
@@ -1534,6 +1698,49 @@ export default function SalesOrdersPage() {
         })}
       </div>
 
+      {/* Status Quick Filter Pills */}
+      <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+        <span className="text-xs font-semibold text-muted-foreground mr-1">Filter Status:</span>
+        {[
+          { id: "all", label: "Semua Status", count: statusCounts.all },
+          { id: "draft", label: "Draft", count: statusCounts.draft },
+          { id: "pending_approval", label: "Menunggu Approval", count: statusCounts.pending_approval },
+          { id: "approved", label: "Disetujui (Approved)", count: statusCounts.approved },
+          { id: "rejected", label: "Ditolak (Rejected)", count: statusCounts.rejected, alert: true },
+        ].map((pill) => {
+          const isActive = selectedStatusFilter === pill.id;
+          return (
+            <button
+              key={pill.id}
+              type="button"
+              onClick={() => setSelectedStatusFilter(pill.id)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border transition-all cursor-pointer whitespace-nowrap ${
+                isActive
+                  ? pill.alert
+                    ? "bg-rose-600 text-white border-rose-600 shadow-xs font-semibold"
+                    : "bg-slate-900 text-white border-slate-900 shadow-xs font-semibold"
+                  : pill.alert && pill.count > 0
+                  ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 font-medium"
+                  : "bg-background text-muted-foreground border-border hover:bg-slate-50 hover:text-foreground"
+              }`}
+            >
+              <span>{pill.label}</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  isActive
+                    ? "bg-white/20 text-white"
+                    : pill.alert && pill.count > 0
+                    ? "bg-rose-200 text-rose-800"
+                    : "bg-slate-100 text-slate-600"
+                }`}
+              >
+                {pill.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Main Data Table */}
       {loadError && (
           <div role="alert" className="m-3 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">
@@ -1683,19 +1890,25 @@ export default function SalesOrdersPage() {
                     {selectedOrder.customerPoNumber || "-"}
                   </span>
                   {selectedOrder.customerPoAttachment && (
-                    <button
-                      type="button"
-                      disabled={isDownloadingPoDoc}
-                      onClick={() => handleDownloadAttachment(selectedOrder)}
-                      className="inline-flex items-center gap-1 mt-1 text-[11px] font-medium text-brand-primary hover:underline hover:text-brand-primary/80 disabled:opacity-50"
-                    >
-                      {isDownloadingPoDoc ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <Download className="h-3 w-3" />
-                      )}
-                      <span>Unduh Dokumen PO</span>
-                    </button>
+                    canSeePrices ? (
+                      <button
+                        type="button"
+                        disabled={isDownloadingPoDoc}
+                        onClick={() => handleDownloadAttachment(selectedOrder)}
+                        className="inline-flex items-center gap-1 mt-1 text-[11px] font-medium text-brand-primary hover:underline hover:text-brand-primary/80 disabled:opacity-50"
+                      >
+                        {isDownloadingPoDoc ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Download className="h-3 w-3" />
+                        )}
+                        <span>Unduh Dokumen PO</span>
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-slate-500 font-medium block mt-1">
+                        Lampiran PO Terdaftar
+                      </span>
+                    )
                   )}
                 </div>
                 <div>
@@ -1735,15 +1948,19 @@ export default function SalesOrdersPage() {
                 <div className="flex items-center justify-between border-b border-border/60 pb-2">
                   <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
                     <FileCheck className="h-4 w-4 text-brand-primary" />
-                    Dokumen Faktur (Commercial / Proforma Invoice)
+                    Dokumen Pendukung: PO Masuk / PI Keluar
                   </span>
                   {selectedOrder.invoiceDocAttachment ? (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
-                      {selectedOrder.invoiceDocType || "CI/PI"} Terlampir
+                      {selectedOrder.invoiceDocType === "PO_MASUK" ? "PO Masuk" : selectedOrder.invoiceDocType === "PI_KELUAR" ? "PI Keluar" : (selectedOrder.invoiceDocType || "Dokumen")} Terlampir
+                    </span>
+                  ) : selectedOrder.customerPoAttachment || selectedOrder.dpPaid ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                      {selectedOrder.customerPoAttachment ? "PO Pembeli Terlampir" : "DP Sudah Diterima"}
                     </span>
                   ) : (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
-                      Belum Ada Dokumen
+                      Belum Ada Dokumen / DP
                     </span>
                   )}
                 </div>
@@ -1754,29 +1971,33 @@ export default function SalesOrdersPage() {
                       <FileText className="h-4 w-4 text-brand-primary shrink-0" />
                       <div className="min-w-0">
                         <span className="font-semibold text-foreground block truncate text-xs">
-                          {selectedOrder.invoiceDocType || "Invoice"}: {selectedOrder.invoiceDocNumber ? `Nomor ${selectedOrder.invoiceDocNumber}` : selectedOrder.invoiceDocAttachment.split("/").pop()}
+                          {selectedOrder.invoiceDocType === "PO_MASUK" ? "PO Masuk" : selectedOrder.invoiceDocType === "PI_KELUAR" ? "PI Keluar" : (selectedOrder.invoiceDocType || "Dokumen")}: {selectedOrder.invoiceDocNumber ? `Nomor ${selectedOrder.invoiceDocNumber}` : selectedOrder.invoiceDocAttachment.split("/").pop()}
                         </span>
                         <span className="text-[10px] text-muted-foreground block">
                           Tersimpan di Cloudflare R2
                         </span>
                       </div>
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-[11px] gap-1 px-2.5 text-brand-primary border-brand-primary/40 hover:bg-brand-tint"
-                      onClick={() => handleDownloadInvoiceAttachment(selectedOrder)}
-                    >
-                      <Download className="h-3 w-3" /> Unduh Dokumen
-                    </Button>
+                    {canSeePrices ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[11px] gap-1 px-2.5 text-brand-primary border-brand-primary/40 hover:bg-brand-tint"
+                        onClick={() => handleDownloadInvoiceAttachment(selectedOrder)}
+                      >
+                        <Download className="h-3 w-3" /> Unduh Dokumen
+                      </Button>
+                    ) : (
+                      <span className="text-[11px] text-slate-500 font-medium">Akses Dokumen Dibatasi</span>
+                    )}
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between p-2.5 rounded-lg border border-amber-200 bg-amber-50/70 text-xs">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-2.5 rounded-lg border border-amber-200 bg-amber-50/70 text-xs gap-2">
                     <div className="flex items-center gap-2">
                       <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
                       <span className="text-[11px] text-amber-900">
-                        Dokumen CI/PI wajib diunggah sebelum Sales Order ini dapat digunakan untuk pengadaan barang di PR.
+                        Dokumen PO Masuk / PI Keluar wajib diunggah dan/atau DP diterima sebelum Sales Order dapat digunakan untuk pengadaan barang di PR.
                       </span>
                     </div>
                     {(selectedOrder.status === "confirmed" || selectedOrder.status === "approved") && (
@@ -1787,7 +2008,7 @@ export default function SalesOrdersPage() {
                         className="h-7 text-[11px] gap-1 px-2.5 shrink-0"
                         onClick={() => openPostApprovalUpload(selectedOrder)}
                       >
-                        <Upload className="h-3 w-3" /> Upload CI/PI
+                        <Upload className="h-3 w-3" /> Upload PO Masuk / PI Keluar
                       </Button>
                     )}
                   </div>
@@ -1796,6 +2017,7 @@ export default function SalesOrdersPage() {
 
               {/* Document Preview Box (When customerPoAttachment exists) */}
               {selectedOrder.customerPoAttachment && (
+                canSeePrices ? (
                 <div className="rounded-xl border border-border bg-slate-50/70 p-3.5 space-y-2.5">
                   <div className="flex items-center justify-between border-b border-border/60 pb-2">
                     <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
@@ -1904,6 +2126,17 @@ export default function SalesOrdersPage() {
                     </div>
                   )}
                 </div>
+                ) : (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground flex items-center gap-1.5 font-medium">
+                      <FileText className="h-4 w-4 text-slate-400" />
+                      Lampiran Dokumen PO Pembeli tersimpan secara aman di Cloudflare R2
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-semibold bg-slate-200/60 px-2 py-0.5 rounded">
+                      Konfidensial
+                    </span>
+                  </div>
+                )
               )}
 
               {/* Kesiapan, DP, PPN, penolakan, revisi */}
@@ -1963,39 +2196,82 @@ export default function SalesOrdersPage() {
 
               {/* Items Line Table */}
               <div className="space-y-2">
-                <h4 className="text-xs font-bold text-foreground">Ordered Line Items</h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-foreground">Ordered Line Items</h4>
+                  {(() => {
+                    const totalOrderWeight = selectedOrder.items.reduce((sum, item) => {
+                      const p = products.find((pr) => pr.id === item.productId || pr.sku === item.sku);
+                      const w = p ? getProductWeightKg(p) : extractUnitWeightKg(item.name);
+                      return sum + (w ? item.qty * w : 0);
+                    }, 0);
+                    if (totalOrderWeight <= 0) return null;
+                    return (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold">
+                        <Scale className="h-3 w-3" />
+                        Total Berat: {totalOrderWeight.toLocaleString("id-ID", { maximumFractionDigits: 3 })} kg
+                      </span>
+                    );
+                  })()}
+                </div>
                 <div className="rounded-xl border border-border overflow-hidden">
                   <table className="w-full text-xs">
                     <thead className="bg-slate-50 text-muted-foreground border-b border-border">
                       <tr>
                         <th className="py-2 px-3 text-left font-semibold">SKU & Item Name</th>
-                        <th className="py-2 px-3 text-center font-semibold">Qty</th>
+                        <th className="py-2 px-3 text-center font-semibold w-24">Qty</th>
+                        <th className="py-2 px-3 text-center font-semibold w-20">Satuan</th>
+                        <th className="py-2 px-3 text-center font-semibold">Berat Kemasan</th>
                         {canSeePrices && <th className="py-2 px-3 text-right font-semibold">Unit Price</th>}
                         {canSeePrices && <th className="py-2 px-3 text-right font-semibold">Subtotal</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {selectedOrder.items.map((item, idx) => (
-                        <tr key={idx}>
-                          <td className="py-2 px-3">
-                            <span className="font-mono font-bold text-brand-primary block">
-                              {item.sku}
-                            </span>
-                            <span className="text-foreground">{item.name}</span>
-                          </td>
-                          <td className="py-2 px-3 text-center font-semibold">{item.qty}</td>
-                          {canSeePrices && (
-                            <td className="py-2 px-3 text-right text-muted-foreground">
-                              <MoneyDisplay amount={item.unitPrice} />
+                      {selectedOrder.items.map((item, idx) => {
+                        const matchedProduct = products.find((p) => p.id === item.productId || p.sku === item.sku);
+                        const unitKg = matchedProduct ? getProductWeightKg(matchedProduct) : extractUnitWeightKg(item.name);
+                        const totalItemWeight = unitKg ? item.qty * unitKg : null;
+
+                        return (
+                          <tr key={idx}>
+                            <td className="py-2 px-3">
+                              <span className="font-mono font-bold text-brand-primary block">
+                                {item.sku}
+                              </span>
+                              <span className="text-foreground">{item.name}</span>
                             </td>
-                          )}
-                          {canSeePrices && (
-                            <td className="py-2 px-3 text-right font-bold text-foreground">
-                              <MoneyDisplay amount={item.subtotal} />
+                            <td className="py-2 px-3 text-center font-semibold font-mono">
+                              {item.qty.toLocaleString("id-ID")}
                             </td>
-                          )}
-                        </tr>
-                      ))}
+                            <td className="py-2 px-3 text-center text-muted-foreground">
+                              {item.unit || matchedProduct?.unit || "Unit"}
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              {unitKg && totalItemWeight ? (
+                                <div className="inline-flex flex-col items-center">
+                                  <span className="font-semibold text-foreground">
+                                    {totalItemWeight.toLocaleString("id-ID", { maximumFractionDigits: 3 })} kg
+                                  </span>
+                                  <span className="text-[10px] text-muted-foreground">
+                                    ({unitKg} kg/unit)
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground text-[11px]">—</span>
+                              )}
+                            </td>
+                            {canSeePrices && (
+                              <td className="py-2 px-3 text-right text-muted-foreground">
+                                <MoneyDisplay amount={item.unitPrice} />
+                              </td>
+                            )}
+                            {canSeePrices && (
+                              <td className="py-2 px-3 text-right font-bold text-foreground">
+                                <MoneyDisplay amount={item.subtotal} />
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -2042,8 +2318,21 @@ export default function SalesOrdersPage() {
                 </Button>
 
                 <div className="flex items-center gap-2">
-                  {/* Draft Actions */}
-                  {selectedOrder.status === "draft" && selectedOrder.editable && (
+                  {!selectedOrder.dpPaid && !["rejected", "cancelled"].includes(selectedOrder.status) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-emerald-700 bg-emerald-50 border-emerald-300 hover:bg-emerald-100"
+                      disabled={isUpdatingReadiness}
+                      onClick={() => handleMarkDpReceived(selectedOrder)}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Tandai DP Diterima
+                    </Button>
+                  )}
+
+                  {/* Draft or Rejected Actions */}
+                  {(selectedOrder.status === "draft" || selectedOrder.status === "rejected") && selectedOrder.editable && (
                     <>
                       <Button
                         type="button"
@@ -2051,7 +2340,8 @@ export default function SalesOrdersPage() {
                         size="sm"
                         onClick={() => handleOpenEditOrder(selectedOrder)}
                       >
-                        Edit Sales Order
+                        <Edit className="h-3.5 w-3.5 mr-1" />
+                        {selectedOrder.status === "rejected" ? "Edit & Ajukan Ulang" : "Edit Sales Order"}
                       </Button>
                       <Button
                         type="button"
@@ -2059,7 +2349,7 @@ export default function SalesOrdersPage() {
                         size="sm"
                         onClick={() => handleSendForApproval(selectedOrder)}
                       >
-                        Kirim untuk Approval
+                        <Send className="h-3.5 w-3.5 mr-1" /> Kirim untuk Approval
                       </Button>
                     </>
                   )}
@@ -2110,7 +2400,7 @@ export default function SalesOrdersPage() {
                       Create Delivery
                     </Button>
                   )}
-                  {(selectedOrder.status === "confirmed" || selectedOrder.status === "approved") && !selectedOrder.invoiceDocAttachment && (
+                  {(selectedOrder.status === "confirmed" || selectedOrder.status === "approved") && !selectedOrder.invoiceDocAttachment && !selectedOrder.customerPoAttachment && (
                     <Button
                       type="button"
                       variant="gradient"
@@ -2119,7 +2409,7 @@ export default function SalesOrdersPage() {
                       onClick={() => openPostApprovalUpload(selectedOrder)}
                     >
                       <Upload className="h-3.5 w-3.5" />
-                      Upload Dokumen CI / PI
+                      Upload PO Masuk / PI Keluar
                     </Button>
                   )}
                   <Button
@@ -2130,8 +2420,8 @@ export default function SalesOrdersPage() {
                     title={
                       selectedOrder.status === "pending_approval"
                         ? "Menunggu Approval Manajemen terlebih dahulu"
-                        : !selectedOrder.invoiceDocAttachment && !selectedOrder.customerPoAttachment
-                        ? "Wajib upload dokumen CI/PI terlebih dahulu"
+                        : !selectedOrder.invoiceDocAttachment && !selectedOrder.customerPoAttachment && !selectedOrder.dpPaid
+                        ? "Wajib upload dokumen PO Masuk / PI Keluar atau konfirmasi DP terlebih dahulu"
                         : "Buat PR Pengadaan untuk Sales Order ini"
                     }
                     className={`gap-1 font-semibold ${
@@ -2146,6 +2436,31 @@ export default function SalesOrdersPage() {
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Buat PR Pengadaan
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!isEligibleForPR(selectedOrder)}
+                    title={
+                      selectedOrder.status === "pending_approval"
+                        ? "Menunggu Approval Manajemen terlebih dahulu"
+                        : !selectedOrder.invoiceDocAttachment && !selectedOrder.customerPoAttachment && !selectedOrder.dpPaid
+                        ? "Wajib upload dokumen PO Masuk / PI Keluar atau konfirmasi DP terlebih dahulu"
+                        : "Buat PO Langsung ke Supplier untuk Sales Order ini (Need PR = False)"
+                    }
+                    className={`gap-1 font-semibold ${
+                      isEligibleForPR(selectedOrder)
+                        ? "border-emerald-600/30 text-emerald-700 hover:bg-emerald-50"
+                        : "opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 border-slate-200"
+                    }`}
+                    onClick={() => {
+                      if (!isEligibleForPR(selectedOrder)) return;
+                      window.location.href = `/procurement/purchase-orders?fromSoId=${selectedOrder.id}&fromSoNo=${selectedOrder.orderNumber}`;
+                    }}
+                  >
+                    <ShoppingBag className="h-3.5 w-3.5" />
+                    Buat PO Langsung
                   </Button>
                   {selectedOrder.source === "marketplace" && (
                     <Button
@@ -2228,7 +2543,22 @@ export default function SalesOrdersPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-medium text-foreground">Item Pesanan</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-foreground">Item Pesanan</label>
+                {(() => {
+                  const totalKg = orderLines.reduce((sum, l) => {
+                    const p = products.find((pr) => pr.id === l.productId);
+                    const w = getProductWeightKg(p);
+                    return sum + (w ? l.quantity * w : 0);
+                  }, 0);
+                  if (totalKg <= 0) return null;
+                  return (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      <Scale className="h-3 w-3" /> Total Berat: {totalKg.toLocaleString("id-ID", { maximumFractionDigits: 3 })} kg
+                    </span>
+                  );
+                })()}
+              </div>
 
               <div className="rounded-lg border border-border overflow-x-auto">
                 {orderLines.length === 0 ? (
@@ -2238,47 +2568,117 @@ export default function SalesOrdersPage() {
                 ) : (
                   <>
                     <table className="w-full text-xs">
+                      <thead className="bg-slate-50 text-muted-foreground border-b border-border">
+                        <tr>
+                          <th className="py-2 px-3 text-left font-semibold">Produk & Spesifikasi</th>
+                          <th className="py-2 px-3 text-center font-semibold w-28">Kuantitas</th>
+                          <th className="py-2 px-3 text-center font-semibold w-24">Berat Total</th>
+                          {canEditPrices && <th className="py-2 px-3 text-right font-semibold w-32">Harga Satuan</th>}
+                          <th className="py-2 px-3 text-right font-semibold">Subtotal</th>
+                          <th className="py-2 px-3 text-center font-semibold w-24">Aksi</th>
+                        </tr>
+                      </thead>
                       <tbody className="divide-y divide-border">
                         {orderLines.map((l) => {
                           const product = products.find((p) => p.id === l.productId);
                           const stockInfo = warehouseProducts.find((p) => p.id === l.productId);
                           const isLowStock = (stockInfo?.stock ?? 0) < l.quantity;
+                          const unitKg = getProductWeightKg(product);
+                          const lineWeight = unitKg ? l.quantity * unitKg : null;
+
                           return (
                             <tr key={l.productId}>
                               <td className="py-2 px-3">
                                 <div>
-                                  <span className="font-medium">{product?.name || l.productId}</span>
-                                  {isLowStock && (
-                                    <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-medium border border-amber-200">
-                                      Perlu Pengadaan (Stok: {stockInfo?.stock ?? 0})
-                                    </span>
-                                  )}
+                                  <span className="font-medium text-foreground block">{product?.name || l.productId}</span>
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <span className="text-[10px] text-muted-foreground font-mono">SKU: {product?.sku || "-"}</span>
+                                    {isLowStock && (
+                                      <span className="px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 text-[9px] font-medium border border-amber-200">
+                                        Perlu PR/PO (Stok: {stockInfo?.stock ?? 0})
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </td>
-                              <td className="py-2 px-3 text-center whitespace-nowrap">
-                                {l.quantity}x
-                                {canEditPrices && (
+                              <td className="py-2 px-3 text-center">
+                                <div className="inline-flex items-center gap-1">
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    aria-label="Kuantitas"
+                                    value={l.quantity}
+                                    onChange={(e) => {
+                                      const val = Math.max(1, Number(e.target.value) || 1);
+                                      setOrderLines((prev) => prev.map((x) => (x.productId === l.productId ? { ...x, quantity: val } : x)));
+                                    }}
+                                    className="h-8 w-16 text-center text-xs font-semibold"
+                                  />
+                                  <span className="text-[11px] text-muted-foreground whitespace-nowrap font-medium">
+                                    {product?.unit || "Unit"}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                {lineWeight ? (
+                                  <div className="inline-flex flex-col items-center">
+                                    <span className="font-semibold text-foreground">
+                                      {lineWeight.toLocaleString("id-ID", { maximumFractionDigits: 3 })} kg
+                                    </span>
+                                    <span className="text-[9px] text-muted-foreground">
+                                      ({unitKg} kg/{product?.unit || "unit"})
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground text-[11px]">—</span>
+                                )}
+                              </td>
+                              {canEditPrices && (
+                                <td className="py-2 px-3 text-right">
                                   <Input
                                     type="number"
                                     min={0}
                                     aria-label="Harga satuan"
                                     value={l.unitPrice}
-                                    onChange={(e) => setOrderLines((prev) => prev.map((x) => (x.productId === l.productId ? { ...x, unitPrice: Math.max(0, Number(e.target.value) || 0) } : x)))}
-                                    className="mt-1 h-7 w-28 text-xs"
+                                    onChange={(e) =>
+                                      setOrderLines((prev) =>
+                                        prev.map((x) =>
+                                          x.productId === l.productId
+                                            ? { ...x, unitPrice: Math.max(0, Number(e.target.value) || 0) }
+                                            : x
+                                        )
+                                      )
+                                    }
+                                    className="h-8 w-28 text-right text-xs"
                                   />
-                                )}
-                              </td>
+                                </td>
+                              )}
                               <td className="py-2 px-3 text-right font-semibold whitespace-nowrap">
                                 Rp {(l.quantity * l.unitPrice).toLocaleString("id-ID")}
                               </td>
-                              <td className="py-2 px-3 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveLine(l.productId)}
-                                  className="text-rose-600 hover:underline text-[11px] font-medium"
-                                >
-                                  Hapus
-                                </button>
+                              <td className="py-2 px-3 text-center whitespace-nowrap">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setLineProductId(l.productId);
+                                      setLineQty(String(l.quantity));
+                                      setLinePrice(String(l.unitPrice));
+                                    }}
+                                    title="Edit item di formulir input di bawah"
+                                    className="text-brand-primary hover:underline text-[11px] font-semibold"
+                                  >
+                                    Edit
+                                  </button>
+                                  <span className="text-border">|</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveLine(l.productId)}
+                                    className="text-rose-600 hover:underline text-[11px] font-medium"
+                                  >
+                                    Hapus
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -2335,44 +2735,88 @@ export default function SalesOrdersPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-1.5 sm:flex">
-                <select
-                  aria-label="Produk gudang"
-                  disabled={!newWarehouseId || stockLoading}
-                  value={lineProductId}
-                  onChange={(e) => setLineProductId(e.target.value)}
-                  className="col-span-2 flex h-10 w-full flex-1 min-w-0 rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30 focus-visible:border-brand-primary"
-                >
-                  <option value="">{stockLoading ? "Memuat produk gudang..." : !newWarehouseId ? "Pilih gudang terlebih dahulu" : "Pilih produk..."}</option>
-                  {warehouseProducts.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} (Stok: {p.stock}{p.stock === 0 ? " — Pengadaan PR/PO" : ""})
-                    </option>
-                  ))}
-                </select>
-                <Input
-                  type="number"
-                  min={1}
-                  aria-label="Kuantitas"
-                  placeholder="Qty"
-                  value={lineQty}
-                  onChange={(e) => setLineQty(e.target.value)}
-                  className="w-28 shrink-0"
-                />
-                {canEditPrices && (
-                  <Input
-                    type="number"
-                    min={0}
-                    aria-label="Harga satuan"
-                    placeholder="Harga satuan (Rp)"
-                    value={linePrice}
-                    onChange={(e) => setLinePrice(e.target.value)}
-                    className="col-span-2 w-full sm:w-40 shrink-0"
-                  />
-                )}
-                <Button type="button" variant="outline" size="sm" disabled={!lineProductId || stockLoading} onClick={handleAddLine} className="h-10 text-xs shrink-0">
-                  Tambah
-                </Button>
+              <div className="space-y-1.5">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-1.5 sm:flex sm:items-center">
+                  <select
+                    aria-label="Produk gudang"
+                    disabled={!newWarehouseId || stockLoading}
+                    value={lineProductId}
+                    onChange={(e) => {
+                      const pid = e.target.value;
+                      setLineProductId(pid);
+                      const prod = products.find((p) => p.id === pid);
+                      if (prod && !linePrice) {
+                        const custName = customers.find((c) => c.id === newCustomerId)?.name;
+                        if (custName) {
+                          salesApi.lastSalePrice(custName, prod.id).then((r) => {
+                            if (r.data?.unitPrice) setLinePrice(String(r.data.unitPrice));
+                          }).catch(() => undefined);
+                        }
+                      }
+                    }}
+                    className="col-span-2 flex h-10 w-full flex-1 min-w-0 rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/30 focus-visible:border-brand-primary"
+                  >
+                    <option value="">{stockLoading ? "Memuat produk gudang..." : !newWarehouseId ? "Pilih gudang terlebih dahulu" : "Pilih produk..."}</option>
+                    {warehouseProducts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} (Stok: {p.stock}{p.stock === 0 ? " — Pengadaan PR/PO" : ""})
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      min={1}
+                      aria-label="Kuantitas"
+                      placeholder="Qty"
+                      value={lineQty}
+                      onChange={(e) => setLineQty(e.target.value)}
+                      className="w-36 shrink-0"
+                    />
+                    {(() => {
+                      const selProd = products.find((p) => p.id === lineProductId);
+                      if (!selProd) return null;
+                      return (
+                        <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap px-1">
+                          {selProd.unit || "Unit"}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  {canEditPrices && (
+                    <Input
+                      type="number"
+                      min={0}
+                      aria-label="Harga satuan"
+                      placeholder="Harga satuan (Rp)"
+                      value={linePrice}
+                      onChange={(e) => setLinePrice(e.target.value)}
+                      className="col-span-2 w-full sm:w-40 shrink-0"
+                    />
+                  )}
+                  <Button type="button" variant="outline" size="sm" disabled={!lineProductId || stockLoading} onClick={handleAddLine} className="h-10 text-xs shrink-0 font-semibold">
+                    Tambah
+                  </Button>
+                </div>
+                {(() => {
+                  const selProd = products.find((p) => p.id === lineProductId);
+                  if (!selProd) return null;
+                  const w = getProductWeightKg(selProd);
+                  const q = Number(lineQty) || 1;
+                  return (
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground bg-slate-50 px-2.5 py-1 rounded-md border border-border/60">
+                      <span>Satuan: <strong className="text-foreground">{selProd.unit || "Unit"}</strong></span>
+                      {w && (
+                        <>
+                          <span>&bull;</span>
+                          <span>Berat/kemasan: <strong className="text-foreground">{w} kg</strong></span>
+                          <span>&bull;</span>
+                          <span>Total berat baris: <strong className="text-emerald-700 font-bold">{(w * q).toLocaleString("id-ID", { maximumFractionDigits: 3 })} kg</strong></span>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               {!canEditPrices && (
                 <p className="text-xs text-muted-foreground">Harga diisi oleh superadmin / admin pada Sales Order ini.</p>
@@ -2416,31 +2860,149 @@ export default function SalesOrdersPage() {
               </div>
             </div>
 
-            {/* Customer Document / PO Info */}
-            <div className="p-3 rounded-xl border border-border bg-slate-50/70 space-y-2.5">
-              <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                <FileText className="h-3.5 w-3.5 text-brand-primary" />
-                Dokumen PO Masuk / PI Keluar
-              </h4>
+            {/* Customer Document: PO Masuk / PI Keluar Info */}
+            <div className="p-3 rounded-xl border border-border bg-slate-50/70 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <FileText className="h-3.5 w-3.5 text-brand-primary" />
+                  Dokumen Pendukung: PO Masuk / PI Keluar
+                </h4>
+                <span className="text-[10px] text-muted-foreground font-medium">
+                  PO Pembeli atau PI Internal
+                </span>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
+                  Pilih Jenis Dokumen
+                </label>
+                <div className="flex items-center gap-4 text-xs">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="invoiceDocType"
+                      value="PO_MASUK"
+                      checked={invoiceDocType === "PO_MASUK"}
+                      onChange={() => setInvoiceDocType("PO_MASUK")}
+                      className="accent-brand-primary"
+                    />
+                    <span className="font-medium">PO Masuk (PO Pembeli)</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="invoiceDocType"
+                      value="PI_KELUAR"
+                      checked={invoiceDocType === "PI_KELUAR"}
+                      onChange={() => setInvoiceDocType("PI_KELUAR")}
+                      className="accent-brand-primary"
+                    />
+                    <span className="font-medium">PI Keluar (PI Internal Manna)</span>
+                  </label>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-muted-foreground">Nomor PO Masuk / PI Keluar</label>
+                  <label className="text-[11px] font-semibold text-muted-foreground">
+                    Nomor Dokumen {invoiceDocType === "PO_MASUK" ? "PO Masuk" : "PI Keluar"}
+                  </label>
                   <Input
-                    placeholder="Contoh: PO-CUST-2026/09/01"
+                    placeholder={invoiceDocType === "PO_MASUK" ? "Contoh: PO-CUST-2026/09/01" : "Contoh: PI-MANNA-2026/001"}
                     value={customerPoNumber}
-                    onChange={(e) => setCustomerPoNumber(e.target.value)}
+                    onChange={(e) => {
+                      setCustomerPoNumber(e.target.value);
+                      setInvoiceDocNumber(e.target.value);
+                    }}
                     className="h-8 text-xs bg-white"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-muted-foreground">Unggah / Tautan Dokumen (wajib, dan/atau DP diterima)</label>
+                  <label className="text-[11px] font-semibold text-muted-foreground">
+                    Tautan Dokumen Eksternal (Opsional)
+                  </label>
                   <Input
-                    placeholder="https://... atau nomor berkas fisik"
-                    value={customerPoAttachment}
-                    onChange={(e) => setCustomerPoAttachment(e.target.value)}
+                    placeholder="https://... atau catatan berkas fisik"
+                    value={customerPoAttachment && (customerPoAttachment.startsWith("http") || customerPoAttachment.startsWith("drive")) ? customerPoAttachment : ""}
+                    onChange={(e) => {
+                      setCustomerPoAttachment(e.target.value);
+                      setInvoiceDocAttachment(e.target.value);
+                    }}
                     className="h-8 text-xs bg-white"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
+                  Upload Berkas Dokumen (Cloudflare R2)
+                </label>
+                <input
+                  ref={poFileInputRef}
+                  type="file"
+                  className="hidden"
+                  accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx"
+                  onChange={async (e) => {
+                    await handlePoFileUpload(e);
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setUploadedInvoiceDocFileName(file.name);
+                      setUploadedInvoiceDocFileSize(file.size);
+                    }
+                  }}
+                  disabled={isUploadingPoDoc}
+                />
+
+                {customerPoAttachment && !customerPoAttachment.startsWith("http") ? (
+                  <div className="flex items-center justify-between p-2 rounded-lg border border-emerald-200 bg-emerald-50/70 text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <div className="min-w-0 truncate">
+                        <span className="font-semibold text-emerald-950 block truncate text-[11px]">
+                          {uploadedPoFileName || customerPoAttachment.split("/").pop()}
+                        </span>
+                        {uploadedPoFileSize != null && (
+                          <span className="text-[10px] text-emerald-700 block">
+                            {(uploadedPoFileSize / 1024).toFixed(1)} KB &bull; Tersimpan di Cloudflare R2
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        handleRemovePoFile();
+                        setInvoiceDocAttachment("");
+                      }}
+                      className="h-6 px-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-100/50 text-[11px] shrink-0"
+                    >
+                      <X className="h-3.5 w-3.5 mr-0.5" /> Hapus
+                    </Button>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => !isUploadingPoDoc && poFileInputRef.current?.click()}
+                    className={`flex items-center justify-center gap-2 p-2.5 rounded-lg border border-dashed cursor-pointer transition-colors text-xs ${
+                      isUploadingPoDoc
+                        ? "border-brand-primary bg-brand-tint/20 text-brand-primary cursor-wait"
+                        : "border-brand-primary/50 hover:border-brand-primary hover:bg-brand-tint/10 bg-white text-brand-primary font-medium"
+                    }`}
+                  >
+                    {isUploadingPoDoc ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin text-brand-primary" />
+                        <span className="text-xs font-semibold">Mengunggah berkas ke Cloudflare R2...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4 text-brand-primary" />
+                        <span className="text-xs font-semibold">Pilih Berkas untuk Upload Dokumen {invoiceDocType === "PO_MASUK" ? "PO Masuk" : "PI Keluar"}</span>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -2565,133 +3127,12 @@ export default function SalesOrdersPage() {
                 </span>
               </label>
 
-              {dpPaid ? (
-                <div className="mt-3 p-3 rounded-lg border border-brand-primary/20 bg-brand-tint/10 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                      <FileCheck className="h-4 w-4 text-brand-primary" />
-                      Dokumen Faktur DP (Wajib CI atau PI)
-                    </span>
-                    <span className="text-[10px] bg-brand-primary text-white font-semibold px-2 py-0.5 rounded-full">
-                      Wajib Dilampirkan
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
-                        Jenis Dokumen
-                      </label>
-                      <div className="flex items-center gap-3 text-xs">
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="invoiceDocType"
-                            value="CI"
-                            checked={invoiceDocType === "CI"}
-                            onChange={() => setInvoiceDocType("CI")}
-                            className="accent-brand-primary"
-                          />
-                          <span className="font-medium">Commercial Invoice (CI)</span>
-                        </label>
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="invoiceDocType"
-                            value="PI"
-                            checked={invoiceDocType === "PI"}
-                            onChange={() => setInvoiceDocType("PI")}
-                            className="accent-brand-primary"
-                          />
-                          <span className="font-medium">Proforma Invoice (PI)</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
-                        Nomor Dokumen {invoiceDocType} (Opsional)
-                      </label>
-                      <Input
-                        placeholder={`Contoh: ${invoiceDocType}-2026/001`}
-                        value={invoiceDocNumber}
-                        onChange={(e) => setInvoiceDocNumber(e.target.value)}
-                        className="h-8 text-xs bg-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <input
-                      ref={invoiceDocFileInputRef}
-                      type="file"
-                      className="hidden"
-                      accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx"
-                      onChange={handleInvoiceDocUpload}
-                      disabled={isUploadingInvoiceDoc}
-                    />
-
-                    {invoiceDocAttachment ? (
-                      <div className="flex items-center justify-between p-2 rounded-lg border border-emerald-200 bg-emerald-50/70 text-xs">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                          <div className="min-w-0 truncate">
-                            <span className="font-semibold text-emerald-950 block truncate text-[11px]">
-                              {uploadedInvoiceDocFileName || invoiceDocAttachment.split("/").pop()}
-                            </span>
-                            {uploadedInvoiceDocFileSize != null && (
-                              <span className="text-[10px] text-emerald-700 block">
-                                {(uploadedInvoiceDocFileSize / 1024).toFixed(1)} KB &bull; Tersimpan di Cloudflare R2
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleRemoveInvoiceDoc}
-                          className="h-6 px-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-100/50 text-[11px] shrink-0"
-                        >
-                          <X className="h-3.5 w-3.5 mr-0.5" /> Hapus
-                        </Button>
-                      </div>
-                    ) : (
-                      <div
-                        onClick={() => !isUploadingInvoiceDoc && invoiceDocFileInputRef.current?.click()}
-                        className={`flex items-center justify-center gap-2 p-2.5 rounded-lg border border-dashed cursor-pointer transition-colors text-xs ${
-                          isUploadingInvoiceDoc
-                            ? "border-brand-primary bg-brand-tint/20 text-brand-primary cursor-wait"
-                            : "border-brand-primary/50 hover:border-brand-primary hover:bg-brand-tint/10 bg-white text-brand-primary font-medium"
-                        }`}
-                      >
-                        {isUploadingInvoiceDoc ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin text-brand-primary" />
-                            <span className="text-xs font-semibold">Mengunggah {invoiceDocType} ke Cloudflare R2...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="h-4 w-4 text-brand-primary" />
-                            <span className="text-xs font-semibold">Pencet Tombol untuk Upload Dokumen {invoiceDocType}</span>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Dokumen {invoiceDocType} ini akan dilampirkan bersama pengajuan pesanan dan dapat diakses saat proses persetujuan (Approval).
-                  </p>
-                </div>
-              ) : (
-                <div className="mt-2.5 p-2.5 rounded-lg border border-amber-200 bg-amber-50/70 text-amber-900 text-[11px] flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold block">Pengajuan Approval Tanpa DP</span>
-                    Karena uang muka (DP) belum dibayarkan, Sales Order ini akan diajukan ke Approval terlebih dahulu. Dokumen Commercial Invoice (CI) atau Proforma Invoice (PI) wajib diunggah setelah disetujui (Approved) sebelum dapat digunakan untuk pengadaan barang di PR.
-                  </div>
-                </div>
-              )}
+              <div className="mt-2 p-2 rounded-lg border border-border/80 bg-white text-[11px] text-muted-foreground flex items-center gap-2">
+                <FileCheck className="h-4 w-4 text-brand-primary shrink-0" />
+                <span>
+                  Sales Order dapat diproses untuk pengadaan barang (PR) setelah Dokumen PO Masuk / PI Keluar diunggah dan/atau DP diterima.
+                </span>
+              </div>
             </div>
             <DialogFooter className="gap-2 sm:gap-0">
               <Button type="button" variant="outline" size="sm" onClick={() => setIsCreateOpen(false)}>
@@ -2727,67 +3168,110 @@ export default function SalesOrdersPage() {
               />
             </div>
 
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-foreground">Alamat Pengiriman</label>
+              <Input
+                value={editShippingAddress}
+                onChange={(e) => setEditShippingAddress(e.target.value)}
+                placeholder="Alamat tujuan pengiriman pesanan"
+                disabled={isEditSubmitting}
+              />
+            </div>
+
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">Item Pesanan</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-foreground">Item Pesanan</label>
+                {(() => {
+                  const totalEditKg = editLines.reduce((sum, l) => {
+                    const p = products.find((pr) => pr.id === l.productId);
+                    const w = getProductWeightKg(p);
+                    return sum + (w ? l.quantity * w : 0);
+                  }, 0);
+                  if (totalEditKg <= 0) return null;
+                  return (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      <Scale className="h-3 w-3" /> Total Berat: {totalEditKg.toLocaleString("id-ID", { maximumFractionDigits: 3 })} kg
+                    </span>
+                  );
+                })()}
+              </div>
               <div className="rounded-lg border border-border bg-slate-50/60 p-3 space-y-3">
-                {editLines.map((line, index) => (
-                  <div key={index} className="grid grid-cols-2 gap-2 rounded-lg border bg-white p-3">
-                    <label className="col-span-2 text-xs">Produk
-                      <select
-                        aria-label={`Edit order item ${index + 1}`}
-                        value={line.productId}
-                        required
-                        disabled={isEditSubmitting}
-                        className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm"
-                        onChange={(e) => {
-                          const product = products.find((p) => p.id === e.target.value);
-                          updateEditLine(index, { productId: product?.id || "" });
-                        }}
-                      >
-                        <option value="">Pilih produk</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>{p.sku} — {p.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="text-xs">Quantity
-                      <Input
-                        aria-label={`Edit order quantity ${index + 1}`}
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        value={line.quantity}
-                        onChange={(e) => updateEditLine(index, { quantity: e.target.valueAsNumber })}
-                        required
-                        disabled={isEditSubmitting}
-                      />
-                    </label>
-                    <label className="text-xs">Unit Price
-                      <Input
-                        aria-label={`Edit order unit price ${index + 1}`}
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={line.unitPrice}
-                        onChange={(e) => updateEditLine(index, { unitPrice: e.target.valueAsNumber })}
-                        required
-                        disabled={isEditSubmitting || !canEditPrices}
-                        title={canEditPrices ? undefined : "Harga hanya dapat diubah superadmin / admin"}
-                      />
-                    </label>
-                    <div className="col-span-2 flex items-center justify-between text-xs">
-                      <span>Subtotal: <MoneyDisplay amount={line.quantity * line.unitPrice || 0} /></span>
-                      <button
-                        type="button"
-                        disabled={editLines.length === 1 || isEditSubmitting}
-                        onClick={() => setEditLines((current) => current.filter((_, i) => i !== index))}
-                        className="text-rose-600 hover:underline text-[11px] font-medium disabled:opacity-40"
-                      >
-                        Hapus
-                      </button>
+                {editLines.map((line, index) => {
+                  const product = products.find((p) => p.id === line.productId);
+                  const unitKg = getProductWeightKg(product);
+                  const lineKg = unitKg ? line.quantity * unitKg : null;
+
+                  return (
+                    <div key={index} className="grid grid-cols-2 gap-2 rounded-lg border bg-white p-3">
+                      <label className="col-span-2 text-xs font-medium">Produk
+                        <select
+                          aria-label={`Edit order item ${index + 1}`}
+                          value={line.productId}
+                          required
+                          disabled={isEditSubmitting}
+                          className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm mt-1"
+                          onChange={(e) => {
+                            const p = products.find((pr) => pr.id === e.target.value);
+                            updateEditLine(index, { productId: p?.id || "" });
+                          }}
+                        >
+                          <option value="">Pilih produk</option>
+                          {products.map((p) => (
+                            <option key={p.id} value={p.id}>{p.sku} — {p.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="text-xs font-medium">
+                        Kuantitas ({product?.unit || "Unit"})
+                        <Input
+                          aria-label={`Edit order quantity ${index + 1}`}
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={line.quantity}
+                          onChange={(e) => updateEditLine(index, { quantity: e.target.valueAsNumber })}
+                          required
+                          disabled={isEditSubmitting}
+                          className="mt-1"
+                        />
+                      </label>
+                      <label className="text-xs font-medium">Unit Price
+                        <Input
+                          aria-label={`Edit order unit price ${index + 1}`}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={line.unitPrice}
+                          onChange={(e) => updateEditLine(index, { unitPrice: e.target.valueAsNumber })}
+                          required
+                          disabled={isEditSubmitting || !canEditPrices}
+                          title={canEditPrices ? undefined : "Harga hanya dapat diubah superadmin / admin"}
+                          className="mt-1"
+                        />
+                      </label>
+                      <div className="col-span-2 flex items-center justify-between text-xs pt-1 border-t border-border/50">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-foreground">
+                            Subtotal: <MoneyDisplay amount={line.quantity * line.unitPrice || 0} />
+                          </span>
+                          {lineKg ? (
+                            <span className="text-[11px] text-muted-foreground">
+                              &bull; Berat: <strong className="text-foreground">{lineKg.toLocaleString("id-ID", { maximumFractionDigits: 3 })} kg</strong> ({unitKg} kg/{product?.unit || "unit"})
+                            </span>
+                          ) : null}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={editLines.length === 1 || isEditSubmitting}
+                          onClick={() => setEditLines((current) => current.filter((_, i) => i !== index))}
+                          className="text-rose-600 hover:underline text-[11px] font-medium disabled:opacity-40"
+                        >
+                          Hapus
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 <Button
                   type="button"
                   variant="outline"
@@ -2799,6 +3283,46 @@ export default function SalesOrdersPage() {
                 </Button>
                 <div className="text-right text-sm font-semibold">Total: <MoneyDisplay amount={Number.isFinite(editTotalAmount) ? editTotalAmount : 0} /></div>
               </div>
+            </div>
+
+            {/* Skema DP pada Edit */}
+            <div className="p-3 rounded-lg border border-border bg-slate-50/70 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <CreditCard className="h-3.5 w-3.5 text-brand-primary" />
+                  Skema & Status Down Payment (DP)
+                </span>
+                <span className="text-xs font-bold font-mono text-brand-primary">
+                  {editDpPercent}% (Rp {Math.round((editTotalAmount * editDpPercent) / 100).toLocaleString("id-ID")})
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+                {[0, 20, 30, 50, 70, 100].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setEditDpPercent(preset)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                      editDpPercent === preset
+                        ? "bg-brand-primary text-white font-bold"
+                        : "bg-white border border-border text-foreground hover:bg-slate-100"
+                    }`}
+                  >
+                    {preset === 0 ? "0% (COD)" : preset === 100 ? "100% (Lunas)" : `${preset}%`}
+                  </button>
+                ))}
+              </div>
+              <label className="flex items-center gap-2 pt-1 text-xs cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={editDpPaid}
+                  onChange={(e) => setEditDpPaid(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-brand-primary rounded"
+                />
+                <span className="text-foreground font-medium">
+                  Tandai uang muka (DP {editDpPercent}%) sudah dibayarkan oleh customer
+                </span>
+              </label>
             </div>
 
             {editingOrder && editingOrder.status !== "draft" && (
@@ -2825,13 +3349,13 @@ export default function SalesOrdersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Upload Dokumen CI / PI Pasca-Approval Dialog */}
+      {/* Upload Dokumen PO Masuk / PI Keluar Pasca-Approval Dialog */}
       <Dialog open={isPostApprovalUploadOpen} onOpenChange={setIsPostApprovalUploadOpen}>
         <DialogContent className="w-[calc(100%-2rem)] max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileCheck className="h-5 w-5 text-brand-primary" />
-              Upload Dokumen CI / PI
+              Upload Dokumen: PO Masuk / PI Keluar
             </DialogTitle>
           </DialogHeader>
           {postApprovalOrder && (
@@ -2854,40 +3378,40 @@ export default function SalesOrdersPage() {
               <div className="space-y-3">
                 <div>
                   <label className="text-xs font-semibold text-foreground block mb-1.5">
-                    Pilih Jenis Dokumen Invoice <span className="text-rose-500">*</span>
+                    Pilih Jenis Dokumen <span className="text-rose-500">*</span>
                   </label>
                   <div className="flex items-center gap-4 text-xs">
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="radio"
                         name="postDocType"
-                        value="CI"
-                        checked={postDocType === "CI"}
-                        onChange={() => setPostDocType("CI")}
+                        value="PO_MASUK"
+                        checked={postDocType === "PO_MASUK"}
+                        onChange={() => setPostDocType("PO_MASUK")}
                         className="accent-brand-primary"
                       />
-                      <span className="font-medium">Commercial Invoice (CI)</span>
+                      <span className="font-medium">PO Masuk (PO Pembeli)</span>
                     </label>
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="radio"
                         name="postDocType"
-                        value="PI"
-                        checked={postDocType === "PI"}
-                        onChange={() => setPostDocType("PI")}
+                        value="PI_KELUAR"
+                        checked={postDocType === "PI_KELUAR"}
+                        onChange={() => setPostDocType("PI_KELUAR")}
                         className="accent-brand-primary"
                       />
-                      <span className="font-medium">Proforma Invoice (PI)</span>
+                      <span className="font-medium">PI Keluar (PI Internal Manna)</span>
                     </label>
                   </div>
                 </div>
 
                 <div>
                   <label className="text-xs font-semibold text-foreground block mb-1">
-                    Nomor Dokumen {postDocType} (Opsional)
+                    Nomor Dokumen {postDocType === "PO_MASUK" ? "PO Masuk" : "PI Keluar"} (Opsional)
                   </label>
                   <Input
-                    placeholder={`Contoh: ${postDocType}-2026/001`}
+                    placeholder={postDocType === "PO_MASUK" ? "Contoh: PO-CUST-2026/001" : "Contoh: PI-MANNA-2026/001"}
                     value={postDocNumber}
                     onChange={(e) => setPostDocNumber(e.target.value)}
                     className="h-8 text-xs bg-white"
@@ -2896,7 +3420,7 @@ export default function SalesOrdersPage() {
 
                 <div>
                   <label className="text-xs font-semibold text-foreground flex items-center justify-between mb-1">
-                    <span>File Dokumen {postDocType} <span className="text-rose-500">*</span></span>
+                    <span>File Dokumen {postDocType === "PO_MASUK" ? "PO Masuk" : "PI Keluar"} <span className="text-rose-500">*</span></span>
                     <span className="text-[10px] text-muted-foreground">Maks 10 MB</span>
                   </label>
                   <input
@@ -2950,7 +3474,7 @@ export default function SalesOrdersPage() {
                       ) : (
                         <>
                           <Upload className="h-4 w-4 text-brand-primary" />
-                          <span className="text-xs font-semibold">Pencet Tombol untuk Upload Dokumen {postDocType}</span>
+                          <span className="text-xs font-semibold">Pencet Tombol untuk Upload Berkas {postDocType === "PO_MASUK" ? "PO Masuk" : "PI Keluar"}</span>
                         </>
                       )}
                     </div>
@@ -2961,7 +3485,7 @@ export default function SalesOrdersPage() {
               <div className="p-2.5 rounded-lg border border-blue-200 bg-blue-50/70 text-blue-900 text-[11px] flex items-start gap-2">
                 <FileCheck className="h-4 w-4 text-brand-primary shrink-0 mt-0.5" />
                 <div>
-                  Setelah dokumen {postDocType} ini disimpan, Sales Order akan memiliki kelengkapan berkas faktur dan tombol pembuatan Purchase Requisition (PR) akan terbuka.
+                  Setelah dokumen {postDocType === "PO_MASUK" ? "PO Masuk" : "PI Keluar"} ini disimpan, Sales Order akan memiliki kelengkapan berkas yang sah dan tombol pembuatan Purchase Requisition (PR) akan terbuka.
                 </div>
               </div>
 

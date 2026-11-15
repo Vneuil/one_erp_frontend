@@ -12,9 +12,6 @@ export const isSuperAdmin = (role?: string | null) => SUPER.has((role ?? "").toL
 /** Manager and above: may deactivate / delete master data. */
 export const canManageMasterData = (role?: string | null) => MANAGER.has((role ?? "").toLowerCase());
 
-/** Prices live on the Sales Order and are entered by superadmin / admin only. */
-export const canEditPrices = (role?: string | null) => canUseTradeDocs(role);
-
 /**
  * Master Produk no longer carries prices (feedback Tim Manna, 12 Nov 2026):
  * prices are typed per line on the Sales Order by superadmin / admin.
@@ -24,10 +21,26 @@ export const canEditPrices = (role?: string | null) => canUseTradeDocs(role);
 export const SHOW_PRICE_IN_PRODUCT_MASTER = false;
 
 // Mirrors the backend (actor.TradeDocRoles / MaySeePrices). The server stays authoritative.
-const TRADE_DOCS = new Set(["admin", "superadmin", "owner", "finance", "akuntan", "accountant", "accounting"]);
+const TRADE_DOCS = new Set([
+  "admin",
+  "superadmin",
+  "owner",
+  "finance",
+  "akuntan",
+  "accountant",
+  "accounting",
+  "sales",
+  "salesman",
+  "sales_staff",
+  "sales_admin",
+  "salesperson",
+]);
 
-/** PI/CI menu and price entry: superadmin, admin and the accountants. */
+/** PI/CI menu and price entry: superadmin, admin, accountants, and sales. */
 export const canUseTradeDocs = (role?: string | null) => TRADE_DOCS.has((role ?? "").toLowerCase());
+
+/** Prices live on the Sales Order and can be entered/edited during create and edit. */
+export const canEditPrices = (role?: string | null) => true;
 
 /** Staff only get the work instruction; selling prices are shown to managers and the trade-doc roles. */
 export const canSeeSalesPrices = (role?: string | null) => canUseTradeDocs(role) || (role ?? "").toLowerCase() === "manager";

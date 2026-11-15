@@ -1,9 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Download, Trash2, Pencil } from "lucide-react";
+import { Plus, Download, Trash2, Pencil, XCircle, Copy, FilePlus2, X, CheckCircle2, History, Layers, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -13,12 +15,10 @@ import {
 } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, Column } from "@/components/data-table/data-table";
-import { StatusBadge } from "@/components/shared/status-badge";
 import { MoneyDisplay } from "@/components/shared/money-display";
 import { downloadCsv } from "@/lib/utils/csv";
-import { salesApi, QuotationLine, QuotationLineInput } from "@/lib/api/sales";
-
-import { crmApi, LeadItem } from "@/lib/api/crm";
+import { salesApi, customerPosApi, CustomerPOItem, QuotationLine, QuotationLineInput } from "@/lib/api/sales";
+import { customersApi, CustomerItem } from "@/lib/api/customers";
 import { productsApi, ProductItem } from "@/lib/api/products";
 import { ApiResponse } from "@/lib/api/client";
 
@@ -42,28 +42,86 @@ interface Quotation {
   expiryDate: string;
   totalAmount: number;
   status: string;
+  notes?: string;
+  cancellationReason?: string;
+  parentQuotationId?: string;
+  parentQuotationNumber?: string;
+  revisionNumber?: number;
+  isSuperseded?: boolean;
+}
+
+function QuotationStatusBadge({ status }: { status: string }) {
+  const s = status.toLowerCase();
+  if (s === "converted" || s === "pi_issued") {
+    return (
+      <Badge variant="success" className="gap-1 text-[11px] font-semibold">
+        <CheckCircle2 className="h-3 w-3" /> PI Terbit
+      </Badge>
+    );
+  }
+  if (s === "revised") {
+    return (
+      <Badge variant="warning" className="gap-1 text-[11px] font-semibold">
+        <History className="h-3 w-3" /> Direvisi
+      </Badge>
+    );
+  }
+  if (s === "cancelled") {
+    return (
+      <Badge variant="destructive" className="gap-1 text-[11px] font-semibold">
+        <XCircle className="h-3 w-3" /> Batal
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="gap-1 text-[11px] font-semibold border-blue-300 bg-blue-50 text-blue-700">
+      Aktif (Diajukan)
+    </Badge>
+  );
 }
 
 export default function QuotationsPage() {
   const [quotations, setQuotations] = React.useState<Quotation[]>([]);
   const [isAddOpen, setIsAddOpen] = React.useState(false);
-  const [leadId, setLeadId] = React.useState("");
-  const [customers, setCustomers] = React.useState<LeadItem[]>([]);
+
+  // Sumber Pelanggan: dari Master Pelanggan, dari PO Masuk, atau Input Manual
+  const [sourceType, setSourceType] = React.useState<"customer" | "po" | "manual">("customer");
+  const [customerId, setCustomerId] = React.useState("");
+  const [selectedPoId, setSelectedPoId] = React.useState("");
+  const [manualCustomerName, setManualCustomerName] = React.useState("");
+
+  const [customers, setCustomers] = React.useState<CustomerItem[]>([]);
+  const [customerPOs, setCustomerPOs] = React.useState<CustomerPOItem[]>([]);
   const [products, setProducts] = React.useState<ProductItem[]>([]);
   const [referenceLoading, setReferenceLoading] = React.useState(false);
   const [referenceError, setReferenceError] = React.useState<string | null>(null);
-  const customer = customers.find(item => item.id === leadId);
-  const customerName = customer ? customer.company || customer.name : "";
+
+  const selectedCustomer = customers.find((item) => item.id === customerId);
+  const customerName = (
+    sourceType === "po"
+      ? (customerPOs.find((p) => p.id === selectedPoId)?.customerName || manualCustomerName)
+      : sourceType === "customer"
+      ? (selectedCustomer?.name || manualCustomerName)
+      : manualCustomerName
+  ).trim();
+
   const loadReferences = React.useCallback(async () => {
     setReferenceLoading(true);
     setReferenceError(null);
     try {
-      const [leads, items] = await Promise.all([allPages(crmApi.listLeads), allPages(productsApi.list)]);
-      setCustomers(leads);
+      const [custRes, poRes, items] = await Promise.all([
+        customersApi.list({ perPage: 200 }),
+        customerPosApi.list({ perPage: 100 }),
+        allPages(productsApi.list),
+      ]);
+      setCustomers((custRes.data || []).filter((c) => c.status?.toLowerCase() !== "inactive"));
+      setCustomerPOs(poRes.data || []);
       setProducts(items);
     } catch (error) {
-      setReferenceError(error instanceof Error ? error.message : "Gagal memuat CRM dan master barang");
-    } finally { setReferenceLoading(false); }
+      setReferenceError(error instanceof Error ? error.message : "Gagal memuat master pelanggan dan barang");
+    } finally {
+      setReferenceLoading(false);
+    }
   }, []);
   const [lines, setLines] = React.useState<QuotationLineInput[]>([{ productId: "", description: "", unit: "pcs", quantity: 1, unitPrice: 0 }]);
   const [selected, setSelected] = React.useState<Quotation | null>(null);
@@ -74,6 +132,7 @@ export default function QuotationsPage() {
   const totalAmount = Math.round(lines.reduce((sum, line) => sum + subtotal(line), 0) * 100) / 100;
   const updateLine = (index: number, patch: Partial<QuotationLineInput>) => setLines(current => current.map((line, i) => i === index ? { ...line, ...patch } : line));
   const [expiryDate, setExpiryDate] = React.useState("");
+  const [refPoNumber, setRefPoNumber] = React.useState<string>("");
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
 
@@ -87,6 +146,13 @@ export default function QuotationsPage() {
   const editSubtotal = (line: QuotationLineInput) => Math.round(line.quantity * line.unitPrice * 100) / 100;
   const editTotalAmount = Math.round(editLines.reduce((sum, line) => sum + editSubtotal(line), 0) * 100) / 100;
   const updateEditLine = (index: number, patch: Partial<QuotationLineInput>) => setEditLines(current => current.map((line, i) => i === index ? { ...line, ...patch } : line));
+
+  const [revisingQuotation, setRevisingQuotation] = React.useState<Quotation | null>(null);
+  const [cancelTarget, setCancelTarget] = React.useState<Quotation | null>(null);
+  const [cancelReason, setCancelReason] = React.useState("");
+  const [isCancelSubmitting, setIsCancelSubmitting] = React.useState(false);
+  const [cancelError, setCancelError] = React.useState<string | null>(null);
+  const [showRevisedHistory, setShowRevisedHistory] = React.useState(false);
 
   const fetchQuotations = React.useCallback(() => {
     salesApi
@@ -103,15 +169,93 @@ export default function QuotationsPage() {
             expiryDate: q.validUntil,
             totalAmount: q.totalAmount,
             status: q.status,
+            notes: q.notes,
+            cancellationReason: q.cancellationReason,
+            parentQuotationId: q.parentQuotationId,
+            parentQuotationNumber: q.parentQuotationNumber,
+            revisionNumber: q.revisionNumber,
+            isSuperseded: q.isSuperseded,
           }))
         );
       })
       .catch((err) => setLoadError(err instanceof Error ? err.message : "Gagal memuat quotation"));
   }, []);
 
+  const supersededCount = React.useMemo(
+    () => quotations.filter((q) => q.isSuperseded || q.status === "Revised").length,
+    [quotations]
+  );
+
+  const displayedQuotations = React.useMemo(
+    () => quotations.filter((q) => showRevisedHistory || (!q.isSuperseded && q.status !== "Revised")),
+    [quotations, showRevisedHistory]
+  );
+
   React.useEffect(() => {
     fetchQuotations();
   }, [fetchQuotations]);
+
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("new") === "true") {
+        setIsAddOpen(true);
+        void loadReferences();
+      }
+    }
+  }, [loadReferences]);
+
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const fromPoId = params.get("fromCustomerPoId");
+      const custParam = params.get("customer");
+      const refPoParam = params.get("refPo");
+
+      if (fromPoId) {
+        setSourceType("po");
+        setSelectedPoId(fromPoId);
+        if (refPoParam) setRefPoNumber(refPoParam);
+        if (custParam) setManualCustomerName(custParam);
+
+        customerPosApi.get(fromPoId).then((res) => {
+          if (res.data) {
+            const po = res.data;
+            if (po.poNumber) setRefPoNumber(po.poNumber);
+            if (po.customerName) setManualCustomerName(po.customerName);
+            if (po.lines && po.lines.length > 0) {
+              setLines(
+                po.lines.map((l) => ({
+                  productId: l.productId || "",
+                  description: l.productName,
+                  unit: l.unit || "pcs",
+                  quantity: l.quantity,
+                  unitPrice: l.unitPrice,
+                }))
+              );
+            }
+          }
+        }).catch(() => undefined);
+      } else if (custParam) {
+        setManualCustomerName(custParam);
+        if (refPoParam) setRefPoNumber(refPoParam);
+      }
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (typeof window !== "undefined" && customers.length > 0) {
+      const params = new URLSearchParams(window.location.search);
+      const custParam = params.get("customer");
+      if (custParam && !customerId) {
+        const found = customers.find((c) => c.name.toLowerCase().includes(custParam.toLowerCase()));
+        if (found) {
+          setSourceType("customer");
+          setCustomerId(found.id);
+        }
+      }
+    }
+  }, [customers, customerId]);
 
   const handleExport = () => {
     downloadCsv(
@@ -123,27 +267,69 @@ export default function QuotationsPage() {
 
   const handleAddQuotation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (referenceLoading || referenceError || !customer || !customerName.trim() || lines.length === 0 || lines.some(line => !products.some(product => product.id === line.productId) || !line.description.trim() || !Number.isFinite(line.quantity) || line.quantity <= 0 || !Number.isFinite(line.unitPrice) || line.unitPrice < 0) || !Number.isFinite(totalAmount) || totalAmount >= 1e13) {
+    if (
+      referenceLoading ||
+      referenceError ||
+      !customerName ||
+      lines.length === 0 ||
+      lines.some(
+        (line) =>
+          !products.some((product) => product.id === line.productId) ||
+          !line.description.trim() ||
+          !Number.isFinite(line.quantity) ||
+          line.quantity <= 0 ||
+          !Number.isFinite(line.unitPrice) ||
+          line.unitPrice < 0
+      ) ||
+      !Number.isFinite(totalAmount) ||
+      totalAmount >= 1e13
+    ) {
       setFormError("Isi nama customer dan minimal satu item dengan kuantitas serta harga yang valid.");
       return;
     }
 
     const issueDate = new Date().toISOString().slice(0, 10);
     const validUntil = expiryDate || issueDate;
+    const notes = revisingQuotation
+      ? `Revisi dari ${revisingQuotation.quotationNumber}`
+      : refPoNumber
+      ? `Menjawab PO Masuk #${refPoNumber}`
+      : "";
 
     setIsSubmitting(true);
     setFormError(null);
     try {
       await salesApi.createQuotation({
-        leadId,
-        customerName: customerName.trim(),
+        customerName,
         lines,
         totalAmount,
         validUntil,
+        notes,
+        parentQuotationId: revisingQuotation ? revisingQuotation.id : undefined,
+        parentQuotationNumber: revisingQuotation ? revisingQuotation.quotationNumber : undefined,
+        revisionNumber: revisingQuotation ? (revisingQuotation.revisionNumber || 0) + 1 : 0,
       });
+
+      // Jika ini adalah revisi, tandai quotation lama sebagai "Revised" dan isSuperseded = true agar ter-trace & ter-hide
+      if (revisingQuotation) {
+        try {
+          await salesApi.updateQuotation(revisingQuotation.id, {
+            status: "Revised",
+            isSuperseded: true,
+            notes: `Telah direvisi oleh penawaran baru`,
+          });
+        } catch {
+          // ignore status update error
+        }
+      }
+
       fetchQuotations();
       setIsAddOpen(false);
-      setLeadId("");
+      setRevisingQuotation(null);
+      setCustomerId("");
+      setSelectedPoId("");
+      setManualCustomerName("");
+      setRefPoNumber("");
       setLines([{ productId: "", description: "", unit: "pcs", quantity: 1, unitPrice: 0 }]);
       setExpiryDate("");
     } catch (err) {
@@ -193,17 +379,60 @@ export default function QuotationsPage() {
     }
   };
 
-  const handleConvert = async (quotation: Quotation) => {
-    setIsConverting(true);
-    setConvertError(null);
+  const handleRevise = (quotation: Quotation) => {
+    setRevisingQuotation(quotation);
+    // Match customer from Master Pelanggan
+    const matchedCustomer = customers.find(
+      (c) => c.name.toLowerCase() === quotation.customerName.toLowerCase()
+    );
+    if (matchedCustomer) {
+      setSourceType("customer");
+      setCustomerId(matchedCustomer.id);
+    } else {
+      setSourceType("manual");
+      setManualCustomerName(quotation.customerName);
+    }
+    // Prefill lines
+    setLines(
+      quotation.lines.length
+        ? quotation.lines.map((line) => ({
+            productId: line.productId || "",
+            description: line.description,
+            unit: line.unit,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+          }))
+        : [{ productId: "", description: "", unit: "pcs", quantity: 1, unitPrice: 0 }]
+    );
+    setExpiryDate(quotation.expiryDate || "");
+    setFormError(null);
+    setSelected(null);
+    setIsAddOpen(true);
+    void loadReferences();
+  };
+
+  const handleOpenCancel = (quotation: Quotation) => {
+    setCancelTarget(quotation);
+    setCancelReason("");
+    setCancelError(null);
+  };
+
+  const handleConfirmCancel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cancelTarget) return;
+    setIsCancelSubmitting(true);
+    setCancelError(null);
     try {
-      await salesApi.convertQuotationToOrder(quotation.id);
+      await salesApi.cancelQuotation(cancelTarget.id, cancelReason.trim());
       fetchQuotations();
-      setSelected(null);
+      setCancelTarget(null);
+      if (selected?.id === cancelTarget.id) {
+        setSelected(null);
+      }
     } catch (err) {
-      setConvertError(err instanceof Error ? err.message : "Gagal mengonversi quotation menjadi sales order");
+      setCancelError(err instanceof Error ? err.message : "Gagal membatalkan penawaran");
     } finally {
-      setIsConverting(false);
+      setIsCancelSubmitting(false);
     }
   };
 
@@ -212,7 +441,41 @@ export default function QuotationsPage() {
       key: "quotationNumber",
       header: "Quotation No.",
       sortable: true,
-      render: (q) => <button className="font-mono text-xs font-bold text-brand-primary hover:underline" onClick={() => setSelected(q)}>{q.quotationNumber}</button>,
+      render: (q) => (
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              className="font-mono text-xs font-bold text-brand-primary hover:underline text-left"
+              onClick={() => setSelected(q)}
+            >
+              {q.quotationNumber}
+            </button>
+            {q.revisionNumber && q.revisionNumber > 0 ? (
+              <span className="text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded-full">
+                Rev {q.revisionNumber}
+              </span>
+            ) : null}
+            {q.isSuperseded && (
+              <span className="text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-300 px-1.5 py-0.2 rounded-full">
+                Arsip
+              </span>
+            )}
+          </div>
+          {q.parentQuotationNumber ? (
+            <span
+              className="text-[10px] text-amber-800 font-medium block truncate max-w-[200px]"
+              title={`Revisi dari ${q.parentQuotationNumber}`}
+            >
+              Ref: {q.parentQuotationNumber}
+            </span>
+          ) : q.notes ? (
+            <span className="text-[10px] text-muted-foreground block truncate max-w-[200px]" title={q.notes}>
+              {q.notes}
+            </span>
+          ) : null}
+        </div>
+      ),
     },
     {
       key: "customerName",
@@ -240,7 +503,72 @@ export default function QuotationsPage() {
     {
       key: "status",
       header: "Status",
-      render: (q) => <StatusBadge status={q.status} />,
+      render: (q) => <QuotationStatusBadge status={q.status} />,
+    },
+    {
+      key: "actions",
+      header: "Tindak Lanjut Internal Manna",
+      align: "right",
+      render: (q) => {
+        const isActionable = q.status !== "Converted" && q.status !== "Cancelled" && q.status !== "Revised" && !q.isSuperseded;
+        return (
+          <div className="flex items-center justify-end gap-1">
+            {isActionable ? (
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="gradient"
+                  className="h-7 px-2 text-[11px] gap-1 font-semibold"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.location.href = `/sales/trade-invoices?tab=PI&fromQuotationId=${q.id}`;
+                  }}
+                  title="Pembeli sepakat (Agree): Lanjut terbitkan Proforma Invoice dengan DP (0-100%)"
+                >
+                  <FilePlus2 className="h-3 w-3" /> Jadi PI
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-[11px] gap-1 text-amber-700 hover:bg-amber-50 border-amber-300"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRevise(q);
+                  }}
+                  title="Ada negosiasi harga/kuantiti: Terbitkan penawaran revisi baru (dokumen lama otomatis disembunyikan)"
+                >
+                  <Copy className="h-3 w-3" /> Revisi
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-[11px] gap-1 text-rose-600 hover:bg-rose-50 border-rose-300"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenCancel(q);
+                  }}
+                  title="Kesepakatan tidak tercapai: Batalkan penawaran ini dengan alasan"
+                >
+                  <XCircle className="h-3 w-3" /> Batal
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                onClick={() => setSelected(q)}
+              >
+                Lihat Detail
+              </Button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -250,6 +578,23 @@ export default function QuotationsPage() {
         title="Penawaran Penjualan"
         description="Terbitkan penawaran resmi, negosiasi harga, dan konversi penawaran menjadi pesanan."
       >
+        {supersededCount > 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={`h-9 gap-1.5 text-xs font-medium transition-colors ${
+              showRevisedHistory ? "bg-amber-50 text-amber-900 border-amber-300" : "text-muted-foreground"
+            }`}
+            onClick={() => setShowRevisedHistory((prev) => !prev)}
+            title="Sembunyikan atau tampilkan dokumen penawaran lama yang telah direvisi"
+          >
+            <History className="h-3.5 w-3.5" />
+            {showRevisedHistory
+              ? `Sembunyikan Versi Lama (${supersededCount})`
+              : `Tampilkan Riwayat Revisi (${supersededCount})`}
+          </Button>
+        )}
         <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs" onClick={handleExport}>
           <Download className="h-3.5 w-3.5" /> Export
         </Button>
@@ -266,30 +611,206 @@ export default function QuotationsPage() {
       {loadError && <div role="alert" className="text-sm text-rose-700">{loadError} <Button variant="outline" onClick={fetchQuotations}>Retry</Button></div>}
       <DataTable
         columns={columns}
-        data={quotations}
+        data={displayedQuotations}
         searchKey="quotationNumber"
         searchPlaceholder="Search quotation number or customer..."
       />
 
-      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+      <Dialog open={isAddOpen} onOpenChange={(open) => { setIsAddOpen(open); if (!open) setRevisingQuotation(null); }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>New Quotation</DialogTitle>
+            <DialogTitle>
+              {revisingQuotation ? `Revisi Penawaran (${revisingQuotation.quotationNumber})` : "New Quotation"}
+            </DialogTitle>
           </DialogHeader>
+          {revisingQuotation && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 flex items-center justify-between">
+              <div>
+                <span className="font-bold flex items-center gap-1.5 text-amber-900">
+                  <History className="h-4 w-4 text-amber-700" /> Mode Revisi Penawaran (Tawar-Menawar):
+                </span>
+                <p className="text-[11px] text-amber-800 mt-1">
+                  Merevisi penawaran <strong>{revisingQuotation.quotationNumber}</strong> ({revisingQuotation.customerName}). Sesuaikan harga atau kuantiti baru yang disepakati. Penawaran sebelumnya otomatis ditandai &quot;Direvisi&quot; agar seluruh riwayat tawar-menawar ter-trace.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRevisingQuotation(null)}
+                className="text-amber-700 hover:text-amber-900 ml-2"
+                title="Batal mode revisi"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+          {refPoNumber && !revisingQuotation && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900 flex items-center justify-between">
+              <div>
+                <span className="font-semibold">Penawaran Balasan (Counter-Offer / PO Masuk Tidak Sesuai):</span>
+                <p className="text-[11px] text-amber-700">Menjawab PO Pembeli #{refPoNumber}. Masukkan kuantiti dan harga baru yang disanggupi pihak Manna.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRefPoNumber("")}
+                className="text-amber-700 hover:text-amber-900"
+                title="Hapus referensi PO"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
           <form onSubmit={handleAddQuotation} className="space-y-4">
             {formError && (
               <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold">
                 {formError}
               </div>
             )}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-foreground">Customer Name</label>
-              <select aria-label="Customer CRM" value={leadId} onChange={e => setLeadId(e.target.value)} required disabled={referenceLoading || isSubmitting} className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm">
-                <option value="">{referenceLoading ? "Memuat customer..." : "Pilih customer dari CRM"}</option>
-                {customers.map(customer => <option key={customer.id} value={customer.id}>{customer.company || customer.name} — {customer.name}</option>)}
-              </select>
-              {!referenceLoading && !referenceError && !customers.length && <p className="text-xs text-muted-foreground">Belum ada customer. Tambahkan data di CRM Leads terlebih dahulu.</p>}
-              {referenceError && <div role="alert" className="text-xs text-rose-700">{referenceError} <Button type="button" variant="outline" size="sm" onClick={loadReferences}>Retry</Button></div>}
+            {/* Sumber Referensi Customer */}
+            <div className="space-y-2 rounded-xl border border-border/80 bg-slate-50/70 p-3.5">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <label className="text-xs font-semibold text-foreground">
+                  Referensi Pembeli / Customer <span className="text-rose-500">*</span>
+                </label>
+                <div className="inline-flex rounded-lg border border-border bg-white p-0.5 text-xs shadow-xs">
+                  <button
+                    type="button"
+                    onClick={() => setSourceType("customer")}
+                    className={`rounded-md px-2.5 py-1 font-medium transition-all ${
+                      sourceType === "customer"
+                        ? "bg-brand-primary text-white shadow-xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Master Pelanggan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSourceType("po")}
+                    className={`rounded-md px-2.5 py-1 font-medium transition-all ${
+                      sourceType === "po"
+                        ? "bg-brand-primary text-white shadow-xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Dari PO Masuk
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSourceType("manual")}
+                    className={`rounded-md px-2.5 py-1 font-medium transition-all ${
+                      sourceType === "manual"
+                        ? "bg-brand-primary text-white shadow-xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Input Manual
+                  </button>
+                </div>
+              </div>
+
+              {sourceType === "customer" && (
+                <div className="space-y-1.5">
+                  <select
+                    aria-label="Master Pelanggan"
+                    value={customerId}
+                    onChange={(e) => {
+                      setCustomerId(e.target.value);
+                      const c = customers.find((item) => item.id === e.target.value);
+                      if (c) setManualCustomerName(c.name);
+                    }}
+                    required={sourceType === "customer"}
+                    disabled={referenceLoading || isSubmitting}
+                    className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+                  >
+                    <option value="">{referenceLoading ? "Memuat master pelanggan..." : "-- Pilih dari Master Pelanggan --"}</option>
+                    {customers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.code ? `[${c.code}] ` : ""}{c.name}
+                      </option>
+                    ))}
+                  </select>
+                  {!referenceLoading && !referenceError && !customers.length && (
+                    <p className="text-xs text-muted-foreground">
+                      Belum ada data di Master Pelanggan. Anda juga dapat memilih opsi &quot;Dari PO Masuk&quot; atau &quot;Input Manual&quot;.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {sourceType === "po" && (
+                <div className="space-y-1.5">
+                  <select
+                    aria-label="PO Masuk"
+                    value={selectedPoId}
+                    onChange={(e) => {
+                      const poId = e.target.value;
+                      setSelectedPoId(poId);
+                      const po = customerPOs.find((p) => p.id === poId);
+                      if (po) {
+                        setManualCustomerName(po.customerName);
+                        setRefPoNumber(po.poNumber);
+                        if (po.lines && po.lines.length > 0) {
+                          setLines(
+                            po.lines.map((l) => ({
+                              productId: l.productId || "",
+                              description: l.productName,
+                              unit: l.unit || "pcs",
+                              quantity: l.quantity,
+                              unitPrice: l.unitPrice,
+                            }))
+                          );
+                        }
+                      }
+                    }}
+                    required={sourceType === "po"}
+                    disabled={referenceLoading || isSubmitting}
+                    className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+                  >
+                    <option value="">{referenceLoading ? "Memuat PO Masuk..." : "-- Pilih Dokumen PO Masuk --"}</option>
+                    {customerPOs.map((po) => (
+                      <option key={po.id} value={po.id}>
+                        PO #{po.poNumber} — {po.customerName} ({po.status})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Memilih PO Masuk akan otomatis mengisi nama pelanggan, nomor referensi PO, dan memuat daftar item barang untuk dinegosiasikan.
+                  </p>
+                </div>
+              )}
+
+              {sourceType === "manual" && (
+                <div className="space-y-1.5">
+                  <Input
+                    aria-label="Customer Name Manual"
+                    placeholder="Masukkan nama calon pembeli / perusahaan..."
+                    value={manualCustomerName}
+                    onChange={(e) => setManualCustomerName(e.target.value)}
+                    required={sourceType === "manual"}
+                    disabled={isSubmitting}
+                    className="h-10 bg-white text-sm"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Gunakan opsi ini jika calon pembeli adalah prospek baru yang belum terdaftar di Master Pelanggan.
+                  </p>
+                </div>
+              )}
+
+              {customerName && (
+                <div className="text-xs text-brand-primary font-medium flex items-center gap-1.5 pt-0.5">
+                  <span>Customer Terpilih:</span>
+                  <span className="font-bold underline decoration-brand-primary/40">{customerName}</span>
+                </div>
+              )}
+
+              {referenceError && (
+                <div role="alert" className="text-xs text-rose-700 flex items-center justify-between">
+                  <span>{referenceError}</span>
+                  <Button type="button" variant="outline" size="sm" onClick={loadReferences} className="h-6 text-xs px-2">
+                    Coba Lagi
+                  </Button>
+                </div>
+              )}
             </div>
             <fieldset disabled={isSubmitting} className="space-y-3">
               <legend className="text-sm font-semibold mb-2">Quotation Items</legend>
@@ -331,7 +852,7 @@ export default function QuotationsPage() {
               <Button type="button" variant="outline" size="sm" onClick={() => setIsAddOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" variant="gradient" size="sm" disabled={isSubmitting || referenceLoading || !!referenceError || !customers.length || !products.length}>
+              <Button type="submit" variant="gradient" size="sm" disabled={isSubmitting || referenceLoading || !!referenceError || !customerName || !products.length}>
                 {isSubmitting ? "Menyimpan..." : "Create Quotation"}
               </Button>
             </DialogFooter>
@@ -340,38 +861,311 @@ export default function QuotationsPage() {
       </Dialog>
       <Dialog open={!!selected} onOpenChange={open => { if (!open) setSelected(null); }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{selected?.quotationNumber}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <div className="flex items-center justify-between pr-6">
+              <DialogTitle className="font-mono text-base">{selected?.quotationNumber}</DialogTitle>
+              {selected && <QuotationStatusBadge status={selected.status} />}
+            </div>
+          </DialogHeader>
           {selected && <>
-            <div className="flex flex-wrap justify-between gap-3 text-sm"><div><p className="font-semibold">{selected.customerName}</p><p>Issued: {selected.issueDate} · Valid until: {selected.expiryDate}</p></div><StatusBadge status={selected.status} /></div>
-            {selected.lines.length ? <div className="overflow-x-auto"><table className="w-full text-sm">
-              <thead><tr className="border-b text-left"><th className="p-2">Item / Description</th><th className="p-2 text-right">Quantity</th><th className="p-2">Unit</th><th className="p-2 text-right">Unit Price</th><th className="p-2 text-right">Subtotal</th></tr></thead>
-              <tbody>{selected.lines.map(line => <tr key={line.id} className="border-b"><td className="p-2 whitespace-pre-wrap">{line.description}</td><td className="p-2 text-right">{line.quantity}</td><td className="p-2">{line.unit}</td><td className="p-2 text-right"><MoneyDisplay amount={line.unitPrice} /></td><td className="p-2 text-right"><MoneyDisplay amount={line.subtotal} /></td></tr>)}</tbody>
-            </table></div> : <p className="text-sm text-muted-foreground">Quotation lama ini belum memiliki detail item.</p>}
-            <div className="text-right font-semibold">Total Estimate: <MoneyDisplay amount={selected.totalAmount} /></div>
-            {convertError && <div role="alert" className="text-xs text-rose-700">{convertError}</div>}
-            {selected.status !== "Converted" && (
+            <div className="flex flex-wrap justify-between gap-3 text-sm pb-2 border-b">
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="font-bold text-base text-foreground">{selected.customerName}</p>
+                  {selected.revisionNumber && selected.revisionNumber > 0 ? (
+                    <Badge variant="warning" className="text-[10px] font-bold">
+                      Revisi ke-{selected.revisionNumber}
+                    </Badge>
+                  ) : null}
+                  {selected.isSuperseded && (
+                    <Badge variant="outline" className="text-[10px] bg-slate-100 text-slate-700">
+                      Dokumen Diarsipkan (Telah Direvisi)
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Tanggal Terbit: {selected.issueDate} · Berlaku Hingga: {selected.expiryDate}
+                </p>
+                {selected.notes && (
+                  <p className="text-xs text-blue-700 mt-1 font-medium bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md inline-block">
+                    <History className="h-3 w-3 inline mr-1" />{selected.notes}
+                  </p>
+                )}
+                {selected.cancellationReason && (
+                  <p className="text-xs text-rose-700 mt-1 font-medium bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md inline-block">
+                    <AlertCircle className="h-3 w-3 inline mr-1" />Alasan Batal: {selected.cancellationReason}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Kotak Riwayat Referensi: Jika dokumen ini adalah revisi dari quotation sebelumnya */}
+            {selected.parentQuotationNumber && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-3 text-xs text-amber-950 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold flex items-center gap-1.5 text-amber-900">
+                    <History className="h-4 w-4 text-amber-700" /> Referensi Versi Penawaran Sebelumnya:
+                  </span>
+                  <span className="text-[11px] font-semibold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full border border-amber-300">
+                    Versi Asal: {selected.parentQuotationNumber}
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-800">
+                  Penawaran ini merupakan revisi lanjutan dari dokumen <strong>{selected.parentQuotationNumber}</strong>. Dokumen lama otomatis disembunyikan dari daftar utama dan diarsipkan sebagai referensi negosiasi.
+                </p>
+                {selected.parentQuotationId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs bg-white text-amber-900 border-amber-300 hover:bg-amber-100 mt-1 gap-1"
+                    onClick={() => {
+                      const parent = quotations.find((q) => q.id === selected.parentQuotationId);
+                      if (parent) {
+                        setSelected(parent);
+                      }
+                    }}
+                  >
+                    <Layers className="h-3.5 w-3.5" /> Buka Rincian Versi Sebelumnya ({selected.parentQuotationNumber})
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Kotak Dokumen Lama (Telah Direvisi): Jika staf membuka dokumen lama yang sudah ter-superseded */}
+            {(selected.isSuperseded || selected.status === "Revised") && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-3 text-xs text-blue-950 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold flex items-center gap-1.5 text-blue-900">
+                    <Layers className="h-4 w-4 text-blue-700" /> Dokumen Versi Lama (Telah Direvisi):
+                  </span>
+                  <Badge variant="warning">Arsip Riwayat</Badge>
+                </div>
+                <p className="text-[11px] text-blue-800">
+                  Dokumen ini telah direvisi dan disembunyikan dari daftar utama penawaran.
+                </p>
+                {(() => {
+                  const newerQuotation = quotations.find((q) => q.parentQuotationId === selected.id);
+                  return newerQuotation ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="gradient"
+                      className="h-7 text-xs gap-1 mt-1 font-semibold"
+                      onClick={() => setSelected(newerQuotation)}
+                    >
+                      Buka Versi Terbaru ({newerQuotation.quotationNumber}) →
+                    </Button>
+                  ) : null;
+                })()}
+              </div>
+            )}
+
+            {selected.lines.length ? (
+              <div className="overflow-x-auto rounded-lg border border-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr className="border-b text-left text-xs text-muted-foreground">
+                      <th className="p-2.5">Item / Deskripsi</th>
+                      <th className="p-2.5 text-right">Kuantiti</th>
+                      <th className="p-2.5">Satuan</th>
+                      <th className="p-2.5 text-right">Harga Satuan</th>
+                      <th className="p-2.5 text-right">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selected.lines.map(line => (
+                      <tr key={line.id} className="border-b last:border-b-0 hover:bg-slate-50/50">
+                        <td className="p-2.5 font-medium whitespace-pre-wrap">{line.description}</td>
+                        <td className="p-2.5 text-right">{line.quantity}</td>
+                        <td className="p-2.5 text-muted-foreground">{line.unit}</td>
+                        <td className="p-2.5 text-right"><MoneyDisplay amount={line.unitPrice} /></td>
+                        <td className="p-2.5 text-right font-semibold"><MoneyDisplay amount={line.subtotal} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Quotation ini belum memiliki rincian item barang.</p>
+            )}
+
+            <div className="text-right text-base font-bold flex items-center justify-end gap-2">
+              <span className="text-sm font-normal text-muted-foreground">Total Penawaran:</span>
+              <MoneyDisplay amount={selected.totalAmount} />
+            </div>
+
+            {/* Kotak Tindak Lanjut Keputusan Internal Staf Manna */}
+            <div className="rounded-xl border border-border bg-slate-50/80 p-4 space-y-3 mt-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                    <Layers className="h-4 w-4 text-brand-primary" />
+                    Tindak Lanjut Penawaran (Keputusan Internal Staf Manna)
+                  </h4>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Seluruh proses dikerjakan oleh staf internal Manna. Pilih keputusan setelah menindaklanjuti penawaran ini dengan pembeli:
+                  </p>
+                </div>
+              </div>
+
+              {selected.status !== "Converted" && selected.status !== "Cancelled" && selected.status !== "Revised" ? (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                  {/* Opsi 1: Jadi PI */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.location.href = `/sales/trade-invoices?tab=PI&fromQuotationId=${selected.id}`;
+                    }}
+                    className="flex flex-col items-start text-left p-3 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-50 hover:border-emerald-500 transition-all shadow-xs group"
+                  >
+                    <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-700 mb-1">
+                      <FilePlus2 className="h-4 w-4" /> 1. Lanjut Jadi PI (Agree)
+                    </div>
+                    <p className="text-[11px] text-muted-foreground group-hover:text-emerald-950">
+                      Pembeli sepakat harga &amp; kuantiti. Terbitkan Proforma Invoice resmi dan tetapkan DP (0-100%).
+                    </p>
+                  </button>
+
+                  {/* Opsi 2: Revisi Quotation */}
+                  <button
+                    type="button"
+                    onClick={() => handleRevise(selected)}
+                    className="flex flex-col items-start text-left p-3 rounded-lg border border-amber-300 bg-white hover:bg-amber-50 hover:border-amber-500 transition-all shadow-xs group"
+                  >
+                    <div className="flex items-center gap-1.5 font-bold text-xs text-amber-800 mb-1">
+                      <Copy className="h-4 w-4" /> 2. Revisi Quotation
+                    </div>
+                    <p className="text-[11px] text-muted-foreground group-hover:text-amber-950">
+                      Pembeli menawar harga atau kuantiti. Buat penawaran baru revisi, riwayat lama tetap tersimpan.
+                    </p>
+                  </button>
+
+                  {/* Opsi 3: Batalkan Penawaran */}
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCancel(selected)}
+                    className="flex flex-col items-start text-left p-3 rounded-lg border border-rose-300 bg-white hover:bg-rose-50 hover:border-rose-500 transition-all shadow-xs group"
+                  >
+                    <div className="flex items-center gap-1.5 font-bold text-xs text-rose-700 mb-1">
+                      <XCircle className="h-4 w-4" /> 3. Batalkan Penawaran
+                    </div>
+                    <p className="text-[11px] text-muted-foreground group-hover:text-rose-950">
+                      Tidak ada kesepakatan atau transaksi dibatalkan. Tercatat alasan pembatalan untuk analisis.
+                    </p>
+                  </button>
+                </div>
+              ) : (
+                <div className="rounded-lg p-3 text-xs bg-white border border-border">
+                  {selected.status === "Converted" && (
+                    <div className="text-emerald-700 font-semibold flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>Penawaran ini telah disepakati (Agree) dan telah diterbitkan Proforma Invoice (PI).</span>
+                    </div>
+                  )}
+                  {selected.status === "Revised" && (
+                    <div className="text-amber-800 font-semibold flex items-center gap-2">
+                      <History className="h-4 w-4" />
+                      <span>Penawaran ini telah direvisi menjadi penawaran baru untuk negosiasi ulang harga/kuantiti.</span>
+                    </div>
+                  )}
+                  {selected.status === "Cancelled" && (
+                    <div>
+                      <p className="text-rose-700 font-semibold flex items-center gap-2">
+                        <XCircle className="h-4 w-4" />
+                        <span>Penawaran ini telah dibatalkan.</span>
+                      </p>
+                      {selected.cancellationReason && (
+                        <p className="text-slate-600 text-xs mt-1.5 pl-6">
+                          Alasan Pembatalan: <span className="font-medium italic text-slate-800">{selected.cancellationReason}</span>
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="flex items-center justify-between gap-2 border-t pt-3 mt-4">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => handleOpenEdit(selected)}
+                disabled={selected.status === "Converted" || selected.status === "Cancelled" || selected.status === "Revised"}
+              >
+                <Pencil className="h-3.5 w-3.5" /> Koreksi / Edit Teks
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setSelected(null)}>
+                Tutup
+              </Button>
+            </DialogFooter>
+          </>}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!cancelTarget} onOpenChange={(open) => !open && setCancelTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-rose-700 flex items-center gap-2">
+              <XCircle className="h-5 w-5" /> Batalkan Penawaran
+            </DialogTitle>
+          </DialogHeader>
+          {cancelTarget && (
+            <form onSubmit={handleConfirmCancel} className="space-y-4">
+              <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-900 space-y-1">
+                <p>
+                  Anda akan membatalkan penawaran <strong>{cancelTarget.quotationNumber}</strong> untuk pelanggan{" "}
+                  <strong>{cancelTarget.customerName}</strong>.
+                </p>
+                <p className="text-[11px] text-rose-700">
+                  Keputusan ini akan dicatat dan ter-trace di sistem untuk bahan analisis evaluasi penjualan.
+                </p>
+              </div>
+
+              {cancelError && (
+                <div role="alert" className="p-2.5 rounded-lg bg-rose-100 text-rose-800 text-xs font-semibold">
+                  {cancelError}
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">
+                  Alasan Pembatalan <span className="text-rose-500">*</span>
+                </label>
+                <Textarea
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="Contoh: Pembeli menolak harga penawaran dan negosiasi buntu, atau pembeli menunda pengadaan..."
+                  required
+                  rows={3}
+                  className="text-xs"
+                />
+              </div>
+
               <DialogFooter>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="gap-1.5"
-                  onClick={() => handleOpenEdit(selected)}
+                  onClick={() => setCancelTarget(null)}
+                  disabled={isCancelSubmitting}
                 >
-                  <Pencil className="h-3.5 w-3.5" /> Edit
+                  Batal
                 </Button>
                 <Button
-                  type="button"
-                  variant="gradient"
+                  type="submit"
+                  variant="destructive"
                   size="sm"
-                  disabled={isConverting}
-                  onClick={() => handleConvert(selected)}
+                  disabled={isCancelSubmitting || !cancelReason.trim()}
+                  className="gap-1.5"
                 >
-                  {isConverting ? "Mengonversi..." : "Convert to Sales Order"}
+                  {isCancelSubmitting ? "Membatalkan..." : "Konfirmasi Batalkan Penawaran"}
                 </Button>
               </DialogFooter>
-            )}
-          </>}
+            </form>
+          )}
         </DialogContent>
       </Dialog>
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>

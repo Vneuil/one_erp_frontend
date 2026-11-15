@@ -77,6 +77,8 @@ export default function PurchaseOrdersPage() {
   const [freightScheme, setFreightScheme] = React.useState("franco");
   const [freightCost, setFreightCost] = React.useState("0");
   const [qualityNotes, setQualityNotes] = React.useState("Kering oven, kadar air standar pabrik Manna.");
+  const [directSoId, setDirectSoId] = React.useState<string | null>(null);
+  const [directSoNo, setDirectSoNo] = React.useState<string | null>(null);
 
   // Detail Modal state (All statuses with Timeline)
   const [selectedPo, setSelectedPo] = React.useState<PurchaseOrderItem | null>(null);
@@ -156,6 +158,8 @@ export default function PurchaseOrdersPage() {
         if (typeof window !== "undefined") {
           const params = new URLSearchParams(window.location.search);
           const fromPrId = params.get("fromPrId");
+          const fromSoId = params.get("fromSoId");
+          const fromSoNo = params.get("fromSoNo");
           if (fromPrId && approved.some((p) => p.id === fromPrId)) {
             setPrId(fromPrId);
             setIsNewOpen(true);
@@ -169,6 +173,11 @@ export default function PurchaseOrdersPage() {
                 }))
               );
             }
+          } else if (fromSoId) {
+            setDirectSoId(fromSoId);
+            setDirectSoNo(fromSoNo || "");
+            setIsNewOpen(true);
+            setQualityNotes(`Pemenuhan langsung Sales Order #${fromSoNo || ""}. Standar spesifikasi pabrik Manna.`);
           }
         }
       })
@@ -266,8 +275,8 @@ export default function PurchaseOrdersPage() {
         supplierId,
         supplierName: selectedSupplier?.name,
         purchaseRequestId: prId || null,
-        salesOrderId: linkedPr?.salesOrderId,
-        salesOrderNo: linkedPr?.salesOrderNo,
+        salesOrderId: linkedPr?.salesOrderId || directSoId || undefined,
+        salesOrderNo: linkedPr?.salesOrderNo || directSoNo || undefined,
         expectedDate,
         requestedBy: currentUser?.name || currentUser?.email,
         currency: currency || undefined,
@@ -281,6 +290,8 @@ export default function PurchaseOrdersPage() {
       setIsNewOpen(false);
       setSupplierId("");
       setPrId("");
+      setDirectSoId(null);
+      setDirectSoNo(null);
       setExpectedDate("");
       setCurrency("");
       setPoLines([]);
@@ -700,6 +711,25 @@ export default function PurchaseOrdersPage() {
             <DialogTitle>Buat Pesanan Pembelian (Draft)</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreatePO} className="min-w-0 space-y-3">
+            {directSoNo && (
+              <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <span className="font-semibold">Direct PO (Need PR = False):</span>
+                  <span>Terkait Sales Order #{directSoNo}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDirectSoId(null);
+                    setDirectSoNo(null);
+                  }}
+                  className="text-emerald-700 hover:text-emerald-900"
+                  title="Hapus kaitan Sales Order"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
             <div className="space-y-1">
               <label className="text-xs font-semibold text-foreground">Vendor</label>
               <div className="flex items-center gap-2 text-[11px] text-muted-foreground">

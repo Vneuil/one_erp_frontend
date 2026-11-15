@@ -93,8 +93,10 @@ export const navigationConfig: NavGroup[] = [
         title: "Penjualan",
         icon: ShoppingCart,
         items: [
-          { title: "Pesanan Penjualan", href: "/sales/sales-orders" },
+          { title: "PO Masuk", href: "/sales/customer-pos" },
+          { title: "Penawaran Harga (Quotation)", href: "/sales/quotations" },
           { title: "Proforma / Commercial Invoice (PI/CI)", href: "/sales/trade-invoices", superAdminOnly: true },
+          { title: "Pesanan Penjualan", href: "/sales/sales-orders" },
           { title: "Nota / Invoice", href: "/sales/invoices" },
           { title: "Retur Penjualan", href: "/sales/returns" },
           { title: "Pelunasan Piutang", href: "/sales/down-payments" },

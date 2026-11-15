@@ -15,6 +15,7 @@ import { productsApi, ProductItem } from "@/lib/api/products";
 import {
   salesApi,
   tradeInvoicesApi,
+  customerPosApi,
   TradeInvoice,
   TradeKind,
   SalesOrderItem,
@@ -74,6 +75,44 @@ export default function TradeInvoicesPage() {
   React.useEffect(() => {
     if (canUseTradeDocs) load();
   }, [canUseTradeDocs, load]);
+
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const fromQuoId = params.get("fromQuotationId");
+      const fromCustomerPoId = params.get("fromCustomerPoId");
+      if (fromQuoId) {
+        setTab("PI");
+        setSource("quotation");
+        setSourceId(fromQuoId);
+        setDpPercent("50");
+        setCreateOpen(true);
+      } else if (fromCustomerPoId) {
+        setTab("PI");
+        setSource("po");
+        setDpPercent("50");
+        setCreateOpen(true);
+        customerPosApi.get(fromCustomerPoId).then((res) => {
+          if (res.data) {
+            const po = res.data;
+            if (po.customerId) setPoCustomerId(po.customerId);
+            if (po.poNumber) setPoNumber(po.poNumber);
+            if (po.attachment) setPoFileKey(po.attachment);
+            if (po.notes) setNotes(po.notes);
+            if (po.lines && po.lines.length > 0) {
+              setPoLines(
+                po.lines.map((l) => ({
+                  productId: l.productId || "",
+                  quantity: l.quantity,
+                  unitPrice: l.unitPrice,
+                }))
+              );
+            }
+          }
+        }).catch(() => undefined);
+      }
+    }
+  }, []);
 
   React.useEffect(() => {
     if (!createOpen) return;
@@ -155,6 +194,7 @@ export default function TradeInvoicesPage() {
     try {
       await tradeInvoicesApi.create({
         kind: tab,
+        dpPercent: tab === "PI" ? (Number(dpPercent) || 0) : undefined,
         ...(source === "po"
           ? {
               customerName: poCustomer?.name,
@@ -162,7 +202,6 @@ export default function TradeInvoicesPage() {
               shippingAddress: (poCustomer?.shippingAddresses?.find((a) => a.isDefault) || poCustomer?.shippingAddresses?.[0])?.address,
               customerPoNumber: poNumber.trim() || undefined,
               customerPoAttachment: poFileKey || undefined,
-              dpPercent: Number(dpPercent) || 0,
               lines: poLines.filter((l) => l.productId).map((l) => {
                 const p = products.find((x) => x.id === l.productId);
                 return { productId: l.productId, description: p?.name ?? "", unit: p?.unit ?? "", quantity: l.quantity, unitPrice: l.unitPrice };
@@ -225,7 +264,7 @@ export default function TradeInvoicesPage() {
   if (!canUseTradeDocs) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Proforma / Commercial Invoice (PI/CI)" description="Menu ini khusus superadmin, admin, dan akuntan." />
+        <PageHeader title="Proforma / Commercial Invoice (PI/CI)" description="Menu ini khusus superadmin, admin, tim sales, dan akuntan." />
         <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           Anda tidak memiliki akses ke menu PI/CI. Hubungi superadmin (Ko Steven) atau admin.
         </div>
@@ -264,7 +303,10 @@ export default function TradeInvoicesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Proforma / Commercial Invoice (PI/CI)" description="Dokumen penagihan ekspor/komersial, dibuat dari Penawaran atau Pesanan Penjualan. Khusus superadmin, admin, dan akuntan.">
+      <PageHeader
+        title="Proforma / Commercial Invoice (PI/CI)"
+        description="Catat PO Masuk dari pembeli untuk terbitkan Proforma Invoice (PI) & tagih DP (0-100%), atau terbitkan Commercial Invoice (CI) saat barang siap kirim."
+      >
         <Button onClick={() => openCreate(tab)} variant="gradient" size="sm" className="h-9 gap-1.5 text-xs font-semibold">
           <Plus className="h-3.5 w-3.5" /> Buat {tab}
         </Button>
@@ -301,17 +343,46 @@ export default function TradeInvoicesPage() {
               </select>
             </div>
             {source !== "po" ? (
-              <div className="space-y-1">
-                <label className="font-semibold">Dokumen sumber *</label>
-                <select className={selectClass} value={sourceId} onChange={(e) => setSourceId(e.target.value)} required>
-                  <option value="">— Pilih —</option>
-                  {sourceOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-                </select>
-              </div>
+              <>
+                <div className="space-y-1">
+                  <label className="font-semibold">Dokumen sumber *</label>
+                  <select className={selectClass} value={sourceId} onChange={(e) => setSourceId(e.target.value)} required>
+                    <option value="">— Pilih —</option>
+                    {sourceOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                  </select>
+                </div>
+                {tab === "PI" && (
+                  <div className="space-y-1 w-44">
+                    <label className="font-semibold">DP yang ditagih (%)</label>
+                    <Input type="number" min={0} max={100} value={dpPercent} onChange={(e) => setDpPercent(e.target.value)} placeholder="0 - 100%" />
+                    <span className="text-[10px] text-muted-foreground">Persentase DP pada Proforma Invoice</span>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="space-y-3 rounded-lg border border-border p-3">
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <span className="font-semibold">Harga atau kuantiti di PO Pembeli belum sesuai? (Agree = False)</span>
+                    <p className="text-[11px] text-amber-700">Jangan terbitkan PI dulu. Buat Quotation penawaran balasan (counter-offer) ke pembeli untuk negosiasi ulang.</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs border-amber-300 text-amber-900 hover:bg-amber-100 whitespace-nowrap font-medium"
+                    onClick={() => {
+                      const params = new URLSearchParams();
+                      if (poCustomer?.name) params.set("customer", poCustomer.name);
+                      if (poNumber) params.set("refPo", poNumber);
+                      window.location.href = `/sales/quotations?new=true&${params.toString()}`;
+                    }}
+                  >
+                    Buat Quotation Balasan
+                  </Button>
+                </div>
                 <p className="text-[11px] text-muted-foreground">
-                  Perusahaan pemesan membuat PO ke kita. Catat PO tersebut, tentukan harga (awalnya harga terakhir yang dibayar pelanggan, boleh diubah), lalu tagih DP.
+                  Jika harga & kuantiti PO Pembeli disetujui (Agree = True), catat PO tersebut di bawah ini untuk menerbitkan Proforma Invoice (PI) dan tagih DP.
                 </p>
                 <div className="space-y-1">
                   <label className="font-semibold">Pelanggan *</label>
