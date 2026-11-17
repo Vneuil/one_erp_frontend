@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Printer, FileSpreadsheet, Scale, Info, CheckCircle2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Plus, Printer, FileSpreadsheet, Scale, Info, CheckCircle2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,6 +19,7 @@ import { procurementApi, PurchaseOrderItem, GoodsReceiptItem, GoodsReceiptLineIn
 import { inventoryApi, WarehouseItem } from "@/lib/api/inventory";
 import { productsApi, ProductItem, isProductActive } from "@/lib/api/products";
 import { useAppStore } from "@/stores/app-store";
+import { exportLBMToExcel } from "@/lib/utils/export-lbm-excel";
 
 interface GoodsReceipt {
   id: string;
@@ -48,6 +50,7 @@ interface LineWeightEntry {
 }
 
 export default function ReceiptsPage() {
+  const router = useRouter();
   const { currentUser } = useAppStore();
   const [rawReceipts, setRawReceipts] = React.useState<GoodsReceiptItem[] | null>(null);
   const [loadError, setLoadError] = React.useState<string | null>(null);
@@ -322,6 +325,58 @@ export default function ReceiptsPage() {
     printWindow.document.close();
   };
 
+  // Export Excel (.xlsx) sesuai template LAPORAN BARANG MASUK (LBM).xlsx
+  const handleExportExcel = async (gr: GoodsReceipt) => {
+    const raw = rawReceipts?.find((r) => r.id === gr.id);
+    if (!raw) return;
+
+    try {
+      const exportLines = (raw.lines || []).map((l) => {
+        const prod = productMap[l.productId];
+        const net = l.weightNet ?? l.quantityReceived ?? 0;
+        const pSize = l.packageSize && l.packageSize > 0 ? l.packageSize : 10;
+
+        let entries = l.bagEntries || [];
+        if (entries.length === 0 && l.bagWeights) {
+          const bagTokens = l.bagWeights
+            .split(/[\s,;\n]+/)
+            .map((t) => parseFloat(t))
+            .filter((n) => !isNaN(n) && n > 0);
+          entries = bagTokens.map((w, idx) => ({
+            id: `legacy-${idx}`,
+            rowNumber: idx + 1,
+            weightActual: w,
+          }));
+        }
+
+        return {
+          lineId: l.id,
+          productId: l.productId,
+          productName: prod?.name || `Produk #${l.productId.slice(0, 8)}`,
+          quantityOrderedRef: l.quantityOrderedReference || net,
+          weightGross: l.weightGross ?? net,
+          weightTare: l.weightTare ?? 0,
+          weightNet: net,
+          packageSize: pSize,
+          bagCount: entries.length > 0 ? entries.length : Math.ceil(net / pSize),
+          entries,
+        };
+      });
+
+      await exportLBMToExcel({
+        receipt: raw,
+        lines: exportLines,
+        vendorName: gr.vendorName,
+        warehouseName: gr.warehouse,
+      });
+      setNotice(`Berkas Excel LBM (${gr.grNumber}) berhasil diunduh.`);
+      setTimeout(() => setNotice(null), 3000);
+    } catch (err) {
+      console.error(err);
+      alert("Gagal mengekspor berkas Excel LBM.");
+    }
+  };
+
   // Cetak Dokumen Lengkap LBM (GD-007-LBM) dengan Grid Penimbangan Karung
   const handlePrintDetailedLBM = (gr: GoodsReceipt) => {
     const raw = rawReceipts?.find((r) => r.id === gr.id);
@@ -571,7 +626,7 @@ export default function ReceiptsPage() {
       setPoId("");
       setDeliveryNoteNo("");
       setNotes("");
-      setNotice(`Laporan Barang Masuk (LBM GD-007) berhasil diterbitkan dengan nomor: ${res.data.receiptNo}`);
+      router.push(`/procurement/receipts/${res.data.id}`);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Gagal mencatat penerimaan barang. Periksa kembali isian form.");
     } finally {
@@ -626,10 +681,28 @@ export default function ReceiptsPage() {
     },
     {
       key: "actions",
-      header: "Dokumen Cetak",
+      header: "Dokumen & Aksi",
       align: "right",
       render: (gr) => (
         <div className="flex items-center justify-end gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1 text-indigo-700 hover:text-indigo-800 border-indigo-200 hover:bg-indigo-50"
+            onClick={() => router.push(`/procurement/receipts/${gr.id}`)}
+            title="Buka Halaman Detail LBM & Timbangan Karung"
+          >
+            <Eye className="h-3 w-3" /> Detail LBM
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1 text-emerald-700 hover:text-emerald-800 border-emerald-300 hover:bg-emerald-50"
+            onClick={() => handleExportExcel(gr)}
+            title="Download Berkas Excel LBM (.xlsx) Sesuai Format GDG-001"
+          >
+            <FileSpreadsheet className="h-3 w-3" /> Export Excel
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -642,11 +715,11 @@ export default function ReceiptsPage() {
           <Button
             variant="outline"
             size="sm"
-            className="h-7 text-xs gap-1 text-emerald-700 hover:text-emerald-800 border-emerald-300 hover:bg-emerald-50"
+            className="h-7 text-xs gap-1 text-slate-700 hover:text-brand-primary"
             onClick={() => handlePrintDetailedLBM(gr)}
             title="Cetak Laporan Lengkap LBM GD-007 beserta rincian karung"
           >
-            <FileSpreadsheet className="h-3 w-3" /> LBM (GD-007)
+            <Printer className="h-3 w-3" /> Cetak LBM
           </Button>
         </div>
       ),
@@ -845,69 +918,26 @@ export default function ReceiptsPage() {
                           </div>
                         </div>
 
-                        {/* Input Timbangan Karung Individual */}
-                        <div className="pt-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <label className="text-[11px] font-semibold text-slate-600 flex items-center gap-1">
-                              <span>Log Timbangan Karung (10 / 25 kg):</span>
-                              <span className="text-[10px] font-normal text-muted-foreground">
-                                (Pisahkan dengan koma atau spasi untuk input cepat timbangan digital)
-                              </span>
-                            </label>
-                            {parsedBags.length > 0 && (
-                              <span className="text-[10px] font-semibold text-brand-primary bg-indigo-50 px-1.5 py-0.5 rounded">
-                                Terdeteksi: {parsedBags.length} Karung ({parsedBags.reduce((a, b) => a + b, 0).toFixed(2)} kg)
-                              </span>
-                            )}
+                        <div className="grid grid-cols-3 gap-2 pt-1">
+                          <div>
+                            <label className="text-[11px] font-semibold text-slate-600">Adjustment manual (kg, +/-)</label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={line.adjustment || ""}
+                              onChange={(e) => handleAdjustmentChange(prodId, { adjustment: parseFloat(e.target.value) || 0 })}
+                              placeholder="0.00"
+                              className="h-8 text-xs font-mono"
+                            />
                           </div>
-                          <textarea
-                            rows={2}
-                            value={line.bagWeightsText}
-                            onChange={(e) => handleBagWeightsChange(prodId, e.target.value)}
-                            placeholder="Contoh: 10.05, 10.00, 9.95, 10.10, 10.00, 9.90, 10.05, 10.00 ..."
-                            className="w-full text-xs font-mono p-2 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-primary"
-                          />
-                          {parsedBags.length > 0 && (
-                            <div className="mt-2 max-h-40 overflow-y-auto rounded border border-slate-200">
-                              <table className="w-full text-[11px]">
-                                <thead className="bg-slate-50 text-slate-600 sticky top-0">
-                                  <tr><th className="px-2 py-1 text-left w-16">Sak #</th><th className="px-2 py-1 text-right">Berat (kg)</th></tr>
-                                </thead>
-                                <tbody>
-                                  {parsedBags.map((w, i) => (
-                                    <tr key={i} className="border-t border-slate-100">
-                                      <td className="px-2 py-0.5 font-mono">{i + 1}</td>
-                                      <td className="px-2 py-0.5 text-right font-mono">{w.toFixed(2)}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                                <tfoot className="bg-slate-50 font-semibold">
-                                  <tr><td className="px-2 py-1">Total {parsedBags.length} sak</td><td className="px-2 py-1 text-right font-mono">{parsedBags.reduce((a, b) => a + b, 0).toFixed(2)}</td></tr>
-                                </tfoot>
-                              </table>
-                            </div>
-                          )}
-                          <div className="grid grid-cols-3 gap-2 mt-2">
-                            <div>
-                              <label className="text-[11px] font-semibold text-slate-600">Adjustment manual (kg, +/-)</label>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                value={line.adjustment || ""}
-                                onChange={(e) => handleAdjustmentChange(prodId, { adjustment: parseFloat(e.target.value) || 0 })}
-                                placeholder="0.00"
-                                className="h-8 text-xs font-mono"
-                              />
-                            </div>
-                            <div className="col-span-2">
-                              <label className="text-[11px] font-semibold text-slate-600">Alasan adjustment {line.adjustment !== 0 && "*"}</label>
-                              <Input
-                                value={line.adjustmentReason}
-                                onChange={(e) => handleAdjustmentChange(prodId, { adjustmentReason: e.target.value })}
-                                placeholder="Wajib diisi bila ada adjustment (audit organik)"
-                                className="h-8 text-xs"
-                              />
-                            </div>
+                          <div className="col-span-2">
+                            <label className="text-[11px] font-semibold text-slate-600">Alasan adjustment {line.adjustment !== 0 && "*"}</label>
+                            <Input
+                              value={line.adjustmentReason}
+                              onChange={(e) => handleAdjustmentChange(prodId, { adjustmentReason: e.target.value })}
+                              placeholder="Wajib diisi bila ada adjustment (audit organik)"
+                              className="h-8 text-xs"
+                            />
                           </div>
                         </div>
                       </div>
@@ -927,10 +957,10 @@ export default function ReceiptsPage() {
               />
             </div>
 
-            <div className="bg-amber-50 p-2.5 rounded-lg border border-amber-200 text-[11px] text-amber-800 flex items-start gap-1.5">
-              <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <div className="bg-blue-50 p-2.5 rounded-lg border border-blue-200 text-[11px] text-blue-800 flex items-start gap-1.5">
+              <Info className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
               <span>
-                <strong>Ketentuan Verifikasi:</strong> Pencatatan ini langsung menambahkan stok pada gudang tujuan dan menghasilkan dokumen nomor induk <strong>GD-007-LBM</strong>. Nilai netto yang tercatat di sini mengikat penagihan invoice supplier.
+                <strong>Alur LBM:</strong> Menekan tombol <strong>Tambah LBM</strong> akan membuat draft LBM dan membuka halaman rincian penimbangan per kemasan untuk diinput oleh staff gudang.
               </span>
             </div>
 
@@ -939,7 +969,7 @@ export default function ReceiptsPage() {
                 Batal
               </Button>
               <Button type="submit" variant="gradient" size="sm" disabled={isSubmitting} className="font-semibold">
-                {isSubmitting ? "Menyimpan..." : "Terbitkan LBM & Simpan Stok"}
+                {isSubmitting ? "Memproses..." : "Tambah LBM"}
               </Button>
             </DialogFooter>
           </form>

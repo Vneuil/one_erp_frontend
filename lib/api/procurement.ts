@@ -116,6 +116,12 @@ export interface CreatePurchaseOrderInput {
 
 // Goods receipts
 
+export interface BagEntryItem {
+  id: string;
+  rowNumber: number;
+  weightActual: number | null;
+}
+
 export interface GoodsReceiptLineInput {
   productId: string;
   quantityReceived: number;
@@ -123,6 +129,7 @@ export interface GoodsReceiptLineInput {
   weightTare?: number;
   weightNet?: number;
   bagWeights?: string;
+  packageSize?: number;
   /** Manual correction (kg, signed) on top of the per-sak total; reason is mandatory when non-zero. */
   weightAdjustment?: number;
   adjustmentReason?: string;
@@ -136,6 +143,8 @@ export interface GoodsReceiptLineItem extends GoodsReceiptLineInput {
   weightNet?: number;
   bagWeights?: string;
   weightDiffPo?: number;
+  packageSize?: number;
+  bagEntries?: BagEntryItem[];
 }
 
 export interface GoodsReceiptItem {
@@ -414,8 +423,20 @@ export const procurementApi = {
   listGoodsReceipts: async (params?: { page?: number; perPage?: number; search?: string }): Promise<ApiResponse<GoodsReceiptItem[]>> => {
     return apiClient<GoodsReceiptItem[]>("/procurement/receipts", { params });
   },
+  getGoodsReceiptById: async (id: string): Promise<ApiResponse<GoodsReceiptItem>> => {
+    return apiClient<GoodsReceiptItem>(`/procurement/receipts/${id}`);
+  },
   createGoodsReceipt: async (data: CreateGoodsReceiptInput): Promise<ApiResponse<GoodsReceiptItem>> => {
     return apiClient<GoodsReceiptItem>("/procurement/receipts", { method: "POST", body: JSON.stringify(data) });
+  },
+  generateBagEntries: async (goodsReceiptId: string, data: { lineId: string; packageSize: number; totalCount: number }): Promise<ApiResponse<BagEntryItem[]>> => {
+    return apiClient<BagEntryItem[]>(`/procurement/receipts/${goodsReceiptId}/bag-entries`, { method: "POST", body: JSON.stringify(data) });
+  },
+  saveBagEntries: async (goodsReceiptId: string, data: { lineId: string; entries: { rowNumber: number; weightActual: number | null }[] }): Promise<ApiResponse<BagEntryItem[]>> => {
+    return apiClient<BagEntryItem[]>(`/procurement/receipts/${goodsReceiptId}/bag-entries`, { method: "PUT", body: JSON.stringify(data) });
+  },
+  confirmGoodsReceipt: async (id: string): Promise<ApiResponse<GoodsReceiptItem>> => {
+    return apiClient<GoodsReceiptItem>(`/procurement/receipts/${id}/confirm`, { method: "POST" });
   },
 
   // Purchase invoices
