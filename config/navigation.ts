@@ -139,7 +139,6 @@ export const navigationConfig: NavGroup[] = [
           { title: "Pemeriksaan Bahan Datang (PBD)", href: "/qc/incoming" },
           { title: "Pemeriksaan Bahan Kemas (PBK)", href: "/qc/packaging" },
           { title: "Checklist Armada Supplier (CAS)", href: "/qc/armada" },
-          { title: "Sertifikasi", href: "/qc/certifications" },
           { title: "Penelusuran Lot", href: "/qc/lot-trace" },
           { title: "Personal Hygiene (CPH)", href: "/qc/hygiene" },
           { title: "Sarana Pra-Operasi (SSO)", href: "/qc/preop" },

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
-import { certificationsApi, LotTrace, TraceInspection } from "@/lib/api/certifications";
+import { traceabilityApi, LotTrace, TraceInspection } from "@/lib/api/traceability";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -44,7 +44,7 @@ export default function LotTracePage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await certificationsApi.traceLot(lot.trim());
+      const res = await traceabilityApi.traceLot(lot.trim());
       setTrace(res.data);
     } catch (err) {
       setTrace(null);
@@ -74,24 +74,15 @@ export default function LotTracePage() {
               </ul>
             )}
           </Section>
-          <Section title="2. Sertifikat Vendor">
-            {trace.supplierCertificates.length === 0 ? <p className="text-xs text-muted-foreground">Tidak ada sertifikat tercatat untuk vendor ini.</p> : (
-              <ul className="space-y-1 text-xs">
-                {trace.supplierCertificates.map((c) => (
-                  <li key={c.id}>{c.scheme} <span className="font-mono">{c.number}</span> s/d {c.validUntil} <Badge variant={c.effectiveStatus === "active" ? "success" : "destructive"}>{c.effectiveStatus}</Badge></li>
-                ))}
-              </ul>
-            )}
-          </Section>
-          <Section title="3. QC Penerimaan"><Inspections rows={trace.receiptQc} /></Section>
-          <Section title="4. Pemakaian Produksi">
+          <Section title="2. QC Penerimaan"><Inspections rows={trace.receiptQc} /></Section>
+          <Section title="3. Pemakaian Produksi">
             {trace.usedIn.length === 0 ? <p className="text-xs text-muted-foreground">Belum dipakai di produksi.</p> : (
               <ul className="space-y-1 text-xs">
                 {trace.usedIn.map((u, i) => (<li key={i}>Order {u.orderNumber} → batch <span className="font-mono font-semibold">{u.childBatchNo}</span> ({u.childProduct}) · {u.quantityUsed} dipakai · {u.recordedAt}</li>))}
               </ul>
             )}
           </Section>
-          <Section title="5. QC Batch Jadi (dasar COI)"><Inspections rows={trace.finishedQc} /></Section>
+          <Section title="4. QC Batch Jadi (dasar COI)"><Inspections rows={trace.finishedQc} /></Section>
           {trace.gaps && trace.gaps.length > 0 && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
               <p className="font-semibold">Mata rantai yang belum terhubung</p>

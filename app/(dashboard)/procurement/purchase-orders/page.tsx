@@ -20,7 +20,6 @@ import { downloadCsv } from "@/lib/utils/csv";
 import { formatCurrency } from "@/lib/utils";
 import { procurementApi, PurchaseOrderItem, PurchaseOrderLineInput, PurchaseRequestItem } from "@/lib/api/procurement";
 import { suppliersApi, SupplierItem } from "@/lib/api/suppliers";
-import { certificationsApi, SupplierEligibility } from "@/lib/api/certifications";
 import { productsApi, ProductItem, isProductActive } from "@/lib/api/products";
 import { currencyApi, CurrencyItem } from "@/lib/api/currency";
 import { pricingApi, PaymentTermItem, TaxRateItem } from "@/lib/api/pricing";
@@ -53,24 +52,10 @@ export default function PurchaseOrdersPage() {
   // Create Modal state
   const [isNewOpen, setIsNewOpen] = React.useState(false);
   const [suppliers, setSuppliers] = React.useState<SupplierItem[]>([]);
-  // Vendor filter: only active vendors, optionally only those with a currently valid certificate.
-  const [eligibility, setEligibility] = React.useState<SupplierEligibility[]>([]);
-  const [certFilter, setCertFilter] = React.useState("");
-  const [certSchemes, setCertSchemes] = React.useState<string[]>([]);
   const selectableSuppliers = React.useMemo(
-    () =>
-      suppliers.filter((s) => {
-        if (s.status?.toLowerCase() === "inactive") return false;
-        if (!certFilter) return true;
-        return eligibility.find((e) => e.supplierId === s.id)?.active.some((a) => a.toLowerCase() === certFilter.toLowerCase()) ?? false;
-      }),
-    [suppliers, eligibility, certFilter]
+    () => suppliers.filter((s) => s.status?.toLowerCase() !== "inactive"),
+    [suppliers]
   );
-  const suspendedFor = (id: string) => {
-    const allSuspended = eligibility.find((e) => e.supplierId === id)?.suspended ?? [];
-    if (!certFilter) return allSuspended;
-    return allSuspended.filter((s) => s.toLowerCase() === certFilter.toLowerCase());
-  };
   const [allProducts, setAllProducts] = React.useState<ProductItem[]>([]);
   const productMap = React.useMemo(() => new Map(allProducts.map((p) => [p.id, p])), [allProducts]);
   const products = React.useMemo(() => allProducts.filter(isProductActive), [allProducts]);
@@ -121,7 +106,6 @@ export default function PurchaseOrdersPage() {
   const [isEditSubmitting, setIsEditSubmitting] = React.useState(false);
 
   const fetchPOs = React.useCallback(() => {
-    setIsLoading(true);
     procurementApi
       .listPurchaseOrders()
       .then((res) => setPos(res.data || []))
@@ -154,13 +138,6 @@ export default function PurchaseOrdersPage() {
       .list({ perPage: 200 })
       .then((res) => setSuppliers(res.data || []))
       .catch((err) => console.warn("Failed to load suppliers", err));
-    certificationsApi
-      .eligibility()
-      .then((res) => {
-        setEligibility(res.data || []);
-        setCertSchemes(Array.from(new Set((res.data || []).flatMap((e) => [...e.active, ...e.suspended, ...e.expired]))).sort());
-      })
-      .catch((err) => console.warn("Failed to load vendor certification status", err));
     productsApi
       .list({ perPage: 500 })
       .then((res) => setAllProducts(res.data || []))
@@ -780,13 +757,6 @@ export default function PurchaseOrdersPage() {
             )}
             <div className="space-y-1">
               <label className="text-xs font-semibold text-foreground">Vendor</label>
-              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                <span>Filter sertifikat aktif:</span>
-                <select value={certFilter} onChange={(e) => setCertFilter(e.target.value)} className="h-7 rounded-md border border-border bg-white px-2 text-[11px]">
-                  <option value="">Semua vendor aktif</option>
-                  {certSchemes.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
               <select
                 value={supplierId}
                 onChange={(e) => {
@@ -803,7 +773,7 @@ export default function PurchaseOrdersPage() {
               >
                 <option value="">Pilih vendor...</option>
                 {selectableSuppliers.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name} ({s.code}){suspendedFor(s.id).length ? " ⚠ sertifikat ditangguhkan" : ""}</option>
+                  <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
                 ))}
               </select>
               {selectedSupplier && (
@@ -824,9 +794,6 @@ export default function PurchaseOrdersPage() {
                     </span>
                   ))}
                 </div>
-              )}
-              {supplierId && suspendedFor(supplierId).length > 0 && (
-                <p role="alert" className="text-[11px] text-amber-700">Sertifikat ditangguhkan: {suspendedFor(supplierId).join(", ")}. Periksa sebelum menerbitkan PO.</p>
               )}
             </div>
 
