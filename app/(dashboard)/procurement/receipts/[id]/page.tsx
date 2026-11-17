@@ -17,6 +17,9 @@ import {
   ChevronRight,
   ClipboardList,
   Info,
+  Truck,
+  PackageCheck,
+  ClipboardCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -663,6 +666,67 @@ export default function GoodsReceiptDetailPage() {
           <span className="text-slate-600 block mt-0.5 font-mono">
             Plastik: {receipt.plasticTare ?? 0.03} kg/karung
           </span>
+        </div>
+      </div>
+
+      {/* QC Internal Forms Workflow Banner (PBK, CAS, PBD) */}
+      <div className="p-4 rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50/70 via-sky-50/50 to-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-xs text-indigo-950 uppercase tracking-wider">
+              Form QC Internal Terkait Penerimaan Ini
+            </span>
+            <span className="text-[10px] bg-indigo-100 text-indigo-800 font-semibold px-2 py-0.5 rounded border border-indigo-200">
+              Sprint 2
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-600">
+            Setelah LBM diterbitkan, tim QC mengisi formulir verifikasi armada supplier dan pemeriksaan kualitas bahan kemas.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5 text-indigo-700 border-indigo-200 hover:bg-indigo-50 bg-white font-medium"
+            onClick={() =>
+              router.push(
+                `/qc/armada?lbmNo=${encodeURIComponent(receipt.receiptNo)}&goodsReceiptId=${encodeURIComponent(receipt.id)}`
+              )
+            }
+          >
+            <Truck className="h-3.5 w-3.5 text-indigo-600" />
+            Check Armada (CAS)
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5 text-indigo-700 border-indigo-200 hover:bg-indigo-50 bg-white font-medium"
+            onClick={() =>
+              router.push(
+                `/qc/packaging?lbmNo=${encodeURIComponent(receipt.receiptNo)}&goodsReceiptId=${encodeURIComponent(receipt.id)}`
+              )
+            }
+          >
+            <PackageCheck className="h-3.5 w-3.5 text-indigo-600" />
+            Bahan Kemas (PBK)
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5 text-indigo-700 border-indigo-200 hover:bg-indigo-50 bg-white font-medium"
+            onClick={() =>
+              router.push(
+                `/qc/incoming?lbmNo=${encodeURIComponent(receipt.receiptNo)}&goodsReceiptId=${encodeURIComponent(receipt.id)}`
+              )
+            }
+          >
+            <ClipboardCheck className="h-3.5 w-3.5 text-indigo-600" />
+            Bahan Datang (PBD)
+          </Button>
         </div>
       </div>
 
