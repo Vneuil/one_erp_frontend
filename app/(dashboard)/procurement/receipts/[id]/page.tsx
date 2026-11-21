@@ -20,6 +20,7 @@ import {
   Truck,
   PackageCheck,
   ClipboardCheck,
+  Warehouse,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,7 @@ import {
 } from "@/lib/api/procurement";
 import { productsApi, ProductItem } from "@/lib/api/products";
 import { inventoryApi, WarehouseItem } from "@/lib/api/inventory";
+import { rawMaterialStockApi, LBMInboundContext } from "@/lib/api/raw-material-stock";
 import { exportLBMToExcel } from "@/lib/utils/export-lbm-excel";
 
 const PAGE_SIZE = 25;
@@ -61,6 +63,7 @@ export default function GoodsReceiptDetailPage() {
   const [warehouses, setWarehouses] = React.useState<WarehouseItem[]>([]);
   const [productMap, setProductMap] = React.useState<Record<string, ProductItem>>({});
   const [lines, setLines] = React.useState<LineUIState[]>([]);
+  const [lbmCtx, setLbmCtx] = React.useState<LBMInboundContext | null>(null);
 
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
@@ -75,11 +78,12 @@ export default function GoodsReceiptDetailPage() {
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      const [grRes, poRes, whRes, prodRes] = await Promise.all([
+      const [grRes, poRes, whRes, prodRes, ctxRes] = await Promise.all([
         procurementApi.getGoodsReceiptById(receiptId),
         procurementApi.listPurchaseOrders({ perPage: 100 }),
         inventoryApi.listWarehouses({ perPage: 50 }),
         productsApi.list({ perPage: 200 }),
+        rawMaterialStockApi.getLbmContext(receiptId).catch(() => ({ success: false, data: null })),
       ]);
 
       if (!grRes.success || !grRes.data) {
@@ -94,6 +98,9 @@ export default function GoodsReceiptDetailPage() {
       setPurchaseOrders(poRes.data || []);
       setWarehouses(whRes.data || []);
       setReceipt(grRes.data);
+      if (ctxRes.success && ctxRes.data) {
+        setLbmCtx(ctxRes.data);
+      }
 
       // Initialize line states
       const initialLines: LineUIState[] = (grRes.data.lines || []).map((l: GoodsReceiptLineItem) => {
@@ -669,19 +676,24 @@ export default function GoodsReceiptDetailPage() {
         </div>
       </div>
 
-      {/* QC Internal Forms Workflow Banner (PBK, CAS, PBD) */}
-      <div className="p-4 rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50/70 via-sky-50/50 to-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+      {/* QC Internal Forms & Warehouse Put-Away Workflow Banner (CAS, PBK, PBD -> Form SBB) */}
+      <div className="p-4 rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50/70 via-sky-50/50 to-white flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 shadow-xs">
         <div className="space-y-0.5">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="font-bold text-xs text-indigo-950 uppercase tracking-wider">
-              Form QC Internal Terkait Penerimaan Ini
+              Alur QC Internal &amp; Masuk Gudang Bahan Baku
             </span>
             <span className="text-[10px] bg-indigo-100 text-indigo-800 font-semibold px-2 py-0.5 rounded border border-indigo-200">
               Sprint 2
             </span>
+            {lbmCtx && lbmCtx.existingEntries.length > 0 && (
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded border border-emerald-200">
+                Tercatat di Gudang: {lbmCtx.existingEntries.map((x) => x.entryNo).join(", ")}
+              </span>
+            )}
           </div>
           <p className="text-[11px] text-slate-600">
-            Setelah LBM diterbitkan, tim QC mengisi formulir verifikasi armada supplier dan pemeriksaan kualitas bahan kemas.
+            Lengkapi 3 formulir QC (CAS, PBD, PBK), lalu lanjutkan ke pencatatan <strong>Form Stok Gudang Bahan Baku (GDG-002-SBB)</strong> sebelum pembuatan BPB &amp; LBB.
           </p>
         </div>
 
@@ -698,6 +710,11 @@ export default function GoodsReceiptDetailPage() {
           >
             <Truck className="h-3.5 w-3.5 text-indigo-600" />
             Check Armada (CAS)
+            {lbmCtx && lbmCtx.casStatus !== "missing" && (
+              <span className="ml-0.5 px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                {lbmCtx.casStatus}
+              </span>
+            )}
           </Button>
 
           <Button
@@ -712,6 +729,11 @@ export default function GoodsReceiptDetailPage() {
           >
             <PackageCheck className="h-3.5 w-3.5 text-indigo-600" />
             Bahan Kemas (PBK)
+            {lbmCtx && lbmCtx.pbkStatus !== "missing" && (
+              <span className="ml-0.5 px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                {lbmCtx.pbkStatus}
+              </span>
+            )}
           </Button>
 
           <Button
@@ -726,6 +748,27 @@ export default function GoodsReceiptDetailPage() {
           >
             <ClipboardCheck className="h-3.5 w-3.5 text-indigo-600" />
             Bahan Datang (PBD)
+            {lbmCtx && lbmCtx.pbdStatus !== "missing" && (
+              <span className="ml-0.5 px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                {lbmCtx.pbdStatus}
+              </span>
+            )}
+          </Button>
+
+          <Button
+            variant="gradient"
+            size="sm"
+            className="h-8 text-xs gap-1.5 font-semibold"
+            onClick={() =>
+              router.push(
+                `/inventory/raw-material-stock?lbmNo=${encodeURIComponent(receipt.receiptNo)}&goodsReceiptId=${encodeURIComponent(receipt.id)}`
+              )
+            }
+          >
+            <Warehouse className="h-3.5 w-3.5" />
+            {lbmCtx && lbmCtx.existingEntries.length > 0
+              ? "Lihat / Tambah Form SBB"
+              : "Masuk Gudang (Form SBB)"}
           </Button>
         </div>
       </div>

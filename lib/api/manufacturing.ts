@@ -331,6 +331,24 @@ export const manufacturingApi = {
     apiClient<MaterialRequisitionItem>("/manufacturing/requisitions", { method: "POST", body: JSON.stringify(input) }),
   updateRequisitionStatus: async (id: string, input: UpdateRequisitionStatusInput): Promise<ApiResponse<void>> =>
     apiClient<void>(`/manufacturing/requisitions/${id}/status`, { method: "PUT", body: JSON.stringify(input) }),
+  accGudangRequisition: async (id: string, data?: { warehouseApprovedBy?: string; notes?: string }): Promise<ApiResponse<MaterialRequisitionItem>> =>
+    apiClient<MaterialRequisitionItem>(`/manufacturing/requisitions/${id}/acc-gudang`, { method: "POST", body: JSON.stringify(data || {}) }),
+  enterProductionRequisition: async (id: string, data?: { enteredProductionBy?: string; notes?: string }): Promise<ApiResponse<MaterialRequisitionItem>> =>
+    apiClient<MaterialRequisitionItem>(`/manufacturing/requisitions/${id}/enter-production`, { method: "POST", body: JSON.stringify(data || {}) }),
+  rejectRequisition: async (id: string, rejectionReason: string): Promise<ApiResponse<MaterialRequisitionItem>> =>
+    apiClient<MaterialRequisitionItem>(`/manufacturing/requisitions/${id}/reject`, { method: "POST", body: JSON.stringify({ rejectionReason }) }),
+
+  // LBB (Laporan Permintaan Bahan Baku — GDG-013-LBB)
+  listLBBReports: async (params?: { requisitionId?: string; variantType?: string; status?: string }): Promise<ApiResponse<LBBReportItem[]>> =>
+    apiClient<LBBReportItem[]>("/manufacturing/lbb", { params }),
+  getLBBReport: async (id: string): Promise<ApiResponse<LBBReportItem>> =>
+    apiClient<LBBReportItem>(`/manufacturing/lbb/${id}`),
+  createLBBReport: async (input: CreateLBBReportInput): Promise<ApiResponse<LBBReportItem>> =>
+    apiClient<LBBReportItem>("/manufacturing/lbb", { method: "POST", body: JSON.stringify(input) }),
+  updateLBBReport: async (id: string, input: UpdateLBBReportInput): Promise<ApiResponse<LBBReportItem>> =>
+    apiClient<LBBReportItem>(`/manufacturing/lbb/${id}`, { method: "PUT", body: JSON.stringify(input) }),
+  deleteLBBReport: async (id: string): Promise<ApiResponse<void>> =>
+    apiClient<void>(`/manufacturing/lbb/${id}`, { method: "DELETE" }),
 
   // Oven Logs (LHO)
   listOvenLogs: async (params?: { date?: string; ovenNumber?: string }): Promise<ApiResponse<OvenProductionLogItem[]>> =>
@@ -339,6 +357,36 @@ export const manufacturingApi = {
     apiClient<OvenProductionLogItem>(`/manufacturing/oven-logs/${id}`),
   createOvenLog: async (input: CreateOvenLogInput): Promise<ApiResponse<OvenProductionLogItem>> =>
     apiClient<OvenProductionLogItem>("/manufacturing/oven-logs", { method: "POST", body: JSON.stringify(input) }),
+
+  // LHP (Laporan Hasil Produksi — PRO-002-LHP)
+  listLHP: async (params?: { productionOrderId?: string; batchNo?: string; status?: string }): Promise<ApiResponse<ProductionOutputReportItem[]>> =>
+    apiClient<ProductionOutputReportItem[]>("/manufacturing/lhp", { params }),
+  getLHP: async (id: string): Promise<ApiResponse<ProductionOutputReportItem>> =>
+    apiClient<ProductionOutputReportItem>(`/manufacturing/lhp/${id}`),
+  createLHP: async (input: CreateLHPInput): Promise<ApiResponse<ProductionOutputReportItem>> =>
+    apiClient<ProductionOutputReportItem>("/manufacturing/lhp", { method: "POST", body: JSON.stringify(input) }),
+  updateLHP: async (id: string, input: UpdateLHPInput): Promise<ApiResponse<ProductionOutputReportItem>> =>
+    apiClient<ProductionOutputReportItem>(`/manufacturing/lhp/${id}`, { method: "PUT", body: JSON.stringify(input) }),
+  deleteLHP: async (id: string): Promise<ApiResponse<void>> =>
+    apiClient<void>(`/manufacturing/lhp/${id}`, { method: "DELETE" }),
+  generateLSTFromLHP: async (id: string): Promise<ApiResponse<HandoverReportItem>> =>
+    apiClient<HandoverReportItem>(`/manufacturing/lhp/${id}/generate-lst`, { method: "POST" }),
+
+  // LST (Laporan Serah Terima — GDG-009-LST)
+  listLST: async (params?: { lhpId?: string; batchNo?: string; status?: string }): Promise<ApiResponse<HandoverReportItem[]>> =>
+    apiClient<HandoverReportItem[]>("/manufacturing/lst", { params }),
+  getLST: async (id: string): Promise<ApiResponse<HandoverReportItem>> =>
+    apiClient<HandoverReportItem>(`/manufacturing/lst/${id}`),
+  createLST: async (input: CreateLSTInput): Promise<ApiResponse<HandoverReportItem>> =>
+    apiClient<HandoverReportItem>("/manufacturing/lst", { method: "POST", body: JSON.stringify(input) }),
+  updateLST: async (id: string, input: UpdateLSTInput): Promise<ApiResponse<HandoverReportItem>> =>
+    apiClient<HandoverReportItem>(`/manufacturing/lst/${id}`, { method: "PUT", body: JSON.stringify(input) }),
+  deleteLST: async (id: string): Promise<ApiResponse<void>> =>
+    apiClient<void>(`/manufacturing/lst/${id}`, { method: "DELETE" }),
+  verifyLSTByQC: async (id: string): Promise<ApiResponse<HandoverReportItem>> =>
+    apiClient<HandoverReportItem>(`/manufacturing/lst/${id}/verify-qc`, { method: "POST" }),
+  acceptLSTByWarehouse: async (id: string): Promise<ApiResponse<HandoverReportItem>> =>
+    apiClient<HandoverReportItem>(`/manufacturing/lst/${id}/accept-warehouse`, { method: "POST" }),
 };
 
 export interface BatchGenealogyItem {
@@ -360,14 +408,26 @@ export type RequisitionType = "raw_material" | "packaging" | "liquid_sugar";
 
 export interface MaterialRequisitionLineItem {
   id?: string;
+  requisitionId?: string;
+  rawMaterialStockId?: string;
+  sbbEntryNo?: string;
   productId: string;
+  productSku?: string;
   productName: string;
   batchNo?: string;
+  supplierName?: string;
+  arrivalDateRef?: string;
+  rackLocation?: string;
+  palletNo?: string;
+  moistureContent?: number;
   quantityRequested: number;
   quantityIssued: number;
   quantityUsed: number;
   quantityReject: number;
   quantityReturned: number;
+  packageCountRequested?: number;
+  packageCountIssued?: number;
+  packageUnit?: string;
   uom: string;
   notes?: string;
 }
@@ -383,25 +443,139 @@ export interface LiquidSugarDispensingItem {
   notes?: string;
 }
 
+export interface LBBBagEntryItem {
+  id?: string;
+  reportId?: string;
+  rowNumber: number;
+  columnGroup: number;
+  lotCode?: string;
+  weightValue?: number | null;
+}
+
+export interface LBBReportItem {
+  id: string;
+  reportNo: string;
+  documentCode: string;
+  requisitionId?: string;
+  requisitionLineId?: string;
+  bpbNo?: string;
+  rawMaterialStockId?: string;
+  sbbEntryNo?: string;
+  productionOrderId?: string;
+  orderNumber?: string;
+  reportDate: string;
+  variantType: "GSKN" | "VCO" | string;
+  fairtradeStatus: string;
+  productId: string;
+  materialCode: string;
+  productName: string;
+  supplierName?: string;
+  customerName?: string;
+  machineNo?: string;
+  meshSize?: string;
+  uom: string;
+  plasticTarePerBag: number;
+  totalBags: number;
+  totalGrossWeight: number;
+  totalPlasticTare: number;
+  totalNetWeight: number;
+  operatorRole: string;
+  preparedBy?: string;
+  preparedDate?: string;
+  acknowledgedBy?: string;
+  acknowledgedDate?: string;
+  status: "draft" | "submitted" | "approved" | string;
+  notes?: string;
+  bagEntries?: LBBBagEntryItem[];
+  createdAt: string;
+}
+
+export interface CreateLBBBagEntryInput {
+  rowNumber: number;
+  columnGroup?: number;
+  lotCode?: string;
+  weightValue?: number | null;
+}
+
+export interface CreateLBBReportInput {
+  requisitionId?: string;
+  requisitionLineId?: string;
+  bpbNo?: string;
+  rawMaterialStockId?: string;
+  sbbEntryNo?: string;
+  productionOrderId?: string;
+  orderNumber?: string;
+  reportDate: string;
+  variantType: string;
+  fairtradeStatus?: string;
+  productId: string;
+  materialCode: string;
+  productName: string;
+  supplierName?: string;
+  customerName?: string;
+  machineNo?: string;
+  meshSize?: string;
+  uom?: string;
+  plasticTarePerBag?: number;
+  operatorRole?: string;
+  preparedBy?: string;
+  preparedDate?: string;
+  acknowledgedBy?: string;
+  acknowledgedDate?: string;
+  notes?: string;
+  bagEntries?: CreateLBBBagEntryInput[];
+}
+
+export interface UpdateLBBReportInput {
+  reportDate?: string;
+  customerName?: string;
+  machineNo?: string;
+  meshSize?: string;
+  plasticTarePerBag?: number;
+  operatorRole?: string;
+  preparedBy?: string;
+  preparedDate?: string;
+  acknowledgedBy?: string;
+  acknowledgedDate?: string;
+  notes?: string;
+  bagEntries?: CreateLBBBagEntryInput[];
+}
+
 export interface MaterialRequisitionItem {
   id: string;
   requestNo: string;
+  documentCode?: string;
   requisitionType: RequisitionType;
+  materialCategory?: string;
+  fairtradeStatus?: string;
+  warehouseId?: string;
   productionOrderId?: string;
   orderNumber?: string;
   requestDate: string;
   department: string;
   requestedBy: string;
   issuedBy?: string;
-  status: "draft" | "submitted" | "issued" | "completed" | "cancelled";
+  issuedAt?: string;
+  warehouseApprovedBy?: string;
+  warehouseApprovedAt?: string;
+  enteredProductionBy?: string;
+  enteredProductionAt?: string;
+  rejectionReason?: string;
+  status: "draft" | "submitted" | "lbb_recorded" | "warehouse_approved" | "in_production" | "completed" | "rejected" | "issued" | "cancelled" | string;
+  stockDeducted?: boolean;
   notes?: string;
   lines?: MaterialRequisitionLineItem[];
   dispensingItems?: LiquidSugarDispensingItem[];
+  lbbReports?: LBBReportItem[];
   createdAt: string;
 }
 
 export interface CreateRequisitionInput {
   requisitionType: RequisitionType;
+  documentCode?: string;
+  materialCategory?: string;
+  fairtradeStatus?: string;
+  warehouseId?: string;
   productionOrderId?: string;
   orderNumber?: string;
   requestDate: string;
@@ -461,5 +635,182 @@ export interface CreateOvenLogInput {
   shift: string;
   notes?: string;
   cycles: OvenCycleItem[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LHP (PRO-002-LHP) & LST (GDG-009-LST) Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ProductionOutputReportDetailItem {
+  id?: string;
+  reportId?: string;
+  itemNo: number;
+  rawMaterialCode: string;
+  productName: string;
+  batchNo: string;
+  unitPcs: number;
+  primaryPackagingType?: string;
+  primaryPackagingCode?: string;
+  secondaryPackagingType?: string;
+  secondaryPackagingCode?: string;
+  weightPerPackKg: number;
+  totalWeightKg: number;
+  stickerNo?: string;
+  remainingStockKg?: number;
+  buyerName?: string;
+  notes?: string;
+}
+
+export interface ProductionOutputReportItem {
+  id: string;
+  reportNo: string;
+  productionOrderId?: string;
+  orderNumber?: string;
+  fairtradeStatus: string;
+  certifications: string;
+  packingDate: string;
+  packingStartTime?: string;
+  packingEndTime?: string;
+  evaluationNotes?: string;
+  productionPic: string;
+  productionSignDate?: string;
+  adminPic: string;
+  adminSignDate?: string;
+  status: "draft" | "completed" | "transferred" | string;
+  totalWeightKg: number;
+  totalQuantityPcs: number;
+  items?: ProductionOutputReportDetailItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateLHPItemInput {
+  itemNo?: number;
+  rawMaterialCode: string;
+  productName: string;
+  batchNo: string;
+  unitPcs: number;
+  primaryPackagingType?: string;
+  primaryPackagingCode?: string;
+  secondaryPackagingType?: string;
+  secondaryPackagingCode?: string;
+  weightPerPackKg: number;
+  totalWeightKg?: number;
+  stickerNo?: string;
+  remainingStockKg?: number;
+  buyerName?: string;
+  notes?: string;
+}
+
+export interface CreateLHPInput {
+  productionOrderId?: string;
+  orderNumber?: string;
+  fairtradeStatus: string;
+  certifications?: string;
+  packingDate: string;
+  packingStartTime?: string;
+  packingEndTime?: string;
+  evaluationNotes?: string;
+  productionPic?: string;
+  productionSignDate?: string;
+  adminPic?: string;
+  adminSignDate?: string;
+  items: CreateLHPItemInput[];
+}
+
+export interface UpdateLHPInput {
+  fairtradeStatus?: string;
+  certifications?: string;
+  packingDate?: string;
+  packingStartTime?: string;
+  packingEndTime?: string;
+  evaluationNotes?: string;
+  productionPic?: string;
+  productionSignDate?: string;
+  adminPic?: string;
+  adminSignDate?: string;
+  status?: string;
+  items?: CreateLHPItemInput[];
+}
+
+export interface HandoverReportDetailItem {
+  id?: string;
+  reportId?: string;
+  itemNo: number;
+  itemName: string;
+  itemCode: string;
+  batchNo: string;
+  unitKg: number;
+  packaging: string;
+  buyerName?: string;
+  quantityPcs: number;
+  notes?: string;
+}
+
+export interface HandoverReportItem {
+  id: string;
+  reportNo: string;
+  lhpId?: string;
+  lhpReportNo?: string;
+  fairtradeStatus: string;
+  fromDepartment: string;
+  toDepartment: string;
+  handoverDate: string;
+  notes?: string;
+  handedOverBy: string;
+  handedOverSignDate?: string;
+  verifiedByQc?: string;
+  verifiedSignDate?: string;
+  receivedByWarehouse?: string;
+  receivedSignDate?: string;
+  status: "draft" | "verified_qc" | "accepted_warehouse" | "rejected" | string;
+  totalQuantityPcs: number;
+  totalWeightKg: number;
+  items?: HandoverReportDetailItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateLSTItemInput {
+  itemNo?: number;
+  itemName: string;
+  itemCode: string;
+  batchNo: string;
+  unitKg: number;
+  packaging: string;
+  buyerName?: string;
+  quantityPcs: number;
+  notes?: string;
+}
+
+export interface CreateLSTInput {
+  lhpId?: string;
+  lhpReportNo?: string;
+  fairtradeStatus: string;
+  fromDepartment?: string;
+  toDepartment?: string;
+  handoverDate: string;
+  notes?: string;
+  handedOverBy?: string;
+  handedOverSignDate?: string;
+  verifiedByQc?: string;
+  verifiedSignDate?: string;
+  receivedByWarehouse?: string;
+  receivedSignDate?: string;
+  items: CreateLSTItemInput[];
+}
+
+export interface UpdateLSTInput {
+  fairtradeStatus?: string;
+  handoverDate?: string;
+  notes?: string;
+  handedOverBy?: string;
+  handedOverSignDate?: string;
+  verifiedByQc?: string;
+  verifiedSignDate?: string;
+  receivedByWarehouse?: string;
+  receivedSignDate?: string;
+  status?: string;
+  items?: CreateLSTItemInput[];
 }
 

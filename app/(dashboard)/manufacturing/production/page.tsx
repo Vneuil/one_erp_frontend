@@ -134,6 +134,41 @@ export default function ProductionRunPage() {
     <div className="space-y-6">
       <PageHeader title="Live Production Floor Execution" description="Catat output tiap proses, selesaikan unit yang sudah melewati seluruh rute, dan jeda atau lanjutkan order." />
 
+      {/* Production & QC Flow Navigation Bar */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+        <span className="font-semibold text-muted-foreground whitespace-nowrap">Alur Proses:</span>
+        <Link href="/manufacturing/requisitions" className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground font-medium whitespace-nowrap">
+          1. Permintaan Bahan (BPB/LBB)
+        </Link>
+        <Link href="/qc/sieving" className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground font-medium whitespace-nowrap">
+          2. Ayak Mentah/Matang (MNA/CMT/MNM)
+        </Link>
+        <Link href="/qc/oven" className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground font-medium whitespace-nowrap">
+          3. Pengeringan Oven (MNO)
+        </Link>
+        <Link href="/qc/packing" className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground font-medium whitespace-nowrap">
+          4. Ruang Packing (MNJ/MNG)
+        </Link>
+        <Link href="/qc/metal-detector" className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground font-medium whitespace-nowrap">
+          5. Metal Detector CCP (CPP/VMD)
+        </Link>
+        <Link href="/qc/finished-goods" className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground font-medium whitespace-nowrap">
+          6. Produk Jadi (PJD)
+        </Link>
+        <Link href="/manufacturing/lhp" className="px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold border border-emerald-200 whitespace-nowrap">
+          7. Hasil Produksi (LHP)
+        </Link>
+        <Link href="/inventory/lst" className="px-2.5 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold border border-blue-200 whitespace-nowrap">
+          8. Serah Terima WIP (LST)
+        </Link>
+        <Link href="/qc/label-inspection" className="px-2.5 py-1 rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold border border-indigo-200 whitespace-nowrap">
+          9. Label Kemasan (PLK)
+        </Link>
+        <Link href="/qc/container" className="px-2.5 py-1 rounded bg-purple-50 text-purple-700 hover:bg-purple-100 font-bold border border-purple-200 whitespace-nowrap">
+          10. Kontainer Ekspor (CCO)
+        </Link>
+      </div>
+
       {loadError && <div role="alert" className="px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">{loadError}</div>}
       {notice && (
         <div role={notice.kind === "error" ? "alert" : "status"} className={`px-3 py-2 rounded-lg border text-xs font-medium ${notice.kind === "error" ? "bg-rose-50 border-rose-200 text-rose-700" : "bg-emerald-50 border-emerald-200 text-emerald-800"}`}>{notice.text}</div>
@@ -235,6 +270,51 @@ export default function ProductionRunPage() {
                                     <ShieldAlert className="h-2.5 w-2.5" /> Wajib QC Gate
                                   </span>
                                 )
+                              )}
+                              {s.name.toLowerCase().includes("ayak") && (
+                                <Link
+                                  href="/qc/sieving"
+                                  className="inline-flex items-center gap-1 text-[9px] font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 px-1.5 py-0.5 rounded"
+                                  title="Form MNA (Proses Ayak), CMT (Magnet Trap), MNM (Mur & Baut)"
+                                >
+                                  QC Ayak (MNA/CMT/MNM)
+                                </Link>
+                              )}
+                              {s.name.toLowerCase().includes("oven") && (
+                                <Link
+                                  href="/qc/oven"
+                                  className="inline-flex items-center gap-1 text-[9px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded"
+                                  title="Form MNO (Monitoring Suhu & Kadar Air Oven)"
+                                >
+                                  QC Oven (MNO)
+                                </Link>
+                              )}
+                              {(s.name.toLowerCase().includes("pack") || s.name.toLowerCase().includes("kemas")) && (
+                                <>
+                                  <Link
+                                    href="/qc/packing"
+                                    className="inline-flex items-center gap-1 text-[9px] font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-1.5 py-0.5 rounded"
+                                    title="Form MNJ (Jarum Jahit) & MNG (Gunting)"
+                                  >
+                                    QC Packing (MNJ/MNG)
+                                  </Link>
+                                  <Link
+                                    href="/qc/metal-detector"
+                                    className="inline-flex items-center gap-1 text-[9px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-1.5 py-0.5 rounded"
+                                    title="Form CPP (Pembersihan) & VMD (Verifikasi CCP Fe/Non-Fe/SS)"
+                                  >
+                                    Metal Detector (CPP/VMD)
+                                  </Link>
+                                </>
+                              )}
+                              {(s.name.toLowerCase().includes("qc") || s.name.toLowerCase().includes("jadi") || s.name.toLowerCase().includes("final")) && (
+                                <Link
+                                  href="/qc/finished-goods"
+                                  className="inline-flex items-center gap-1 text-[9px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded"
+                                  title="Form QC-004-PJD.05 Pemeriksaan Kualitas Produk Jadi"
+                                >
+                                  QC Produk Jadi (PJD)
+                                </Link>
                               )}
                             </div>
                             {!isSkipped && (
