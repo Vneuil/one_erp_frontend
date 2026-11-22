@@ -387,6 +387,8 @@ export const manufacturingApi = {
     apiClient<HandoverReportItem>(`/manufacturing/lst/${id}/verify-qc`, { method: "POST" }),
   acceptLSTByWarehouse: async (id: string): Promise<ApiResponse<HandoverReportItem>> =>
     apiClient<HandoverReportItem>(`/manufacturing/lst/${id}/accept-warehouse`, { method: "POST" }),
+  generateSerialNumbers: async (data: { batchNo: string; supplierCode?: string; quantity: number; format?: string }): Promise<ApiResponse<{ batchNo: string; serials: string[]; count: number }>> =>
+    apiClient<{ batchNo: string; serials: string[]; count: number }>("/manufacturing/serial-numbers/generate", { method: "POST", body: JSON.stringify(data) }),
 };
 
 export interface BatchGenealogyItem {

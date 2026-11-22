@@ -115,7 +115,6 @@ export const navigationConfig: NavGroup[] = [
           { title: "Transaksi Stock", href: "/inventory/stock-documents" },
           { title: "Stock Opname", href: "/inventory/stock-opname" },
           { title: "Analisa Umur Stock", href: "/inventory/reports" },
-          { title: "Alur Sprint 2 (LBM → LST)", href: "/manufacturing/sprint2-flow", badge: "Wizard" },
           { title: "Laporan Serah Terima (LST)", href: "/inventory/lst" },
           { title: "Penerimaan Barang Jadi", href: "/inventory/transfers" },
         ],
@@ -124,7 +123,7 @@ export const navigationConfig: NavGroup[] = [
         title: "Produksi",
         icon: Factory,
         items: [
-          { title: "Alur Sprint 2 (LBM → LST)", href: "/manufacturing/sprint2-flow", badge: "End-to-End" },
+          { title: "Inventory & Production End to End", href: "/manufacturing/inventory-production-flow" },
           { title: "Bill of Material", href: "/manufacturing/bom" },
           { title: "Order Produksi", href: "/manufacturing/production-orders" },
           { title: "Layar Produksi", href: "/manufacturing/production" },
