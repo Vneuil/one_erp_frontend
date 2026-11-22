@@ -36,6 +36,7 @@ import { productsApi, ProductItem } from "@/lib/api/products";
 import { inventoryApi, WarehouseItem } from "@/lib/api/inventory";
 import { rawMaterialStockApi, LBMInboundContext } from "@/lib/api/raw-material-stock";
 import { exportLBMToExcel } from "@/lib/utils/export-lbm-excel";
+import { printLBMExcelDocument } from "@/lib/utils/print-lbm-excel";
 
 const PAGE_SIZE = 25;
 
@@ -315,213 +316,12 @@ export default function GoodsReceiptDetailPage() {
   // Cetak Dokumen Resmi GDG-001-LBM (Sesuai format Excel referensi)
   const handlePrintLBM = () => {
     if (!receipt) return;
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      alert("Gagal membuka jendela cetak. Izinkan popup browser untuk mencetak laporan.");
-      return;
-    }
-
-    const COLS = 6; // 6 kolom kemasan paralel
-    const plasticTare = receipt.plasticTare ?? 0.03;
-
-    let tablesHtml = "";
-    lines.forEach((line) => {
-      const entries = line.entries;
-      const count = entries.length;
-      if (count === 0) return;
-
-      const rowsPerCol = Math.max(1, Math.ceil(count / COLS));
-      const colGroups: BagEntryItem[][] = Array.from({ length: COLS }, (_, ci) =>
-        entries.slice(ci * rowsPerCol, (ci + 1) * rowsPerCol)
-      );
-
-      // Header row: No & Berat (kg) 6x
-      let headerThs = "";
-      for (let c = 0; c < COLS; c++) {
-        headerThs += `
-          <th style="border: 1px solid #000; padding: 3px 4px; text-align: center; width: 26px; font-size: 8pt; background: #f1f5f9;">No</th>
-          <th style="border: 1px solid #000; padding: 3px 6px; text-align: center; width: 55px; font-size: 8pt; background: #f1f5f9;">Berat (kg)</th>
-        `;
-        if (c < COLS - 1) {
-          headerThs += `<th style="width: 6px; border: none;"></th>`;
-        }
-      }
-
-      // Data rows
-      let dataRows = "";
-      for (let r = 0; r < rowsPerCol; r++) {
-        let row = "<tr>";
-        for (let c = 0; c < COLS; c++) {
-          const item = colGroups[c][r];
-          if (item) {
-            row += `
-              <td style="border: 1px solid #000; padding: 2px 3px; text-align: center; font-size: 8pt; font-family: monospace;">${item.rowNumber}</td>
-              <td style="border: 1px solid #000; padding: 2px 4px; text-align: right; font-size: 8pt; font-family: monospace; font-weight: ${item.weightActual !== null ? "bold" : "normal"};">
-                ${item.weightActual !== null ? item.weightActual.toFixed(2) : ""}
-              </td>
-            `;
-          } else {
-            row += `<td style="border: 1px solid #ccc;"></td><td style="border: 1px solid #ccc;"></td>`;
-          }
-          if (c < COLS - 1) {
-            row += `<td style="border: none; width: 6px;"></td>`;
-          }
-        }
-        row += "</tr>";
-        dataRows += row;
-      }
-
-      // Subtotals per column
-      let subtotalRow = "<tr style='font-weight: bold; background: #fafafa;'>";
-      for (let c = 0; c < COLS; c++) {
-        const colSum = colGroups[c].reduce((s, e) => s + (e.weightActual ?? 0), 0);
-        subtotalRow += `
-          <td style="border: 1px solid #000; padding: 3px 4px; text-align: right; font-size: 8pt;" colspan="2">
-            ${colSum > 0 ? colSum.toFixed(2) : "-"}
-          </td>
-        `;
-        if (c < COLS - 1) {
-          subtotalRow += `<td style="border: none;"></td>`;
-        }
-      }
-      subtotalRow += "</tr>";
-
-      tablesHtml += `
-        <div style="margin-top: 12px; page-break-inside: avoid;">
-          <div style="font-weight: bold; font-size: 9pt; margin-bottom: 4px; color: #0f766e;">
-            Rincian Karung: ${line.productName} (Target: ${line.packageSize} kg/karung, Total ${count} Kemasan)
-          </div>
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
-            <thead><tr>${headerThs}</tr></thead>
-            <tbody>${dataRows}${subtotalRow}</tbody>
-          </table>
-        </div>
-      `;
+    printLBMExcelDocument({
+      receipt,
+      lines,
+      vendorName: referencedPo?.supplierName || "-",
+      warehouseName: referencedWh?.name || "-",
     });
-
-    const allEntries = lines.flatMap((l) => l.entries);
-    const grandTotal = allEntries.reduce((s, e) => s + (e.weightActual ?? 0), 0);
-    const totalBags = allEntries.length;
-    const netAfterPlastic = Math.max(0, grandTotal - plasticTare * totalBags);
-    const sjTotal = lines.reduce((s, l) => s + l.weightNet, 0);
-    const diffSj = Math.abs(netAfterPlastic - sjTotal);
-    const isSesuai = sjTotal > 0 && diffSj / sjTotal <= 0.01;
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>LAPORAN BARANG MASUK (LBM) - ${receipt.receiptNo}</title>
-        <style>
-          @page { size: A4 portrait; margin: 0.8cm; }
-          body { font-family: Arial, sans-serif; font-size: 9pt; color: #1e293b; line-height: 1.3; }
-          .kop { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 8px; }
-          .kop-left { font-size: 8pt; }
-          .kop-left strong { font-size: 11pt; color: #000; }
-          .kop-right { text-align: right; font-size: 8pt; font-weight: bold; }
-          .lbm-title { text-align: center; font-size: 12pt; font-weight: bold; border: 2px solid #000; padding: 6px; margin: 8px 0; background: #f8fafc; }
-          .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 8.5pt; }
-          .meta-table td { padding: 2px 4px; vertical-align: top; }
-          .meta-label { font-weight: bold; width: 120px; }
-          .footer-box { border: 1px solid #000; padding: 6px 10px; margin-top: 10px; background: #f8fafc; font-size: 8.5pt; }
-          .signatures { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 35px; text-align: center; font-size: 8.5pt; page-break-inside: avoid; }
-          .sig-box { border-top: 1px solid #000; padding-top: 4px; margin-top: 45px; font-weight: bold; }
-          @media print { body { padding: 0; } }
-        </style>
-      </head>
-      <body>
-        <div class="kop">
-          <div class="kop-left">
-            <strong>CV. Manna Anugerah Sejahtera</strong><br/>
-            CU 820674 D-11 &bull; 104464OC &bull; FLO-ID 43683
-          </div>
-          <div class="kop-right">
-            GDG-001-LBM<br/>
-            Revisi 00
-          </div>
-        </div>
-
-        <div class="lbm-title">
-          LAPORAN RINCI BARANG MASUK / DETAIL INCOMING GOODS REPORT<br/>
-          <span style="font-size: 10pt; font-weight: normal;">(LBM)</span>
-        </div>
-
-        <table class="meta-table">
-          <tr>
-            <td class="meta-label">Asal Bahan Baku:</td>
-            <td>${referencedPo?.supplierName || "-"}</td>
-            <td class="meta-label">Jenis Gula:</td>
-            <td>${lines[0]?.productName || "-"}</td>
-          </tr>
-          <tr>
-            <td class="meta-label">Kondisi Gula:</td>
-            <td>${receipt.sugarCondition || "Kering, Bersih, Sesuai Standar"}</td>
-            <td class="meta-label">Kondisi Kemasan:</td>
-            <td>${receipt.packageCondition || "Utuh, Tidak Rusak"}</td>
-          </tr>
-          <tr>
-            <td class="meta-label">Tanggal:</td>
-            <td>${receipt.receivedDate || "-"}</td>
-            <td class="meta-label">No. Surat Jalan:</td>
-            <td style="font-weight: bold;">${receipt.deliveryNoteNo || "-"}</td>
-          </tr>
-          <tr>
-            <td class="meta-label">No. LBM:</td>
-            <td style="font-family: monospace; font-weight: bold;">${receipt.receiptNo}</td>
-            <td class="meta-label">Berat Plastik:</td>
-            <td>${plasticTare.toFixed(3)} kg/karung</td>
-          </tr>
-          <tr>
-            <td class="meta-label">Gudang Tujuan:</td>
-            <td>${referencedWh?.name || "-"}</td>
-            <td class="meta-label">Ref. PO:</td>
-            <td style="font-family: monospace;">${referencedPo?.orderNo || "-"}</td>
-          </tr>
-        </table>
-
-        ${tablesHtml}
-
-        <div class="footer-box">
-          <table style="width: 100%; border-collapse: collapse; font-size: 8.5pt;">
-            <tr>
-              <td style="width: 25%;"><strong>Grand Total Bruto Timbang:</strong></td>
-              <td style="width: 25%; font-family: monospace; font-weight: bold;">${grandTotal.toFixed(2)} kg</td>
-              <td style="width: 25%;"><strong>Netto Setelah Berat Plastik:</strong></td>
-              <td style="width: 25%; font-family: monospace; font-weight: bold; color: #0f766e;">${netAfterPlastic.toFixed(2)} kg</td>
-            </tr>
-            <tr>
-              <td><strong>Qty Surat Jalan Supplier:</strong></td>
-              <td style="font-family: monospace;">${sjTotal.toFixed(2)} kg</td>
-              <td><strong>Bandingkan Surat Jalan:</strong></td>
-              <td style="font-weight: bold; color: ${isSesuai ? "#16a34a" : "#dc2626"};">
-                ${isSesuai ? "SESUAI" : "TIDAK SESUAI (SELISIH " + diffSj.toFixed(2) + " kg)"}
-              </td>
-            </tr>
-          </table>
-        </div>
-
-        <div class="signatures">
-          <div>
-            <div>Diserahkan Oleh (Supir / Vendor)</div>
-            <div class="sig-box">( ${referencedPo?.supplierName || "Supir / Vendor"} )</div>
-          </div>
-          <div>
-            <div>Diperiksa Oleh (QC Inbound)</div>
-            <div class="sig-box">( Staff QC )</div>
-          </div>
-          <div>
-            <div>Dibuat Oleh (Admin Gudang)</div>
-            <div class="sig-box">( ${receipt.receivedBy || "Admin Gudang"} )</div>
-          </div>
-        </div>
-
-        <script>
-          window.onload = function() { window.print(); };
-        </script>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
   };
 
   if (isLoading) {
@@ -590,9 +390,9 @@ export default function GoodsReceiptDetailPage() {
             size="sm"
             className="h-8 text-xs gap-1.5 text-slate-700 border-slate-300 hover:bg-slate-50"
             onClick={handlePrintLBM}
-            title="Cetak Laporan Format GDG-001-LBM"
+            title="Cetak Dokumen Resmi LBM Format GDG-001 (Sesuai Template Excel)"
           >
-            <Printer className="h-3.5 w-3.5 text-slate-500" /> Cetak LBM (GD-001)
+            <Printer className="h-3.5 w-3.5 text-slate-500" /> Cetak LBM
           </Button>
 
           {receipt.status === "draft" && (
@@ -682,9 +482,6 @@ export default function GoodsReceiptDetailPage() {
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-bold text-xs text-indigo-950 uppercase tracking-wider">
               Alur QC Internal &amp; Masuk Gudang Bahan Baku
-            </span>
-            <span className="text-[10px] bg-indigo-100 text-indigo-800 font-semibold px-2 py-0.5 rounded border border-indigo-200">
-              Sprint 2
             </span>
             {lbmCtx && lbmCtx.existingEntries.length > 0 && (
               <span className="text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded border border-emerald-200">

@@ -513,6 +513,50 @@ export const qcApi = {
   deleteContainerChecklist: async (id: string): Promise<ApiResponse<{ id: string }>> => {
     return apiClient<{ id: string }>(`/qc/container/cco/${id}`, { method: "DELETE" });
   },
+
+  // ─── Brontol & Reject Return Reports (Form REP-013-KSB) ──────────────────────
+  listBrontolReports: async (params?: {
+    month?: string;
+    stage?: string;
+    action?: string;
+    status?: string;
+    search?: string;
+  }): Promise<ApiResponse<BrontolReportItem[]>> => {
+    return apiClient<BrontolReportItem[]>("/qc/brontol", { params });
+  },
+  getBrontolReport: async (id: string): Promise<ApiResponse<BrontolReportItem>> => {
+    return apiClient<BrontolReportItem>(`/qc/brontol/${id}`);
+  },
+  createBrontolReport: async (input: CreateBrontolReportInput): Promise<ApiResponse<BrontolReportItem>> => {
+    return apiClient<BrontolReportItem>("/qc/brontol", { method: "POST", body: JSON.stringify(input) });
+  },
+  updateBrontolReport: async (id: string, input: UpdateBrontolReportInput): Promise<ApiResponse<BrontolReportItem>> => {
+    return apiClient<BrontolReportItem>(`/qc/brontol/${id}`, { method: "PUT", body: JSON.stringify(input) });
+  },
+  deleteBrontolReport: async (id: string): Promise<ApiResponse<{ id: string }>> => {
+    return apiClient<{ id: string }>(`/qc/brontol/${id}`, { method: "DELETE" });
+  },
+  getBrontolStats: async (): Promise<ApiResponse<BrontolStats>> => {
+    return apiClient<BrontolStats>("/qc/brontol/stats");
+  },
+  getBrontolStockCard: async (params?: { month?: string; productCode?: string }): Promise<ApiResponse<BrontolStockCardItem[]>> => {
+    return apiClient<BrontolStockCardItem[]>("/qc/brontol/stock-card", { params });
+  },
+  createRejectReturn: async (id: string, input: CreateRejectReturnInput): Promise<ApiResponse<RejectReturnItem>> => {
+    return apiClient<RejectReturnItem>(`/qc/brontol/${id}/return`, { method: "POST", body: JSON.stringify(input) });
+  },
+  listRejectReturns: async (params?: { month?: string; status?: string; search?: string }): Promise<ApiResponse<RejectReturnItem[]>> => {
+    return apiClient<RejectReturnItem[]>("/qc/brontol/returns", { params });
+  },
+  getRejectReturn: async (id: string): Promise<ApiResponse<RejectReturnItem>> => {
+    return apiClient<RejectReturnItem>(`/qc/brontol/returns/${id}`);
+  },
+  updateRejectReturn: async (id: string, input: UpdateRejectReturnInput): Promise<ApiResponse<RejectReturnItem>> => {
+    return apiClient<RejectReturnItem>(`/qc/brontol/returns/${id}`, { method: "PUT", body: JSON.stringify(input) });
+  },
+  deleteRejectReturn: async (id: string): Promise<ApiResponse<{ id: string }>> => {
+    return apiClient<{ id: string }>(`/qc/brontol/returns/${id}`, { method: "DELETE" });
+  },
 };
 
 export const qcFormsApi = qcApi;
@@ -1793,3 +1837,205 @@ export interface UpdateContainerChecklistInput {
   overallDecision?: string;
   notes?: string;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Brontol & Reject Return Types (Form REP-013-KSB)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface RejectReturnItem {
+  id: string;
+  brontolReportId: string;
+  returnNo: string;
+  documentCode: string;
+  returnDate: string;
+  supplierId?: string;
+  supplierName: string;
+  poNo?: string;
+  goodsReceiptNo?: string;
+  deliveryNoteNo?: string;
+  productName: string;
+  productCode?: string;
+  batchNo: string;
+  returnQuantity: number;
+  unit: string;
+  unitPrice?: number;
+  estimatedValue?: number;
+  returnReason: string;
+  courierName?: string;
+  vehicleNumber?: string;
+  driverName?: string;
+  preparedBy: string;
+  approvedBy?: string;
+  receivedBySupplier?: string;
+  shippedDate?: string;
+  completedDate?: string;
+  status: "pending_pickup" | "shipped" | "completed" | "cancelled";
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BrontolReportItem {
+  id: string;
+  reportNo: string;
+  documentCode: string;
+  reportDate: string;
+  reportMonth: string;
+  sourceStage:
+    | "incoming_raw_material"
+    | "incoming_packaging"
+    | "sieving"
+    | "magnet_trap"
+    | "mesh_bolt"
+    | "oven"
+    | "metal_detector"
+    | "finished_goods"
+    | "label_packaging"
+    | "production_step"
+    | "manual";
+  sourceInspectionId?: string;
+  sourceInspectionNo?: string;
+  productionOrderId?: string;
+  orderNumber?: string;
+  productId?: string;
+  productName: string;
+  productCode?: string;
+  batchNo: string;
+  materialType: "BM" | "BO" | "BK" | "FG" | "WIP" | string;
+  supplierId?: string;
+  supplierName?: string;
+  machineNo?: string;
+  meshSize?: string;
+  quantity: number;
+  unit: string;
+  defectReason: string;
+  actionDisposition: "return_to_supplier" | "rework" | "re_oven" | "disposal" | "hold" | string;
+  operatorName?: string;
+  qcInspectorName?: string;
+  status: "recorded" | "returned" | "reprocessed" | "disposed" | "closed" | string;
+  notes?: string;
+  isReturn: boolean;
+  returnReport?: RejectReturnItem;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateBrontolReportInput {
+  reportDate: string;
+  sourceStage: string;
+  sourceInspectionId?: string;
+  sourceInspectionNo?: string;
+  productionOrderId?: string;
+  orderNumber?: string;
+  productId?: string;
+  productName: string;
+  productCode?: string;
+  batchNo: string;
+  materialType?: string;
+  supplierId?: string;
+  supplierName?: string;
+  machineNo?: string;
+  meshSize?: string;
+  quantity: number;
+  unit?: string;
+  defectReason: string;
+  actionDisposition: string;
+  operatorName?: string;
+  qcInspectorName?: string;
+  notes?: string;
+  createReturn?: CreateRejectReturnInput;
+}
+
+export interface UpdateBrontolReportInput {
+  reportDate?: string;
+  productName?: string;
+  productCode?: string;
+  batchNo?: string;
+  materialType?: string;
+  supplierId?: string;
+  supplierName?: string;
+  machineNo?: string;
+  meshSize?: string;
+  quantity?: number;
+  unit?: string;
+  defectReason?: string;
+  actionDisposition?: string;
+  operatorName?: string;
+  qcInspectorName?: string;
+  status?: string;
+  notes?: string;
+}
+
+export interface CreateRejectReturnInput {
+  returnDate: string;
+  supplierId?: string;
+  supplierName: string;
+  poNo?: string;
+  goodsReceiptNo?: string;
+  deliveryNoteNo?: string;
+  returnQuantity: number;
+  unit?: string;
+  unitPrice?: number;
+  estimatedValue?: number;
+  returnReason: string;
+  courierName?: string;
+  vehicleNumber?: string;
+  driverName?: string;
+  preparedBy: string;
+  approvedBy?: string;
+  notes?: string;
+}
+
+export interface UpdateRejectReturnInput {
+  returnDate?: string;
+  supplierName?: string;
+  poNo?: string;
+  goodsReceiptNo?: string;
+  deliveryNoteNo?: string;
+  returnQuantity?: number;
+  unitPrice?: number;
+  estimatedValue?: number;
+  returnReason?: string;
+  courierName?: string;
+  vehicleNumber?: string;
+  driverName?: string;
+  approvedBy?: string;
+  receivedBySupplier?: string;
+  shippedDate?: string;
+  completedDate?: string;
+  status?: string;
+  notes?: string;
+}
+
+export interface BrontolStats {
+  totalCount: number;
+  totalQuantityKg: number;
+  returnCount: number;
+  returnQtyKg: number;
+  reworkCount: number;
+}
+
+export interface BrontolStockCardItem {
+  id: string;
+  rowNo: number;
+  reportNo: string;
+  batchNo: string;
+  productCode?: string;
+  productName: string;
+  isBM: boolean;
+  isBO: boolean;
+  inDate: string;
+  inQty: number;
+  outDate?: string;
+  outQty: number;
+  balanceQty: number;
+  machineNo?: string;
+  meshSize?: string;
+  operatorName?: string;
+  actionDisposition: string;
+  status: string;
+  hasReturnReport: boolean;
+  returnNo?: string;
+  supplierName?: string;
+}
+

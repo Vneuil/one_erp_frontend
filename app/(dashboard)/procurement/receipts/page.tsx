@@ -20,6 +20,7 @@ import { inventoryApi, WarehouseItem } from "@/lib/api/inventory";
 import { productsApi, ProductItem, isProductActive } from "@/lib/api/products";
 import { useAppStore } from "@/stores/app-store";
 import { exportLBMToExcel } from "@/lib/utils/export-lbm-excel";
+import { printLBMExcelDocument } from "@/lib/utils/print-lbm-excel";
 
 interface GoodsReceipt {
   id: string;
@@ -377,157 +378,49 @@ export default function ReceiptsPage() {
     }
   };
 
-  // Cetak Dokumen Lengkap LBM (GD-007-LBM) dengan Grid Penimbangan Karung
+  // Cetak Dokumen Lengkap LBM (GDG-001-LBM) sesuai format Excel yang ter-generate
   const handlePrintDetailedLBM = (gr: GoodsReceipt) => {
     const raw = rawReceipts?.find((r) => r.id === gr.id);
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      alert("Gagal membuka jendela cetak.");
-      return;
-    }
+    if (!raw) return;
 
-    let allBagsHtml = "";
-    (raw?.lines || []).forEach((l, idx) => {
+    const exportLines = (raw.lines || []).map((l) => {
       const prod = productMap[l.productId];
-      const prodName = prod?.name || `Item #${idx + 1}`;
-      const bagTokens = (l.bagWeights || "")
-        .split(/[\s,;\n]+/)
-        .map((t) => parseFloat(t))
-        .filter((n) => !isNaN(n) && n > 0);
+      const net = l.weightNet ?? l.quantityReceived ?? 0;
+      const pSize = l.packageSize && l.packageSize > 0 ? l.packageSize : 10;
 
-      if (bagTokens.length > 0) {
-        let cells = "";
-        bagTokens.forEach((w, bIdx) => {
-          cells += `
-            <div style="border: 1px solid #e2e8f0; padding: 4px; text-align: center; font-size: 11px;">
-              <span style="color: #64748b; font-size: 9px;">#${bIdx + 1}</span> <strong>${w.toFixed(2)}</strong>
-            </div>
-          `;
-        });
-        allBagsHtml += `
-          <div style="margin-top: 15px; page-break-inside: avoid;">
-            <div style="font-weight: bold; font-size: 12px; margin-bottom: 6px; color: #0f766e;">
-              Rincian Timbangan Karung: ${prodName} (${bagTokens.length} Karung)
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; margin-bottom: 10px;">
-              ${cells}
-            </div>
-            <div style="font-size: 11px; text-align: right; color: #334155;">
-              Subtotal Netto Karung: <strong>${bagTokens.reduce((a, b) => a + b, 0).toLocaleString("id-ID")} kg</strong>
-            </div>
-          </div>
-        `;
+      let entries = l.bagEntries || [];
+      if (entries.length === 0 && l.bagWeights) {
+        const bagTokens = l.bagWeights
+          .split(/[\s,;\n]+/)
+          .map((t) => parseFloat(t))
+          .filter((n) => !isNaN(n) && n > 0);
+        entries = bagTokens.map((w, idx) => ({
+          id: `legacy-${idx}`,
+          rowNumber: idx + 1,
+          weightActual: w,
+        }));
       }
+
+      return {
+        lineId: l.id,
+        productId: l.productId,
+        productName: prod?.name || `Produk #${l.productId.slice(0, 8)}`,
+        quantityOrderedRef: l.quantityOrderedReference || net,
+        weightGross: l.weightGross ?? net,
+        weightTare: l.weightTare ?? 0,
+        weightNet: net,
+        packageSize: pSize,
+        bagCount: entries.length > 0 ? entries.length : Math.ceil(net / pSize),
+        entries,
+      };
     });
 
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>LAPORAN BARANG MASUK (LBM) - ${gr.grNumber}</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 25px; font-size: 12px; color: #1e293b; }
-            .header-table { width: 100%; border: 2px solid #000; border-collapse: collapse; margin-bottom: 15px; }
-            .header-table td { border: 1px solid #000; padding: 6px 10px; font-size: 11px; }
-            .lbm-title { font-size: 16px; font-weight: bold; text-align: center; padding: 10px 0; background: #f8fafc; }
-            .doc-code { font-weight: bold; font-size: 12px; text-align: right; }
-            table.data-table { width: 100%; border-collapse: collapse; margin: 12px 0; }
-            table.data-table th, table.data-table td { border: 1px solid #333; padding: 6px 8px; font-size: 11px; }
-            table.data-table th { background: #f1f5f9; }
-            .footer-sign { display: flex; justify-content: space-between; margin-top: 40px; text-align: center; }
-            .sign-box { width: 180px; border-top: 1px solid #000; padding-top: 4px; margin-top: 50px; font-weight: bold; }
-          </style>
-        </head>
-        <body>
-          <table class="header-table">
-            <tr>
-              <td style="width: 25%; font-weight: bold; font-size: 14px;">CV MANNA / PT MANNA</td>
-              <td class="lbm-title">LAPORAN BARANG MASUK (LBM)</td>
-              <td class="doc-code" style="width: 25%;">KODE: ${gr.documentCode || "GD-007-LBM"}</td>
-            </tr>
-          </table>
-
-          <table style="width: 100%; margin-bottom: 10px; font-size: 11px;">
-            <tr>
-              <td style="width: 15%;"><strong>Asal Bahan Baku:</strong></td>
-              <td style="width: 35%;">${gr.vendorName}</td>
-              <td style="width: 15%;"><strong>Tanggal:</strong></td>
-              <td style="width: 35%;">${gr.receivedDate}</td>
-            </tr>
-            <tr>
-              <td><strong>No. Surat Jalan:</strong></td>
-              <td>${gr.deliveryNoteNo || "-"}</td>
-              <td><strong>No. Penerimaan (LBM):</strong></td>
-              <td>${gr.grNumber}</td>
-            </tr>
-            <tr>
-              <td><strong>Kondisi Gula:</strong></td>
-              <td>${gr.sugarCondition || "Lihat hasil QC"}</td>
-              <td><strong>Kondisi Kemasan:</strong></td>
-              <td>${gr.packageCondition || "Lihat hasil QC"}</td>
-            </tr>
-            <tr>
-              <td><strong>Gudang Penerima:</strong></td>
-              <td>${gr.warehouse}</td>
-              <td><strong>Penerima:</strong></td>
-              <td>${gr.receivedBy}</td>
-            </tr>
-          </table>
-
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th style="width: 30px; text-align: center;">No</th>
-                <th>Nama Barang / Deskripsi Bahan</th>
-                <th style="text-align: right; width: 100px;">Surat Jalan</th>
-                <th style="text-align: right; width: 90px;">Bruto (kg)</th>
-                <th style="text-align: right; width: 80px;">Tara (kg)</th>
-                <th style="text-align: right; width: 100px;">Netto Aktual (kg)</th>
-                <th style="text-align: center; width: 90px;">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${(raw?.lines || []).map((l, i) => {
-                const prod = productMap[l.productId];
-                const diff = (l.weightDiffPo || 0);
-                const statusKesesuaian = Math.abs(diff) <= 0.05 * l.quantityReceived ? "SESUAI" : "SELISIH";
-                return `
-                  <tr>
-                    <td style="text-align: center;">${i + 1}</td>
-                    <td><strong>${prod?.name || l.productId}</strong></td>
-                    <td style="text-align: right;">${(l.quantityOrderedReference || l.quantityReceived).toLocaleString("id-ID")} kg</td>
-                    <td style="text-align: right;">${l.weightGross ? l.weightGross.toLocaleString("id-ID") + " kg" : "-"}</td>
-                    <td style="text-align: right;">${l.weightTare ? l.weightTare.toLocaleString("id-ID") + " kg" : "-"}</td>
-                    <td style="text-align: right; font-weight: bold;">${l.quantityReceived.toLocaleString("id-ID")} kg</td>
-                    <td style="text-align: center; font-weight: bold; color: ${statusKesesuaian === "SESUAI" ? "#16a34a" : "#dc2626"};">${statusKesesuaian}</td>
-                  </tr>
-                `;
-              }).join("")}
-            </tbody>
-          </table>
-
-          ${allBagsHtml}
-
-          <div class="footer-sign">
-            <div>
-              <div>Diserahkan Oleh (Supir / Vendor)</div>
-              <div class="sign-box">( ${gr.vendorName} )</div>
-            </div>
-            <div>
-              <div>Diperiksa Oleh (QC / Checker)</div>
-              <div class="sign-box">( Pak Adin )</div>
-            </div>
-            <div>
-              <div>Dibuat Oleh (Admin Gudang)</div>
-              <div class="sign-box">( ${gr.receivedBy || "Mbak Sari"} )</div>
-            </div>
-          </div>
-          <script>
-            window.onload = function() { window.print(); };
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+    printLBMExcelDocument({
+      receipt: raw,
+      lines: exportLines,
+      vendorName: gr.vendorName,
+      warehouseName: gr.warehouse,
+    });
   };
 
   const receipts: GoodsReceipt[] = React.useMemo(() => {
@@ -548,7 +441,7 @@ export default function ReceiptsPage() {
         return {
           id: gr.id,
           grNumber: gr.receiptNo,
-          documentCode: gr.documentCode || "GD-007-LBM",
+          documentCode: gr.documentCode || "GDG-001-LBM",
           poNumber: po?.orderNo || gr.purchaseOrderId,
           vendorName: po?.supplierName || "-",
           receivedDate: gr.receivedDate,
@@ -642,7 +535,7 @@ export default function ReceiptsPage() {
       render: (gr) => (
         <div>
           <span className="font-mono text-xs font-bold text-brand-primary">{gr.grNumber}</span>
-          <span className="block text-[10px] font-mono text-muted-foreground">{gr.documentCode || "GD-007-LBM"}</span>
+          <span className="block text-[10px] font-mono text-muted-foreground">{gr.documentCode || "GDG-001-LBM"}</span>
         </div>
       ),
     },
@@ -717,7 +610,7 @@ export default function ReceiptsPage() {
             size="sm"
             className="h-7 text-xs gap-1 text-slate-700 hover:text-brand-primary"
             onClick={() => handlePrintDetailedLBM(gr)}
-            title="Cetak Laporan Lengkap LBM GD-007 beserta rincian karung"
+            title="Cetak Laporan Resmi LBM GDG-001 sesuai format Excel referensi"
           >
             <Printer className="h-3 w-3" /> Cetak LBM
           </Button>
@@ -730,7 +623,7 @@ export default function ReceiptsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Penerimaan Barang"
-        description="Laporan Barang Masuk (GD-007-LBM): timbangan per sak, verifikasi surat jalan, dan cetak tanda terima. Kondisi fisik dicatat QC."
+        description="Laporan Barang Masuk (GDG-001-LBM): timbangan per sak, verifikasi surat jalan, cetak laporan resmi format Excel, dan tanda terima."
       >
         <Button
           variant="gradient"

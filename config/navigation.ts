@@ -115,6 +115,7 @@ export const navigationConfig: NavGroup[] = [
           { title: "Transaksi Stock", href: "/inventory/stock-documents" },
           { title: "Stock Opname", href: "/inventory/stock-opname" },
           { title: "Analisa Umur Stock", href: "/inventory/reports" },
+          { title: "Alur Sprint 2 (LBM → LST)", href: "/manufacturing/sprint2-flow", badge: "Wizard" },
           { title: "Laporan Serah Terima (LST)", href: "/inventory/lst" },
           { title: "Penerimaan Barang Jadi", href: "/inventory/transfers" },
         ],
@@ -123,6 +124,7 @@ export const navigationConfig: NavGroup[] = [
         title: "Produksi",
         icon: Factory,
         items: [
+          { title: "Alur Sprint 2 (LBM → LST)", href: "/manufacturing/sprint2-flow", badge: "End-to-End" },
           { title: "Bill of Material", href: "/manufacturing/bom" },
           { title: "Order Produksi", href: "/manufacturing/production-orders" },
           { title: "Layar Produksi", href: "/manufacturing/production" },
@@ -130,6 +132,7 @@ export const navigationConfig: NavGroup[] = [
           { title: "Permintaan Bahan (BPB/BPK/LPC)", href: "/manufacturing/requisitions" },
           { title: "Laporan Oven (LHO)", href: "/manufacturing/oven" },
           { title: "Laporan Hasil Produksi (LHP)", href: "/manufacturing/lhp" },
+          { title: "Laporan Brontol (Reject)", href: "/qc/brontol" },
           { title: "Laporan Produksi", href: "/manufacturing/reports" },
         ],
       },
@@ -138,6 +141,7 @@ export const navigationConfig: NavGroup[] = [
         icon: ShieldCheck,
         items: [
           { title: "Inspeksi Mutu", href: "/qc/inspections" },
+          { title: "Laporan Brontol & Retur", href: "/qc/brontol" },
           { title: "Parameter Mutu", href: "/qc/parameters" },
           { title: "Pemeriksaan Bahan Datang (PBD)", href: "/qc/incoming" },
           { title: "Pemeriksaan Bahan Kemas (PBK)", href: "/qc/packaging" },

@@ -981,7 +981,7 @@ export default function RequisitionsPage() {
     <div className="space-y-6 pb-12">
       <PageHeader
         title="Permintaan & Pengeluaran Bahan Baku (BPB & LBB)"
-        description="Alur lengkap Sprint 2: Ambil Lot Siap Produksi dari SBB (FEFO) → Buat Form BPB (GDG-011-BPB) → Isi Rincian Timbangan Sak/Jerigen LBB (GDG-013-LBB) → ACC Gudang (Potong Stok Lot SBB & Gudang) → Masuk ke Produksi (SPK & Evaluasi Oven BRL-01)."
+        description="Ambil Lot Siap Produksi dari SBB (FEFO) → Buat Form BPB (GDG-011-BPB) → Isi Rincian Timbangan Sak/Jerigen LBB (GDG-013-LBB) → ACC Gudang (Potong Stok Lot SBB & Gudang) → Masuk ke Produksi (SPK & Evaluasi Oven BRL-01)."
       >
         <div className="flex flex-wrap items-center gap-2">
           {activeTab === "lbb" ? (
