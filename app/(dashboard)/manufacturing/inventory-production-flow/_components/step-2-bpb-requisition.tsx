@@ -24,6 +24,7 @@ import {
   Package,
   Layers,
   AlertCircle,
+  Lock,
 } from "lucide-react";
 import { ProductionBatchRecord } from "../_lib/production-flow-types";
 import { manufacturingApi, CreateRequisitionInput } from "@/lib/api/manufacturing";
@@ -182,7 +183,10 @@ export function Step2BPBRequisition({
     setIsEnterProd(true);
   };
 
+  const isStep2Valid = Boolean(isScanned && bpbDocNo.trim() && isAccGudang);
+
   const handleSaveAndNext = () => {
+    if (!isStep2Valid) return;
     onUpdateBatch({
       scannedBarcode,
       requisitionId: activeReqId,
@@ -364,7 +368,7 @@ export function Step2BPBRequisition({
       </Card>
 
       {/* ─── NAVIGASI ────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between pt-4 border-t border-border">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-border">
         <Button
           variant="outline"
           size="sm"
@@ -375,18 +379,34 @@ export function Step2BPBRequisition({
           <span>Kembali ke Tahap 1 (LBM)</span>
         </Button>
 
-        <div className="flex items-center gap-3">
-          {isCompleted && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          {!isStep2Valid ? (
+            <span className="text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-md text-[11px] font-medium flex items-center gap-1.5">
+              <Lock className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+              Scan Barcode Bahan &amp; Konfirmasi ACC Gudang Bahan untuk membuka Tahap 3 (Ayak Mentah).
+            </span>
+          ) : isCompleted ? (
             <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
               <CheckCircle2 className="h-4 w-4" /> Tahap 2 Selesai
             </span>
-          )}
+          ) : null}
+
           <Button
             onClick={handleSaveAndNext}
-            className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+            disabled={!isStep2Valid}
+            className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
           >
-            <span>Simpan &amp; Lanjut ke Tahap 3 (Ayak Mentah)</span>
-            <ArrowRight className="h-3.5 w-3.5" />
+            {isStep2Valid ? (
+              <>
+                <span>Simpan &amp; Lanjut ke Tahap 3 (Ayak Mentah)</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </>
+            ) : (
+              <>
+                <Lock className="h-3.5 w-3.5" />
+                <span>Tahap 3 Terkunci (Selesaikan BPB)</span>
+              </>
+            )}
           </Button>
         </div>
       </div>

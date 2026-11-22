@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { QrCode, RefreshCw, CheckCircle2, ArrowRight, ArrowLeft } from "lucide-react";
+import { QrCode, RefreshCw, CheckCircle2, ArrowRight, ArrowLeft, Lock } from "lucide-react";
 import { ProductionBatchRecord } from "../_lib/production-flow-types";
 import { manufacturingApi } from "@/lib/api/manufacturing";
 import { CustomerItem } from "@/lib/api/customers";
@@ -61,7 +61,10 @@ export function Step9LHPSerials({
     }
   };
 
+  const isStep9Valid = bulkSerials.length > 0 && Boolean(buyerName.trim());
+
   const handleSaveAndNext = async () => {
+    if (!isStep9Valid) return;
     setIsSaving(true);
     try {
       await manufacturingApi.createLHP({
@@ -221,7 +224,7 @@ export function Step9LHPSerials({
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-between pt-4 border-t border-border">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-border">
         <Button
           variant="outline"
           size="sm"
@@ -232,19 +235,34 @@ export function Step9LHPSerials({
           <span>Kembali ke Tahap 8 (QC Produk Jadi)</span>
         </Button>
 
-        <div className="flex items-center gap-3">
-          {isCompleted && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          {!isStep9Valid ? (
+            <span className="text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-md text-[11px] font-medium flex items-center gap-1.5">
+              <Lock className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+              Generate Barcode Serial unik &amp; isi nama Buyer untuk membuka Tahap 10 (LST Handover).
+            </span>
+          ) : isCompleted ? (
             <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
               <CheckCircle2 className="h-4 w-4" /> Tahap 9 Selesai (LHP Created)
             </span>
-          )}
+          ) : null}
+
           <Button
             onClick={handleSaveAndNext}
-            disabled={isSaving}
-            className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+            disabled={isSaving || !isStep9Valid}
+            className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
           >
-            <span>{isSaving ? "Menyimpan LHP..." : "Simpan & Lanjut ke Tahap 10 (LST Handover)"}</span>
-            <ArrowRight className="h-3.5 w-3.5" />
+            {isStep9Valid ? (
+              <>
+                <span>{isSaving ? "Menyimpan LHP..." : "Simpan & Lanjut ke Tahap 10 (LST Handover)"}</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </>
+            ) : (
+              <>
+                <Lock className="h-3.5 w-3.5" />
+                <span>Tahap 10 Terkunci (Generate Barcode Dahulu)</span>
+              </>
+            )}
           </Button>
         </div>
       </div>

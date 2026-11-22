@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Scale, CheckCircle2, ArrowRight, ArrowLeft } from "lucide-react";
+import { Scale, CheckCircle2, ArrowRight, ArrowLeft, Lock } from "lucide-react";
 import { ProductionBatchRecord } from "../_lib/production-flow-types";
 import { qcApi } from "@/lib/api/qc";
 
@@ -40,7 +40,10 @@ export function Step6PackingScale({
   const packedBagsCount = batch.fgOutputPcs || Math.floor(estimatedFgKg / 25);
   const weightPerBag = batch.weightPerBag || 25;
 
+  const isStep6Valid = Boolean(needleCheckOk && scissorCheckOk && isScaleSettled);
+
   const handleSaveAndNext = async () => {
+    if (!isStep6Valid) return;
     setIsSaving(true);
     try {
       if (needleCheckOk) {
@@ -202,7 +205,7 @@ export function Step6PackingScale({
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-between pt-4 border-t border-border">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-border">
         <Button
           variant="outline"
           size="sm"
@@ -213,19 +216,34 @@ export function Step6PackingScale({
           <span>Kembali ke Tahap 5 (Ayak Matang)</span>
         </Button>
 
-        <div className="flex items-center gap-3">
-          {isCompleted && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          {!isStep6Valid ? (
+            <span className="text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-md text-[11px] font-medium flex items-center gap-1.5">
+              <Lock className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+              Pemeriksaan jarum utuh, gunting terikat rantai, dan konfirmasi settle weight timbangan wajib dipenuhi.
+            </span>
+          ) : isCompleted ? (
             <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
               <CheckCircle2 className="h-4 w-4" /> Tahap 6 Selesai
             </span>
-          )}
+          ) : null}
+
           <Button
             onClick={handleSaveAndNext}
-            disabled={isSaving}
-            className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+            disabled={isSaving || !isStep6Valid}
+            className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
           >
-            <span>{isSaving ? "Menyimpan Log..." : "Simpan & Lanjut ke Tahap 7 (Metal Detector CCP 1)"}</span>
-            <ArrowRight className="h-3.5 w-3.5" />
+            {isStep6Valid ? (
+              <>
+                <span>{isSaving ? "Menyimpan Log..." : "Simpan & Lanjut ke Tahap 7 (Metal Detector CCP 1)"}</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </>
+            ) : (
+              <>
+                <Lock className="h-3.5 w-3.5" />
+                <span>Tahap 7 Terkunci (Cek HACCP &amp; Bobot)</span>
+              </>
+            )}
           </Button>
         </div>
       </div>

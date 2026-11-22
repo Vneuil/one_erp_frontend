@@ -4,7 +4,7 @@ import React from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, ArrowLeft } from "lucide-react";
+import { Check, ArrowLeft, Lock } from "lucide-react";
 import { ProductionBatchRecord, PRODUCTION_STEPS } from "../_lib/production-flow-types";
 
 interface StepSidebarProps {
@@ -44,7 +44,7 @@ export function StepSidebar({
             Alur Kendali 10 Tahap (LBM ➔ LST)
           </CardTitle>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            Klik tahap di bawah untuk memeriksa formulir &amp; riwayat uji mutu.
+            Tahap selanjutnya terkunci hingga tahap aktif selesai diisi &amp; diverifikasi.
           </p>
         </div>
       </CardHeader>
@@ -53,18 +53,31 @@ export function StepSidebar({
         {PRODUCTION_STEPS.map((step) => {
           const isDone = completedSteps.includes(step.id);
           const isCurr = currentStep === step.id;
+          // Step 1 is always unlocked. Next step is unlocked ONLY if the previous step is completed.
+          const isUnlocked = step.id === 1 || isDone || completedSteps.includes(step.id - 1);
+          const isLocked = !isUnlocked;
 
           return (
             <button
               key={step.id}
               type="button"
-              onClick={() => onSelectStep(step.id)}
-              className={`w-full flex items-start gap-2.5 p-2 rounded-lg text-left transition-all cursor-pointer border ${
+              disabled={isLocked}
+              onClick={() => {
+                if (isUnlocked) onSelectStep(step.id);
+              }}
+              title={
+                isLocked
+                  ? `Tahap ${step.id} (${step.title}) terkunci. Selesaikan Tahap ${step.id - 1} terlebih dahulu.`
+                  : step.title
+              }
+              className={`w-full flex items-start gap-2.5 p-2 rounded-lg text-left transition-all border ${
                 isCurr
-                  ? "bg-blue-50 border-blue-300 text-blue-950 font-semibold shadow-xs"
+                  ? "bg-blue-50 border-blue-300 text-blue-950 font-semibold shadow-xs cursor-pointer"
                   : isDone
-                  ? "border-transparent hover:bg-slate-50 text-foreground"
-                  : "border-transparent text-muted-foreground hover:bg-slate-50 hover:text-foreground"
+                  ? "border-transparent hover:bg-slate-50 text-foreground cursor-pointer"
+                  : isLocked
+                  ? "border-transparent opacity-50 bg-slate-50/60 text-slate-400 cursor-not-allowed"
+                  : "border-transparent text-muted-foreground hover:bg-slate-50 hover:text-foreground cursor-pointer"
               }`}
             >
               <span
@@ -73,18 +86,32 @@ export function StepSidebar({
                     ? "bg-emerald-600 text-white"
                     : isCurr
                     ? "bg-blue-600 text-white ring-2 ring-blue-200"
+                    : isLocked
+                    ? "bg-slate-100 text-slate-400 border border-slate-200"
                     : "bg-slate-100 text-slate-500 border border-slate-200"
                 }`}
               >
-                {isDone ? <Check className="h-3.5 w-3.5" /> : step.id}
+                {isDone ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : isLocked ? (
+                  <Lock className="h-3 w-3 text-slate-400" />
+                ) : (
+                  step.id
+                )}
               </span>
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-1">
-                  <span className="text-xs truncate">{step.title}</span>
-                  {isDone && (
+                  <span className={`text-xs truncate ${isLocked ? "text-slate-400 font-normal" : ""}`}>
+                    {step.title}
+                  </span>
+                  {isDone ? (
                     <span className="text-[10px] text-emerald-600 font-bold shrink-0">Lolos</span>
-                  )}
+                  ) : isLocked ? (
+                    <span className="text-[9px] text-slate-400 bg-slate-100 border border-slate-200 px-1 py-0.2 rounded font-mono shrink-0">
+                      Terkunci
+                    </span>
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted-foreground">
                   <span className="font-mono">{step.docCode}</span>

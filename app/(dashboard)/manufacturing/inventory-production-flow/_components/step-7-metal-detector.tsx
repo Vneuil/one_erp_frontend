@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ShieldCheck, ArrowRight, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { ShieldCheck, ArrowRight, ArrowLeft, CheckCircle2, Lock } from "lucide-react";
 import { ProductionBatchRecord } from "../_lib/production-flow-types";
 import { qcApi } from "@/lib/api/qc";
 
@@ -185,7 +185,7 @@ export function Step7MetalDetector({
         </div>
       </div>
 
-      <div className="flex items-center justify-between pt-4 border-t border-border">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-border">
         <Button
           variant="outline"
           size="sm"
@@ -196,19 +196,34 @@ export function Step7MetalDetector({
           <span>Kembali ke Tahap 6 (Packing)</span>
         </Button>
 
-        <div className="flex items-center gap-3">
-          {isCompleted && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          {!allPassed ? (
+            <span className="text-rose-800 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-md text-[11px] font-medium flex items-center gap-1.5">
+              <Lock className="h-3.5 w-3.5 shrink-0 text-rose-600" />
+              CCP 1 Mandatori: Ketiga uji test piece logam &amp; aperture bersih wajib lulus untuk membuka Tahap 8.
+            </span>
+          ) : isCompleted ? (
             <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
               <CheckCircle2 className="h-4 w-4" /> Tahap 7 Selesai (CCP Passed)
             </span>
-          )}
+          ) : null}
+
           <Button
             onClick={handleSaveAndNext}
             disabled={isSaving || !allPassed}
-            className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+            className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
           >
-            <span>{isSaving ? "Menyimpan Verifikasi..." : "Simpan & Lanjut ke Tahap 8 (QC Produk Jadi)"}</span>
-            <ArrowRight className="h-3.5 w-3.5" />
+            {allPassed ? (
+              <>
+                <span>{isSaving ? "Menyimpan Verifikasi..." : "Simpan & Lanjut ke Tahap 8 (QC Produk Jadi)"}</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </>
+            ) : (
+              <>
+                <Lock className="h-3.5 w-3.5" />
+                <span>Tahap 8 Terkunci (CCP 1 Wajib Lulus)</span>
+              </>
+            )}
           </Button>
         </div>
       </div>

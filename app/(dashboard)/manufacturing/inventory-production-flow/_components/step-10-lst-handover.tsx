@@ -534,10 +534,20 @@ export function Step10LSTHandover({
             <Button
               size="sm"
               onClick={onFinish}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs gap-1.5"
+              disabled={!isFinal}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <CheckCircle2 className="h-4 w-4" />
-              <span>Selesai &amp; Kembali ke Overview</span>
+              {isFinal ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>Selesai &amp; Kunci Pipeline ke Overview</span>
+                </>
+              ) : (
+                <>
+                  <Lock className="h-3.5 w-3.5" />
+                  <span>Sahkan LST ke Gudang FG Terlebih Dahulu</span>
+                </>
+              )}
             </Button>
           </div>
         </div>

@@ -16,6 +16,7 @@ import {
   Plus,
   ArrowRight,
   ArrowLeft,
+  Lock,
   X,
 } from "lucide-react";
 
@@ -359,7 +360,7 @@ export default function InventoryProductionFlowPage() {
     });
   };
 
-  const handleNextStep = () => {
+  const handleCompleteAndNext = () => {
     if (!activeBatch) return;
     const next = Math.min(10, currentStep + 1);
     const newCompleted = activeBatch.completedStages.includes(currentStep)
@@ -375,8 +376,37 @@ export default function InventoryProductionFlowPage() {
     setCurrentStep(next);
     setNotification({
       type: "success",
-      text: `Tahap ${currentStep} (${PRODUCTION_STEPS[currentStep - 1].title}) berhasil diselesaikan. Berlanjut ke Tahap ${next}.`,
+      text: `Tahap ${currentStep} (${PRODUCTION_STEPS[currentStep - 1].title}) berhasil diselesaikan & disahkan. Berlanjut ke Tahap ${next}.`,
     });
+  };
+
+  const handleHeaderNext = () => {
+    if (!activeBatch || currentStep >= 10) return;
+    if (!activeBatch.completedStages.includes(currentStep)) {
+      setNotification({
+        type: "error",
+        text: `Tahap ${currentStep} (${PRODUCTION_STEPS[currentStep - 1].title}) belum selesai. Harap lengkapi seluruh formulir & checklist tahap ini, kemudian klik 'Simpan & Lanjut' di bawah.`,
+      });
+      return;
+    }
+    setCurrentStep(currentStep + 1);
+  };
+
+  const handleSelectStep = (stepId: number) => {
+    if (!activeBatch) return;
+    const isUnlocked =
+      stepId === 1 ||
+      activeBatch.completedStages.includes(stepId) ||
+      activeBatch.completedStages.includes(stepId - 1);
+
+    if (!isUnlocked) {
+      setNotification({
+        type: "error",
+        text: `Tahap ${stepId} (${PRODUCTION_STEPS[stepId - 1].title}) terkunci! Selesaikan Tahap ${stepId - 1} (${PRODUCTION_STEPS[stepId - 2].title}) terlebih dahulu.`,
+      });
+      return;
+    }
+    setCurrentStep(stepId);
   };
 
   const handlePrevStep = () => {
@@ -622,7 +652,7 @@ export default function InventoryProductionFlowPage() {
                 activeBatch={activeBatch}
                 currentStep={currentStep}
                 completedSteps={activeBatch.completedStages}
-                onSelectStep={setCurrentStep}
+                onSelectStep={handleSelectStep}
                 onBackToOverview={() => setViewMode("overview")}
               />
             </div>
@@ -664,11 +694,15 @@ export default function InventoryProductionFlowPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={handleNextStep}
-                      disabled={currentStep === 10}
+                      onClick={handleHeaderNext}
+                      disabled={currentStep === 10 || !activeBatch.completedStages.includes(currentStep)}
                       className="text-xs"
                     >
-                      Next <ArrowRight className="h-3 w-3 ml-1" />
+                      {activeBatch.completedStages.includes(currentStep) ? (
+                        <>Next <ArrowRight className="h-3 w-3 ml-1" /></>
+                      ) : (
+                        <><Lock className="h-3 w-3 mr-1 text-slate-400" /> Tahap {currentStep} Belum Selesai</>
+                      )}
                     </Button>
                   </div>
                 </CardHeader>
@@ -681,7 +715,7 @@ export default function InventoryProductionFlowPage() {
                       suppliers={suppliers}
                       products={products}
                       onUpdateBatch={handleUpdateActiveBatch}
-                      onNext={handleNextStep}
+                      onNext={handleCompleteAndNext}
                       isCompleted={activeBatch.completedStages.includes(1)}
                     />
                   )}
@@ -690,7 +724,7 @@ export default function InventoryProductionFlowPage() {
                     <Step2BPBRequisition
                       batch={activeBatch}
                       onUpdateBatch={handleUpdateActiveBatch}
-                      onNext={handleNextStep}
+                      onNext={handleCompleteAndNext}
                       onPrev={handlePrevStep}
                       isCompleted={activeBatch.completedStages.includes(2)}
                     />
@@ -700,7 +734,7 @@ export default function InventoryProductionFlowPage() {
                     <Step3SievingRaw
                       batch={activeBatch}
                       onUpdateBatch={handleUpdateActiveBatch}
-                      onNext={handleNextStep}
+                      onNext={handleCompleteAndNext}
                       onPrev={handlePrevStep}
                       isCompleted={activeBatch.completedStages.includes(3)}
                     />
@@ -710,7 +744,7 @@ export default function InventoryProductionFlowPage() {
                     <Step4MoistureOven
                       batch={activeBatch}
                       onUpdateBatch={handleUpdateActiveBatch}
-                      onNext={handleNextStep}
+                      onNext={handleCompleteAndNext}
                       onPrev={handlePrevStep}
                       isCompleted={activeBatch.completedStages.includes(4)}
                     />
@@ -720,7 +754,7 @@ export default function InventoryProductionFlowPage() {
                     <Step5SievingCooked
                       batch={activeBatch}
                       onUpdateBatch={handleUpdateActiveBatch}
-                      onNext={handleNextStep}
+                      onNext={handleCompleteAndNext}
                       onPrev={handlePrevStep}
                       isCompleted={activeBatch.completedStages.includes(5)}
                     />
@@ -730,7 +764,7 @@ export default function InventoryProductionFlowPage() {
                     <Step6PackingScale
                       batch={activeBatch}
                       onUpdateBatch={handleUpdateActiveBatch}
-                      onNext={handleNextStep}
+                      onNext={handleCompleteAndNext}
                       onPrev={handlePrevStep}
                       isCompleted={activeBatch.completedStages.includes(6)}
                     />
@@ -740,7 +774,7 @@ export default function InventoryProductionFlowPage() {
                     <Step7MetalDetector
                       batch={activeBatch}
                       onUpdateBatch={handleUpdateActiveBatch}
-                      onNext={handleNextStep}
+                      onNext={handleCompleteAndNext}
                       onPrev={handlePrevStep}
                       isCompleted={activeBatch.completedStages.includes(7)}
                     />
@@ -750,7 +784,7 @@ export default function InventoryProductionFlowPage() {
                     <Step8QCFinished
                       batch={activeBatch}
                       onUpdateBatch={handleUpdateActiveBatch}
-                      onNext={handleNextStep}
+                      onNext={handleCompleteAndNext}
                       onPrev={handlePrevStep}
                       isCompleted={activeBatch.completedStages.includes(8)}
                     />
@@ -761,7 +795,7 @@ export default function InventoryProductionFlowPage() {
                       batch={activeBatch}
                       customers={customers}
                       onUpdateBatch={handleUpdateActiveBatch}
-                      onNext={handleNextStep}
+                      onNext={handleCompleteAndNext}
                       onPrev={handlePrevStep}
                       isCompleted={activeBatch.completedStages.includes(9)}
                     />
