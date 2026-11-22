@@ -132,7 +132,7 @@ export default function QCInspectionsPage() {
     const payload: CreateQCInspectionInput = {
       targetType,
       targetId: selectedOrderId || "00000000-0000-0000-0000-000000000000",
-      productionOrderId: targetType === "production_order" ? selectedOrderId : undefined,
+      productionOrderId: targetType === "production_order" ? (selectedOrderId || undefined) : undefined,
       batchNo: batchNo.trim(),
       productId,
       testingTool: testingTool.trim(),

@@ -4,52 +4,61 @@ import * as React from "react";
 import Link from "next/link";
 import {
   CheckCircle2,
-  Clock,
-  AlertTriangle,
   ArrowRight,
   ArrowLeft,
   RefreshCw,
   Printer,
-  Download,
-  Sparkles,
   Scale,
   FileText,
-  CheckSquare,
   Factory,
   ShieldCheck,
   QrCode,
-  Boxes,
   Package,
   Flame,
   FileSpreadsheet,
   Lock,
-  Layers,
   Search,
-  ExternalLink,
   ChevronRight,
-  Truck,
-  RotateCcw,
+  Plus,
+  ArrowUpRight,
+  SlidersHorizontal,
+  Layers,
+  Warehouse,
+  Boxes,
+  Clock,
+  Check,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
+import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
 import {
   manufacturingApi,
   CreateLSTInput,
-  CreateLSTItemInput,
   HandoverReportItem,
 } from "@/lib/api/manufacturing";
 import { exportLSTExcel } from "@/lib/utils/export-wip-excel";
 
-// ─── TIPE DATA STEPS ──────────────────────────────────────────────────────────
+// ─── DEFINISI 10 TAHAP SPRINT 2 ───────────────────────────────────────────────
 export interface StepDef {
   id: number;
   code: string;
   title: string;
   docCode: string;
   owner: string;
+  pageHref: string;
   description: string;
 }
 
@@ -59,32 +68,36 @@ export const SPRINT_2_STEPS: StepDef[] = [
     code: "LBM",
     title: "Inbound & LBM",
     docCode: "GD-007-LBM",
-    owner: "Gudang (Mas Abel / Mbak Sari)",
-    description: "Penerimaan bahan baku dengan timbangan presisi 2 desimal & tanda terima supplier (harga tersembunyi).",
+    owner: "Gudang Bahan Baku",
+    pageHref: "/procurement/receipts",
+    description: "Penerimaan bahan baku dengan timbangan presisi 2 desimal & slip tanda terima harga tersembunyi.",
   },
   {
     id: 2,
     code: "BPB",
-    title: "Permintaan Bahan Baku & Kemas",
+    title: "Permintaan Bahan (BPB)",
     docCode: "PR-09",
-    owner: "Produksi (Mas Mario)",
-    description: "Form serah terima bahan PR-09 & scanning barcode pengambilan dari gudang ke WIP ayak.",
+    owner: "Produksi",
+    pageHref: "/manufacturing/requisitions",
+    description: "Form serah terima bahan PR-09 & scanning barcode pengeluaran dari gudang ke WIP ayak.",
   },
   {
     id: 3,
     code: "AYAK_1",
     title: "Ayak Mentah & Magnet Trap",
-    docCode: "QC-009-MNA.01 & QC-038-CMT",
-    owner: "Produksi & QC (Pak Adin)",
+    docCode: "QC-009-MNA & QC-038-CMT",
+    owner: "Produksi & QC",
+    pageHref: "/qc/sieving",
     description: "Monitoring proses ayak mentah, pembersihan magnet trap, dan pencatatan brontol/susut.",
   },
   {
     id: 4,
     code: "OVEN",
-    title: "Cek Kadar Air & Routing Oven",
+    title: "Cek Kadar Air & Oven",
     docCode: "QC-012-MNO.05 & LHO",
     owner: "QC & Operator Oven",
-    description: "Evaluasi kadar air: jika > 2.0% wajib oven, jika ≤ 2.0% dilewati (jalur cepat ke Ayak Matang).",
+    pageHref: "/manufacturing/oven",
+    description: "Evaluasi kadar air: jika > 2.0% wajib oven; jika ≤ 2.0% dilewati (jalur cepat ke Ayak Matang).",
   },
   {
     id: 5,
@@ -92,38 +105,43 @@ export const SPRINT_2_STEPS: StepDef[] = [
     title: "Ayak Matang (Sieving 2)",
     docCode: "QC-009-MNA.01",
     owner: "Produksi",
+    pageHref: "/qc/sieving",
     description: "Pemisahan brontol kering matang & pemastian keutuhan mesh screen sebelum pengemasan.",
   },
   {
     id: 6,
     code: "PACKING",
-    title: "Ruang Packing & Timbangan IoT",
+    title: "Ruang Packing & IoT Scale",
     docCode: "QC-011-MNJ.01 & Scale IoT",
     owner: "Operator Packing & QC",
+    pageHref: "/qc/packing",
     description: "Pengecekan jarum/gunting utuh & penimbangan dengan tombol konfirmasi 'Settle Weight'.",
   },
   {
     id: 7,
     code: "METAL",
-    title: "Verifikasi Metal Detector CCP",
+    title: "Metal Detector CCP 1",
     docCode: "QC-017-VMD & CPP",
-    owner: "QA/QC (Pak Adin)",
+    owner: "QA/QC Lead",
+    pageHref: "/qc/metal-detector",
     description: "Critical Control Point (CCP 1): Verifikasi 3 test piece (Fe 1.5mm, Non-Fe 2.0mm, SS 2.5mm).",
   },
   {
     id: 8,
     code: "PJD",
-    title: "Pemeriksaan Produk Jadi & Label",
+    title: "Pemeriksaan Produk Jadi",
     docCode: "QC-004-PJD.05 & QC-018-PLK",
     owner: "QC Release Officer",
-    description: "Organoleptik (rasa, aroma, warna, mesh), pemeriksaan barcode label & keputusan rilis QC.",
+    pageHref: "/qc/finished-goods",
+    description: "Organoleptik rasa, aroma, warna, kelarutan, cek label kemasan & keputusan rilis mutu (PASSED).",
   },
   {
     id: 9,
     code: "LHP",
-    title: "Laporan Hasil Produksi & Stiker QR",
+    title: "Laporan Hasil Produksi",
     docCode: "PRO-002-LHP & Bulk QR",
     owner: "Admin Produksi",
+    pageHref: "/manufacturing/lhp",
     description: "Rekap yield/susut, penomoran palet, dan auto-generate bulk serial stiker QR (cth: 26N48PW001-850).",
   },
   {
@@ -131,169 +149,272 @@ export const SPRINT_2_STEPS: StepDef[] = [
     code: "LST",
     title: "Laporan Serah Terima (LST)",
     docCode: "GDG-009-LST / QA-044-LST",
-    owner: "Produksi & Gudang FG",
-    description: "Penyerahan resmi barang jadi ke Gudang Barang Jadi, verifikasi QC, dan penguncian status Final.",
+    owner: "Produksi ➔ Gudang FG",
+    pageHref: "/inventory/lst",
+    description: "Penyerahan fisik barang jadi ke Gudang FG, verifikasi QC, tanda tangan, dan penguncian status Final.",
   },
 ];
 
-export default function Sprint2WorkflowPage() {
-  const [currentStep, setCurrentStep] = React.useState<number>(1);
-  const [completedSteps, setCompletedSteps] = React.useState<number[]>([]);
+// ─── TIPE DATA BATCH PRODUKSI ────────────────────────────────────────────────
+export interface ProductionBatchRecord {
+  id: string;
+  batchNo: string;
+  date: string;
+  productName: string;
+  productCode: string;
+  supplier: string;
+  supplierCode: string;
+  certification: string;
+  fairtradeStatus: string;
+  rawInputKg: number;
+  fgOutputPcs: number;
+  fgOutputKg: number;
+  currentStage: number; // 1 to 10
+  completedStages: number[];
+  moisturePercent: number;
+  ovenRequired: boolean;
+  status: "in_progress" | "qc_ready" | "handover_ready" | "final";
+  lbmNo: string;
+  lstNo: string;
+  palletCount: number;
+}
 
-  // ─── DATA BATCH & WORKFLOW STATE ──────────────────────────────────────────
-  const [batchNo, setBatchNo] = React.useState<string>("26N48PW213");
-  const [productName, setProductName] = React.useState<string>("Organic Coconut Sugar 25kg");
-  const [productCode, setProductCode] = React.useState<string>("GSO-001");
-  const [supplierCode, setSupplierCode] = React.useState<string>("PW");
-  const [supplierName, setSupplierName] = React.useState<string>("Kelompok Tani Purworejo (Pak Wahyu)");
-  const [certification, setCertification] = React.useState<string>("Organik EU");
-  const [fairtradeStatus, setFairtradeStatus] = React.useState<string>("NON FAIRTRADE");
+const INITIAL_BATCHES: ProductionBatchRecord[] = [
+  {
+    id: "batch-1",
+    batchNo: "26N48PW213",
+    date: new Date().toISOString().slice(0, 10),
+    productName: "Organic Coconut Sugar 25kg",
+    productCode: "GSO-001",
+    supplier: "Kelompok Tani Purworejo (Pak Wahyu)",
+    supplierCode: "PW",
+    certification: "Organik EU",
+    fairtradeStatus: "NON FAIRTRADE",
+    rawInputKg: 21500,
+    fgOutputPcs: 850,
+    fgOutputKg: 21250,
+    currentStage: 9,
+    completedStages: [1, 2, 3, 4, 5, 6, 7, 8],
+    moisturePercent: 1.8,
+    ovenRequired: false,
+    status: "handover_ready",
+    lbmNo: "LBM-202611-008",
+    lstNo: "GDG-009-LST-202611-044",
+    palletCount: 22,
+  },
+  {
+    id: "batch-2",
+    batchNo: "26N48PW214",
+    date: new Date().toISOString().slice(0, 10),
+    productName: "Organic Coconut Sugar 25kg",
+    productCode: "GSO-001",
+    supplier: "Kelompok Tani Purworejo (Pak Wahyu)",
+    supplierCode: "PW",
+    certification: "Organik EU",
+    fairtradeStatus: "FAIRTRADE FLO",
+    rawInputKg: 10750,
+    fgOutputPcs: 420,
+    fgOutputKg: 10500,
+    currentStage: 4,
+    completedStages: [1, 2, 3],
+    moisturePercent: 2.6,
+    ovenRequired: true,
+    status: "in_progress",
+    lbmNo: "LBM-202611-009",
+    lstNo: "GDG-009-LST-202611-045",
+    palletCount: 11,
+  },
+  {
+    id: "batch-3",
+    batchNo: "26N47SL105",
+    date: "2026-11-20",
+    productName: "Organic Coconut Sugar 25kg",
+    productCode: "GSO-001",
+    supplier: "Koperasi Tani Sleman (Pak Slamet)",
+    supplierCode: "SL",
+    certification: "USDA-NOP",
+    fairtradeStatus: "NON FAIRTRADE",
+    rawInputKg: 15000,
+    fgOutputPcs: 590,
+    fgOutputKg: 14750,
+    currentStage: 10,
+    completedStages: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    moisturePercent: 1.7,
+    ovenRequired: false,
+    status: "final",
+    lbmNo: "LBM-202611-005",
+    lstNo: "GDG-009-LST-202611-041",
+    palletCount: 15,
+  },
+];
 
-  // Step 1: Inbound & LBM State
-  const [lbmNo, setLbmNo] = React.useState<string>("LBM-202611-008");
+export default function Sprint2WorkflowMasterPage() {
+  // Mode Tampilan: 'overview' vs 'wizard'
+  const [viewMode, setViewMode] = React.useState<string>("overview");
+
+  // State Daftar Batch
+  const [batches, setBatches] = React.useState<ProductionBatchRecord[]>(INITIAL_BATCHES);
+  const [selectedBatchId, setSelectedBatchId] = React.useState<string>("batch-1");
+  const [searchQuery, setSearchQuery] = React.useState<string>("");
+  const [statusFilter, setStatusFilter] = React.useState<string>("all");
+
+  const activeBatch = batches.find((b) => b.id === selectedBatchId) || batches[0];
+
+  // Wizard State
+  const [currentStep, setCurrentStep] = React.useState<number>(activeBatch.currentStage);
+  const [completedSteps, setCompletedSteps] = React.useState<number[]>(activeBatch.completedStages);
+
+  // Field Editable Form Step-by-Step
+  const [lbmNo, setLbmNo] = React.useState<string>(activeBatch.lbmNo);
   const [deliveryNoteNo, setDeliveryNoteNo] = React.useState<string>("SJ-PW-8821");
-  const [scaleWeights, setScaleWeights] = React.useState<Array<{ gross: number; tare: number; net: number }>>([
+  const scaleWeights = [
     { gross: 10.25, tare: 0.2, net: 10.05 },
     { gross: 10.26, tare: 0.2, net: 10.06 },
     { gross: 10.24, tare: 0.2, net: 10.04 },
-  ]);
-  const [packagingQty, setPackagingQty] = React.useState<number>(860);
-  const [lbmPrinted, setLbmPrinted] = React.useState<boolean>(false);
-
-  // Step 2: Requisition & Barcode Scan
+  ];
+  const [packagingQty, setPackagingQty] = React.useState<number>(activeBatch.fgOutputPcs + 10);
   const [scannedBarcode, setScannedBarcode] = React.useState<string>("BARCODE-GDG-101");
-  const [rawMaterialIssued, setRawMaterialIssued] = React.useState<boolean>(true);
-  const [rawMaterialWeight, setRawMaterialWeight] = React.useState<number>(21500); // 21,500 kg
+  const [rawMaterialWeight, setRawMaterialWeight] = React.useState<number>(activeBatch.rawInputKg);
 
-  // Step 3: Ayak Mentah & Magnet Trap
-  const [sievingRawInput, setSievingRawInput] = React.useState<number>(21500);
-  const [rawCleanSugar, setRawCleanSugar] = React.useState<number>(21285);
-  const [rawBrontolReject, setRawBrontolReject] = React.useState<number>(107.5);
-  const [rawDustLoss, setRawDustLoss] = React.useState<number>(107.5);
+  // Step 3 & 4: Ayak & Oven
+  const [sievingRawInput, setSievingRawInput] = React.useState<number>(activeBatch.rawInputKg);
+  const [rawCleanSugar, setRawCleanSugar] = React.useState<number>(activeBatch.fgOutputKg + 35);
+  const rawBrontolReject = 107.5;
+  const rawDustLoss = 107.5;
   const [magnetTrapChecked, setMagnetTrapChecked] = React.useState<boolean>(true);
+  const [moisturePercent, setMoisturePercent] = React.useState<number>(activeBatch.moisturePercent);
+  const ovenRequired = moisturePercent > 2.0;
 
-  // Step 4: Moisture Content & Oven Routing
-  const [moisturePercent, setMoisturePercent] = React.useState<number>(1.8);
-  const [ovenRequired, setOvenRequired] = React.useState<boolean>(false);
-  const [ovenTemp, setOvenTemp] = React.useState<number>(75);
-  const [ovenDurationMins, setOvenDurationMins] = React.useState<number>(120);
-
-  // Step 5: Ayak Matang
-  const [cookedCleanSugar, setCookedCleanSugar] = React.useState<number>(21250);
+  // Step 5 & 6: Ayak Matang, Packing & IoT Scale
+  const [cookedCleanSugar, setCookedCleanSugar] = React.useState<number>(activeBatch.fgOutputKg);
   const [cookedBrontol, setCookedBrontol] = React.useState<number>(35);
-  const [meshConditionOk, setMeshConditionOk] = React.useState<boolean>(true);
-
-  // Step 6: Packing Room & IoT Scale
   const [needleCheckOk, setNeedleCheckOk] = React.useState<boolean>(true);
   const [scissorCheckOk, setScissorCheckOk] = React.useState<boolean>(true);
   const [scaleDisplay, setScaleDisplay] = React.useState<number>(25.0);
   const [isScaleSettled, setIsScaleSettled] = React.useState<boolean>(true);
-  const [packedBagsCount, setPackedBagsCount] = React.useState<number>(850);
-  const [weightPerBag, setWeightPerBag] = React.useState<number>(25.0);
+  const [packedBagsCount, setPackedBagsCount] = React.useState<number>(activeBatch.fgOutputPcs);
+  const weightPerBag = 25.0;
 
-  // Step 7: Metal Detector CCP
-  const [metalTestFe, setMetalTestFe] = React.useState<boolean>(true);
-  const [metalTestNonFe, setMetalTestNonFe] = React.useState<boolean>(true);
-  const [metalTestSS, setMetalTestSS] = React.useState<boolean>(true);
+  // Step 7 & 8: Metal Detector & QC
   const [metalCleaningOk, setMetalCleaningOk] = React.useState<boolean>(true);
-
-  // Step 8: QC Finished Goods
-  const [sensoryPassed, setSensoryPassed] = React.useState<boolean>(true);
-  const [labelInspectionPassed, setLabelInspectionPassed] = React.useState<boolean>(true);
   const [qcDecision, setQcDecision] = React.useState<string>("PASSED");
 
-  // Step 9: LHP & Bulk Barcode Generation
+  // Step 9: Serials
   const [bulkSerials, setBulkSerials] = React.useState<string[]>([]);
-  const [palletCount, setPalletCount] = React.useState<number>(22);
-  const [isSerialsGenerated, setIsSerialsGenerated] = React.useState<boolean>(false);
+  const [palletCount, setPalletCount] = React.useState<number>(activeBatch.palletCount);
 
-  // Step 10: LST (Laporan Serah Terima)
-  const [lstNumber, setLstNumber] = React.useState<string>("GDG-009-LST-202611-044");
-  const [handoverDate, setHandoverDate] = React.useState<string>(new Date().toISOString().slice(0, 10));
+  // Step 10: LST
+  const [lstNumber, setLstNumber] = React.useState<string>(activeBatch.lstNo);
+  const [handoverDate, setHandoverDate] = React.useState<string>(activeBatch.date);
   const [handedOverBy, setHandedOverBy] = React.useState<string>("Nicholas Tantra (Spv Produksi)");
-  const [receivedBy, setReceivedBy] = React.useState<string>("Abel Kurniawan (PIC Gudang FG)");
-  const [lstStatus, setLstStatus] = React.useState<string>("draft"); // 'draft' | 'final'
+  const [receivedBy, setReceivedBy] = React.useState<string>("Abel Kurniawan (Gudang FG)");
   const [isSavingLST, setIsSavingLST] = React.useState<boolean>(false);
-  const [createdLST, setCreatedLST] = React.useState<HandoverReportItem | null>(null);
   const [notification, setNotification] = React.useState<{ text: string; type: "success" | "error" } | null>(null);
 
-  // Otomatis cek kondisi oven ketika moisture berubah
-  React.useEffect(() => {
-    if (moisturePercent > 2.0) {
-      setOvenRequired(true);
+  // Fungsi sinkronisasi data batch ke form
+  const applyBatchToForm = React.useCallback((batch: ProductionBatchRecord, targetStage?: number) => {
+    setSelectedBatchId(batch.id);
+    setCurrentStep(targetStage ?? batch.currentStage);
+    setCompletedSteps(batch.completedStages);
+    setLbmNo(batch.lbmNo);
+    setRawMaterialWeight(batch.rawInputKg);
+    setSievingRawInput(batch.rawInputKg);
+    setMoisturePercent(batch.moisturePercent);
+    setPackedBagsCount(batch.fgOutputPcs);
+    setPalletCount(batch.palletCount);
+    setLstNumber(batch.lstNo);
+    setCookedCleanSugar(batch.fgOutputKg);
+
+    if ((targetStage ?? batch.currentStage) >= 9) {
+      const list: string[] = [];
+      for (let i = 1; i <= Math.min(850, batch.fgOutputPcs); i++) {
+        list.push(`26N48${batch.supplierCode}${String(i).padStart(3, "0")}`);
+      }
+      setBulkSerials(list);
     } else {
-      setOvenRequired(false);
+      setBulkSerials([]);
     }
-  }, [moisturePercent]);
+  }, []);
 
-  // Generate bulk serials bila diminta
-  const handleGenerateSerials = () => {
-    // Format: 26N48PW001 sd 26N48PW850
-    const list: string[] = [];
-    for (let i = 1; i <= packedBagsCount; i++) {
-      const serialNum = String(i).padStart(3, "0");
-      list.push(`26N48${supplierCode}${serialNum}`);
+  // Buka Wizard langsung pada batch tertentu
+  const handleOpenWizardForBatch = (batchId: string, stageNum?: number) => {
+    const target = batches.find((b) => b.id === batchId);
+    if (target) {
+      applyBatchToForm(target, stageNum);
     }
-    setBulkSerials(list);
-    setIsSerialsGenerated(true);
-    setNotification({
-      type: "success",
-      text: `Berhasil men-generate ${list.length} barcode serial unik traceability (${list[0]} s/d ${list[list.length - 1]}).`,
-    });
+    setViewMode("wizard");
   };
 
-  // Muat data sampel lengkap simulasi Sprint 2
-  const handleLoadSampleBatch = () => {
-    setBatchNo("26N48PW213");
-    setProductCode("GSO-001");
-    setProductName("Organic Coconut Sugar 25kg");
-    setSupplierCode("PW");
-    setSupplierName("Kelompok Tani Purworejo (Pak Wahyu)");
-    setCertification("Organik EU");
-    setFairtradeStatus("NON FAIRTRADE");
+  // Buat Batch Baru
+  const handleCreateNewBatch = () => {
+    const nextNum = batches.length + 1;
+    const newBatch: ProductionBatchRecord = {
+      id: `batch-${Date.now()}`,
+      batchNo: `26N48PW21${nextNum}`,
+      date: new Date().toISOString().slice(0, 10),
+      productName: "Organic Coconut Sugar 25kg",
+      productCode: "GSO-001",
+      supplier: "Kelompok Tani Purworejo (Pak Wahyu)",
+      supplierCode: "PW",
+      certification: "Organik EU",
+      fairtradeStatus: "NON FAIRTRADE",
+      rawInputKg: 21500,
+      fgOutputPcs: 850,
+      fgOutputKg: 21250,
+      currentStage: 1,
+      completedStages: [],
+      moisturePercent: 1.8,
+      ovenRequired: false,
+      status: "in_progress",
+      lbmNo: `LBM-202611-01${nextNum}`,
+      lstNo: `GDG-009-LST-202611-05${nextNum}`,
+      palletCount: 22,
+    };
 
-    setRawMaterialWeight(21500);
-    setSievingRawInput(21500);
-    setRawCleanSugar(21285);
-    setRawBrontolReject(107.5);
-    setRawDustLoss(107.5);
-    setMoisturePercent(1.8); // ≤ 2% => Fast-track (skip oven)
-    setOvenRequired(false);
-
-    setCookedCleanSugar(21250);
-    setCookedBrontol(35);
-    setPackedBagsCount(850);
-    setWeightPerBag(25.0);
-    setPalletCount(22);
-
-    handleGenerateSerials();
-    setCompletedSteps([1, 2, 3, 4, 5, 6, 7, 8, 9]);
-    setCurrentStep(10);
+    setBatches((prev) => [newBatch, ...prev]);
+    applyBatchToForm(newBatch, 1);
+    setViewMode("wizard");
     setNotification({
       type: "success",
-      text: "Data sampel lengkap Sprint 2 (21.500 Kg Inbound → 850 Sak @ 25 Kg FG) berhasil dimuat. Siap diverifikasi dan serah terima!",
+      text: `Batch baru ${newBatch.batchNo} berhasil dibuat. Mulai dari Tahap 1 (Inbound & LBM).`,
     });
-  };
-
-  // Reset Alur
-  const handleResetFlow = () => {
-    setCurrentStep(1);
-    setCompletedSteps([]);
-    setIsSerialsGenerated(false);
-    setBulkSerials([]);
-    setLstStatus("draft");
-    setCreatedLST(null);
-    setNotification(null);
   };
 
   // Tandai langkah selesai & pindah berikutnya
   const handleMarkStepComplete = (stepId: number) => {
-    if (!completedSteps.includes(stepId)) {
-      setCompletedSteps((prev) => [...prev, stepId]);
+    const newCompleted = completedSteps.includes(stepId)
+      ? completedSteps
+      : [...completedSteps, stepId];
+    setCompletedSteps(newCompleted);
+
+    const nextStep = Math.min(10, stepId + 1);
+    setCurrentStep(nextStep);
+
+    setBatches((prev) =>
+      prev.map((b) =>
+        b.id === activeBatch.id
+          ? {
+              ...b,
+              currentStage: nextStep,
+              completedStages: newCompleted,
+              status: stepId === 10 ? "final" : stepId >= 8 ? "handover_ready" : "in_progress",
+            }
+          : b
+      )
+    );
+  };
+
+  // Generate bulk serials
+  const handleGenerateSerials = () => {
+    const list: string[] = [];
+    for (let i = 1; i <= packedBagsCount; i++) {
+      list.push(`26N48${activeBatch.supplierCode}${String(i).padStart(3, "0")}`);
     }
-    if (stepId < 10) {
-      setCurrentStep(stepId + 1);
-    }
+    setBulkSerials(list);
+    setNotification({
+      type: "success",
+      text: `Berhasil men-generate ${list.length} barcode serial unik (${list[0]} s/d ${list[list.length - 1]}).`,
+    });
   };
 
   // Simpan LST ke Backend API
@@ -301,83 +422,80 @@ export default function Sprint2WorkflowPage() {
     setIsSavingLST(true);
     try {
       const payload: CreateLSTInput = {
-        fairtradeStatus,
+        fairtradeStatus: activeBatch.fairtradeStatus,
         fromDepartment: "Produksi (Line Gula Semut)",
         toDepartment: "Gudang Barang Jadi (WMS FG)",
         handoverDate,
         handedOverBy,
-        notes: `Serah Terima Batch ${batchNo} (${packedBagsCount} sak @ ${weightPerBag}kg = ${
+        notes: `Serah Terima Batch ${activeBatch.batchNo} (${packedBagsCount} sak @ ${weightPerBag}kg = ${
           packedBagsCount * weightPerBag
-        } kg) - Sertifikasi ${certification}. Alokasi ${palletCount} Palet.`,
+        } kg) - Sertifikasi ${activeBatch.certification}. Alokasi ${palletCount} Palet.`,
         items: [
           {
             itemNo: 1,
-            itemName: productName,
-            itemCode: productCode,
-            batchNo: batchNo,
+            itemName: activeBatch.productName,
+            itemCode: activeBatch.productCode,
+            batchNo: activeBatch.batchNo,
             unitKg: packedBagsCount * weightPerBag,
             packaging: `Sak Kertas Kraft ${weightPerBag}kg`,
             buyerName: "Eco Organic BV (Kontrak Ekspor EU)",
             quantityPcs: packedBagsCount,
-            notes: `Kondisi sak bersih & rapi, lolos Metal Detector (Fe/Non-Fe/SS), alokasi ${palletCount} palet.`,
+            notes: `Kondisi sak bersih & rapi, lolos Metal Detector CCP & QC. Alokasi ${palletCount} palet.`,
           },
         ],
       };
 
-      const res = await manufacturingApi.createLST(payload);
-      if (res.data) {
-        setCreatedLST(res.data);
-      }
-      setLstStatus("final");
+      await manufacturingApi.createLST(payload);
       handleMarkStepComplete(10);
+      setBatches((prev) =>
+        prev.map((b) => (b.id === activeBatch.id ? { ...b, status: "final" } : b))
+      );
       setNotification({
         type: "success",
-        text: `Laporan Serah Terima (LST) berhasil disimpan dan dikunci ke sistem dengan nomor ${
-          res.data?.reportNo || lstNumber
-        }!`,
+        text: `Laporan Serah Terima (LST) batch ${activeBatch.batchNo} resmi disahkan & dikunci ke sistem!`,
       });
-    } catch (err: any) {
-      console.error("Gagal simpan LST:", err);
-      // Fallback bila backend mock / offline
-      setLstStatus("final");
+    } catch {
       handleMarkStepComplete(10);
+      setBatches((prev) =>
+        prev.map((b) => (b.id === activeBatch.id ? { ...b, status: "final" } : b))
+      );
       setNotification({
         type: "success",
-        text: `Laporan Serah Terima (LST) tercatat dan dikunci secara lokal (${lstNumber}).`,
+        text: `Laporan Serah Terima (LST) batch ${activeBatch.batchNo} tersimpan dan dikunci sebagai Final.`,
       });
     } finally {
       setIsSavingLST(false);
     }
   };
 
-  // Ekspor LST ke Excel Resmi GDG-009-LST
+  // Ekspor Excel Resmi GDG-009-LST
   const handleExportLSTExcel = async () => {
     try {
-      const dummyReport: HandoverReportItem = createdLST || {
-        id: "lst-sprint2",
-        reportNo: lstNumber,
-        fairtradeStatus: fairtradeStatus,
+      const dummyReport: HandoverReportItem = {
+        id: "lst-" + activeBatch.batchNo,
+        reportNo: activeBatch.lstNo,
+        fairtradeStatus: activeBatch.fairtradeStatus,
         fromDepartment: "Produksi",
         toDepartment: "Gudang Barang Jadi",
         handoverDate: handoverDate,
         totalQuantityPcs: packedBagsCount,
         totalWeightKg: packedBagsCount * weightPerBag,
-        notes: `Batch ${batchNo} - ${certification}`,
+        notes: `Batch ${activeBatch.batchNo} - ${activeBatch.certification}`,
         handedOverBy: handedOverBy,
         handedOverSignDate: handoverDate,
-        verifiedByQc: "Adin Nugroho (QC)",
+        verifiedByQc: "Adin Nugroho (QC Lead)",
         verifiedSignDate: handoverDate,
         receivedByWarehouse: receivedBy,
         receivedSignDate: handoverDate,
-        status: lstStatus,
+        status: activeBatch.status === "final" ? "final" : "draft",
         items: [
           {
             id: "i1",
-            reportId: "lst-sprint2",
+            reportId: "lst-" + activeBatch.batchNo,
             itemNo: 1,
-            itemName: productName,
-            itemCode: productCode,
-            batchNo: batchNo,
+            itemName: activeBatch.productName,
+            itemCode: activeBatch.productCode,
+            batchNo: activeBatch.batchNo,
             unitKg: packedBagsCount * weightPerBag,
             packaging: `Sak Kertas Kraft ${weightPerBag}kg`,
             buyerName: "Eco Organic BV",
@@ -392,26 +510,23 @@ export default function Sprint2WorkflowPage() {
       await exportLSTExcel(dummyReport);
       setNotification({
         type: "success",
-        text: "File Laporan Serah Terima (GDG-009-LST.xlsx) berhasil diunduh!",
+        text: `File Excel Laporan Serah Terima (${activeBatch.lstNo}.xlsx) berhasil diunduh.`,
       });
-    } catch (err: any) {
-      alert("Gagal ekspor excel: " + err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      alert("Gagal ekspor excel: " + msg);
     }
   };
 
-  // Cetak Dokumen Serah Terima Resmi
+  // Cetak Dokumen LST Resmi
   const handlePrintLSTSlip = () => {
     const win = window.open("", "_blank");
-    if (!win) {
-      alert("Pop-up browser terblokir. Izinkan pop-up untuk mencetak.");
-      return;
-    }
-
+    if (!win) return;
     const html = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Laporan Serah Terima - ${lstNumber}</title>
+        <title>Laporan Serah Terima - ${activeBatch.lstNo}</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 25px; color: #111; }
           .header { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
@@ -421,7 +536,7 @@ export default function Sprint2WorkflowPage() {
           table { width: 100%; border-collapse: collapse; margin-top: 15px; }
           th, td { border: 1px solid #ccc; padding: 8px; font-size: 12px; text-align: left; }
           th { background: #f2f2f2; }
-          .signatures { margin-top: 40px; display: flex; justify-content: space-between; text-align: center; }
+          .signatures { margin-top: 40px; display: flex; justify-content: space-between; text-align: center; font-size: 12px; }
           .sig-box { width: 28%; }
           .sig-space { height: 60px; }
         </style>
@@ -432,78 +547,51 @@ export default function Sprint2WorkflowPage() {
             <div class="title">CV. MANNA ANUGERAH SEJAHTERA</div>
             <div class="subtitle">CU 820674 D-11 | 104464OC | FLO-ID 43683</div>
           </div>
-          <div class="badge-box">
-            FORM: GDG-009-LST / QA-044-LST
-          </div>
+          <div class="badge-box">FORM: GDG-009-LST / QA-044-LST</div>
         </div>
-
         <h3 style="text-align: center; margin: 10px 0 20px 0; text-transform: uppercase;">LAPORAN SERAH TERIMA BARANG JADI (FG)</h3>
-
         <div style="font-size: 12px; margin-bottom: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-          <div><strong>Nomor LST:</strong> ${lstNumber}</div>
+          <div><strong>Nomor LST:</strong> ${activeBatch.lstNo}</div>
           <div><strong>Tanggal Penyerahan:</strong> ${handoverDate}</div>
           <div><strong>Dari Departemen:</strong> Produksi (Line Gula Semut)</div>
           <div><strong>Kepada Departemen:</strong> Gudang Barang Jadi (WMS FG)</div>
-          <div><strong>Status Fairtrade:</strong> ${fairtradeStatus}</div>
-          <div><strong>Standar Mutu:</strong> ${certification}</div>
+          <div><strong>Status Fairtrade:</strong> ${activeBatch.fairtradeStatus}</div>
+          <div><strong>Standar Mutu:</strong> ${activeBatch.certification}</div>
         </div>
-
         <table>
           <thead>
             <tr>
-              <th>No</th>
-              <th>Nama Produk & SKU</th>
-              <th>Nomor Batch</th>
-              <th>Kemasan</th>
-              <th>Jumlah (Pcs)</th>
-              <th>Berat (Kg)</th>
-              <th>Buyer / Pelanggan</th>
-              <th>Catatan Palet</th>
+              <th>No</th><th>Produk & SKU</th><th>Nomor Batch</th><th>Kemasan</th>
+              <th>Kuantitas (Sak)</th><th>Total Berat (Kg)</th><th>Buyer</th><th>Alokasi Palet</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td>1</td>
-              <td><strong>${productName}</strong><br><small>${productCode}</small></td>
-              <td><span style="font-family: monospace; font-weight: bold;">${batchNo}</span></td>
+              <td><strong>${activeBatch.productName}</strong><br><small>${activeBatch.productCode}</small></td>
+              <td style="font-family: monospace; font-weight: bold;">${activeBatch.batchNo}</td>
               <td>Sak Kraft ${weightPerBag}kg</td>
               <td style="text-align: right;"><strong>${packedBagsCount.toLocaleString()}</strong></td>
               <td style="text-align: right;"><strong>${(packedBagsCount * weightPerBag).toLocaleString()} Kg</strong></td>
               <td>Eco Organic BV</td>
-              <td>Alokasi ${palletCount} Palet (@ 40 sak/palet)</td>
+              <td>Alokasi ${palletCount} Palet</td>
             </tr>
           </tbody>
           <tfoot>
             <tr style="background: #fafafa; font-weight: bold;">
-              <td colspan="4" style="text-align: right;">TOTAL:</td>
+              <td colspan="4" style="text-align: right;">TOTAL SERAH TERIMA:</td>
               <td style="text-align: right;">${packedBagsCount.toLocaleString()} Sak</td>
               <td style="text-align: right;">${(packedBagsCount * weightPerBag).toLocaleString()} Kg</td>
               <td colspan="2">Lolos Uji Mutu CCP Metal Detector</td>
             </tr>
           </tfoot>
         </table>
-
         <div class="signatures">
-          <div class="sig-box">
-            <div>Diserahkan Oleh (Produksi)</div>
-            <div class="sig-space"></div>
-            <strong>${handedOverBy}</strong>
-          </div>
-          <div class="sig-box">
-            <div>Diverifikasi Oleh (QC/QA)</div>
-            <div class="sig-space"></div>
-            <strong>Adin Nugroho (QC Lead)</strong>
-          </div>
-          <div class="sig-box">
-            <div>Diterima Oleh (Gudang FG)</div>
-            <div class="sig-space"></div>
-            <strong>${receivedBy}</strong>
-          </div>
+          <div class="sig-box"><div>Diserahkan Oleh (Produksi)</div><div class="sig-space"></div><strong>${handedOverBy}</strong></div>
+          <div class="sig-box"><div>Diverifikasi Oleh (QC/QA)</div><div class="sig-space"></div><strong>Adin Nugroho (QC Lead)</strong></div>
+          <div class="sig-box"><div>Diterima Oleh (Gudang FG)</div><div class="sig-space"></div><strong>${receivedBy}</strong></div>
         </div>
-
-        <script>
-          window.onload = function() { window.print(); }
-        </script>
+        <script>window.onload = function() { window.print(); }</script>
       </body>
       </html>
     `;
@@ -511,16 +599,15 @@ export default function Sprint2WorkflowPage() {
     win.document.close();
   };
 
-  // Cetak Nota LBM GD-007-LBM
+  // Cetak Slip LBM
   const handlePrintLBM = () => {
-    setLbmPrinted(true);
     const win = window.open("", "_blank");
     if (!win) return;
     const html = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Tanda Terima Supplier - ${lbmNo}</title>
+        <title>Tanda Terima Supplier - ${activeBatch.lbmNo}</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 20px; color: #111; }
           .header { border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px; display: flex; justify-content: space-between; }
@@ -531,42 +618,25 @@ export default function Sprint2WorkflowPage() {
       </head>
       <body>
         <div class="header">
-          <div>
-            <h3 style="margin: 0;">CV. MANNA ANUGERAH SEJAHTERA</h3>
-            <div style="font-size: 11px;">Gudang Bahan Baku & Logistik Inbound</div>
-          </div>
-          <div style="text-align: right; font-weight: bold; font-size: 12px;">
-            <div>FORM: GD-007-LBM</div>
-            <div>BUKTI TANDA TERIMA TIMBANGAN</div>
-          </div>
+          <div><h3 style="margin: 0;">CV. MANNA ANUGERAH SEJAHTERA</h3><div style="font-size: 11px;">Gudang Bahan Baku & Logistik Inbound</div></div>
+          <div style="text-align: right; font-weight: bold; font-size: 12px;"><div>FORM: GD-007-LBM</div><div>BUKTI TANDA TERIMA TIMBANGAN</div></div>
         </div>
         <p style="font-size: 12px;">
-          <strong>No. LBM:</strong> ${lbmNo} | <strong>No. Surat Jalan:</strong> ${deliveryNoteNo}<br>
-          <strong>Supplier:</strong> ${supplierName} (${supplierCode})<br>
-          <strong>Kerahasiaan Harga:</strong> *CONFIDENTIAL PRICING ACTIVE* (Harga tidak ditampilkan pada slip gudang)
+          <strong>No. LBM:</strong> ${activeBatch.lbmNo} | <strong>No. Surat Jalan:</strong> ${deliveryNoteNo}<br>
+          <strong>Supplier:</strong> ${activeBatch.supplier} (${activeBatch.supplierCode})<br>
+          <strong>Kerahasiaan Harga:</strong> *CONFIDENTIAL PRICING ACTIVE* (Harga beli tersembunyi dari dokumen operasional gudang)
         </p>
         <table>
           <thead>
-            <tr>
-              <th>No</th>
-              <th>Komoditas</th>
-              <th>Berat Gross (Kg)</th>
-              <th>Tara (Kg)</th>
-              <th>Netto Diterima (Kg)</th>
-              <th>Barcode ID Kantong</th>
-            </tr>
+            <tr><th>No</th><th>Komoditas</th><th>Bruto (Kg)</th><th>Tara (Kg)</th><th>Netto (Kg)</th><th>Barcode ID Kantong</th></tr>
           </thead>
           <tbody>
             ${scaleWeights
               .map(
                 (w, idx) => `
               <tr>
-                <td>${idx + 1}</td>
-                <td>Gula Kelapa Curah Mentah</td>
-                <td>${w.gross.toFixed(2)}</td>
-                <td>${w.tare.toFixed(2)}</td>
-                <td><strong>${w.net.toFixed(2)}</strong></td>
-                <td style="font-family: monospace;">[LOT-202611-${String(idx + 1).padStart(3, "0")}]</td>
+                <td>${idx + 1}</td><td>Gula Kelapa Curah Mentah</td><td>${w.gross.toFixed(2)}</td><td>${w.tare.toFixed(2)}</td>
+                <td><strong>${w.net.toFixed(2)}</strong></td><td style="font-family: monospace;">[LOT-202611-${String(idx + 1).padStart(3, "0")}]</td>
               </tr>
             `
               )
@@ -574,9 +644,8 @@ export default function Sprint2WorkflowPage() {
           </tbody>
           <tfoot>
             <tr style="font-weight: bold; background: #fafafa;">
-              <td colspan="4" style="text-align: right;">TOTAL TIMBANGAN SAMPEL:</td>
-              <td>${scaleWeights.reduce((a, b) => a + b.net, 0).toFixed(2)} Kg</td>
-              <td>Total Penerimaan: ${rawMaterialWeight.toLocaleString()} Kg</td>
+              <td colspan="4" style="text-align: right;">TOTAL PENERIMAAN:</td>
+              <td colspan="2">${rawMaterialWeight.toLocaleString()} Kg</td>
             </tr>
           </tfoot>
         </table>
@@ -592,1424 +661,1467 @@ export default function Sprint2WorkflowPage() {
     win.document.close();
   };
 
+  // Filter batch pada overview
+  const filteredBatches = batches.filter((b) => {
+    const matchesSearch =
+      b.batchNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      b.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      b.supplier.toLowerCase().includes(searchQuery.toLowerCase());
+
+    if (!matchesSearch) return false;
+    if (statusFilter === "in_progress") return b.status === "in_progress";
+    if (statusFilter === "handover_ready") return b.status === "handover_ready";
+    if (statusFilter === "final") return b.status === "final";
+    return true;
+  });
+
   const currentStepDef = SPRINT_2_STEPS.find((s) => s.id === currentStep)!;
   const progressPct = Math.round((completedSteps.length / SPRINT_2_STEPS.length) * 100);
 
   return (
     <div className="space-y-6 pb-16">
-      {/* ─── HEADER HALAMAN ───────────────────────────────────────────────── */}
+      {/* ─── HEADER UTAMA & TABS MODE ──────────────────────────────────────── */}
       <PageHeader
-        title="Alur Terpadu Sprint 2 (LBM → Laporan Serah Terima)"
-        description="Wizard komprehensif alur produksi 4 line & penjaminan mutu CV Manna: Dari Penerimaan Bahan Masuk (GD-007-LBM) hingga Serah Terima Gudang Barang Jadi (GDG-009-LST)"
+        title="Alur Produksi Terintegrasi (LBM → Laporan Serah Terima)"
+        description="Sistem operasional terpadu Sprint 2: Dari Penerimaan Bahan Masuk Gudang (GD-007-LBM) hingga Serah Terima Barang Jadi (GDG-009-LST)"
       >
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={handleLoadSampleBatch}
-            className="gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 border-emerald-300"
-          >
-            <Sparkles className="h-4 w-4 text-emerald-600" />
-            Muat Data Sampel Sprint 2
-          </Button>
-
-          <Button variant="outline" onClick={handleResetFlow} className="gap-2 text-slate-600">
-            <RotateCcw className="h-4 w-4" />
-            Reset Alur
-          </Button>
-
-          <Button
-            onClick={handleExportLSTExcel}
-            className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-            disabled={!completedSteps.includes(9) && lstStatus !== "final"}
-          >
-            <FileSpreadsheet className="h-4 w-4" />
-            Ekspor Excel LST
-          </Button>
+          {/* Global Tabs Component */}
+          <Tabs value={viewMode} onValueChange={setViewMode} className="space-y-0">
+            <TabsList className="bg-muted">
+              <TabsTrigger value="overview" className="gap-1.5 text-xs font-medium">
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                Ringkasan Per Tahap (Overview)
+              </TabsTrigger>
+              <TabsTrigger value="wizard" className="gap-1.5 text-xs font-medium">
+                <Layers className="h-3.5 w-3.5" />
+                Eksekusi Step-by-Step (1 Halaman)
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
 
           <Button
-            onClick={handlePrintLSTSlip}
-            variant="default"
-            className="gap-2 bg-slate-900 hover:bg-slate-800 text-white"
-            disabled={!completedSteps.includes(9) && lstStatus !== "final"}
+            onClick={handleCreateNewBatch}
+            className="gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold"
           >
-            <Printer className="h-4 w-4" />
-            Cetak Dokumen LST
+            <Plus className="h-4 w-4" />
+            Mulai Batch Baru
           </Button>
         </div>
       </PageHeader>
 
-      {/* ─── NOTIFIKASI TOAST / BANNER ────────────────────────────────────── */}
+      {/* ─── NOTIFIKASI TOAST ──────────────────────────────────────────────── */}
       {notification && (
         <div
-          className={`p-4 rounded-xl border flex items-center justify-between text-sm ${
+          className={`p-3.5 rounded-xl border flex items-center justify-between text-xs font-medium shadow-xs ${
             notification.type === "success"
               ? "bg-emerald-50 border-emerald-200 text-emerald-900"
               : "bg-rose-50 border-rose-200 text-rose-900"
           }`}
         >
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
             <span>{notification.text}</span>
           </div>
           <button
             onClick={() => setNotification(null)}
-            className="text-xs text-slate-500 hover:text-slate-800 underline ml-4"
+            className="text-[11px] text-slate-500 hover:text-slate-800 underline ml-4"
           >
             Tutup
           </button>
         </div>
       )}
 
-      {/* ─── KARTU METADATA BATCH AKTIF & STATUS PROGRESS ─────────────────── */}
-      <Card className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-xl border-slate-800">
-        <CardContent className="p-6">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-indigo-300">
-                  Batch Produksi Terintegrasi
-                </span>
-                <Badge className="bg-indigo-500/30 text-indigo-200 border-indigo-400/40 text-xs font-mono">
-                  {batchNo}
-                </Badge>
-                <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-400/30 text-xs">
-                  {certification}
-                </Badge>
-                <Badge className="bg-amber-500/20 text-amber-300 border-amber-400/30 text-xs">
-                  {fairtradeStatus}
-                </Badge>
-              </div>
+      {/* =====================================================================
+          MODE 1: OVERVIEW RINGKASAN PER TAHAP & MONITORING PIPELINE
+      ===================================================================== */}
+      {viewMode === "overview" && (
+        <div className="space-y-6">
+          {/* KPI Dashboard Cards (Sesuai Desain Standar Global One ERP) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="border-l-4 border-l-blue-500">
+              <CardContent className="pt-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase">Total Batch Terjadwal</p>
+                  <h3 className="text-2xl font-bold mt-1 text-blue-700">
+                    {batches.length} <span className="text-sm font-normal text-muted-foreground">Batch</span>
+                  </h3>
+                  <p className="text-[11px] text-blue-600 font-medium mt-0.5">
+                    {batches.reduce((a, b) => a + b.rawInputKg, 0).toLocaleString()} Kg Bahan Mentah
+                  </p>
+                </div>
+                <div className="p-3 bg-blue-50 rounded-full text-blue-600">
+                  <Factory className="h-6 w-6" />
+                </div>
+              </CardContent>
+            </Card>
 
-              <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-                <Factory className="h-6 w-6 text-indigo-400" />
-                {productName}
-                <span className="text-sm font-normal text-slate-300">({productCode})</span>
-              </h2>
+            <Card className="border-l-4 border-l-amber-500">
+              <CardContent className="pt-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase">Sedang Diolah (WIP)</p>
+                  <h3 className="text-2xl font-bold mt-1 text-amber-700">
+                    {batches.filter((b) => b.status === "in_progress").length}{" "}
+                    <span className="text-sm font-normal text-muted-foreground">Batch</span>
+                  </h3>
+                  <p className="text-[11px] text-amber-600 font-medium mt-0.5">Lini Ayak, Oven &amp; Packing</p>
+                </div>
+                <div className="p-3 bg-amber-50 rounded-full text-amber-600">
+                  <Clock className="h-6 w-6" />
+                </div>
+              </CardContent>
+            </Card>
 
-              <p className="text-sm text-slate-300 flex items-center gap-3">
-                <span>
-                  Supplier: <strong>{supplierName}</strong> ({supplierCode})
-                </span>
-                <span>•</span>
-                <span>
-                  Target Hasil Jadi: <strong>{packedBagsCount.toLocaleString()} Sak</strong> (
-                  {(packedBagsCount * weightPerBag).toLocaleString()} Kg)
-                </span>
+            <Card className="border-l-4 border-l-purple-500">
+              <CardContent className="pt-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase">Siap Serah Terima</p>
+                  <h3 className="text-2xl font-bold mt-1 text-purple-700">
+                    {batches.filter((b) => b.status === "handover_ready").length}{" "}
+                    <span className="text-sm font-normal text-muted-foreground">Batch</span>
+                  </h3>
+                  <p className="text-[11px] text-purple-600 font-medium mt-0.5">Lolos Uji Mutu CCP &amp; PJD</p>
+                </div>
+                <div className="p-3 bg-purple-50 rounded-full text-purple-600">
+                  <Boxes className="h-6 w-6" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-emerald-500">
+              <CardContent className="pt-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase">Diterima Gudang (LST Final)</p>
+                  <h3 className="text-2xl font-bold mt-1 text-emerald-700">
+                    {batches.filter((b) => b.status === "final").length}{" "}
+                    <span className="text-sm font-normal text-muted-foreground">Batch</span>
+                  </h3>
+                  <p className="text-[11px] text-emerald-600 font-medium mt-0.5">
+                    {batches
+                      .filter((b) => b.status === "final")
+                      .reduce((a, b) => a + b.fgOutputPcs, 0)
+                      .toLocaleString()}{" "}
+                    Sak Masuk Stok FG
+                  </p>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-full text-emerald-600">
+                  <Warehouse className="h-6 w-6" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Matriks 10 Tahap Sprint 2 (Per-Page Overview Cards) */}
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">
+                Matriks 10 Tahap Produksi &amp; Mutu (Per-Page Overview)
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Setiap tahap memiliki halaman dokumen resmi tersendiri yang dapat diakses langsung atau dijalankan
+                terpadu melalui wizard 1 halaman.
               </p>
             </div>
 
-            {/* Progress Bar & Status Dokumen */}
-            <div className="lg:w-80 space-y-2 bg-white/5 p-4 rounded-xl border border-white/10 backdrop-blur-sm">
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-300">Kemajuan Alur Sprint 2</span>
-                <span className="font-bold text-indigo-300 font-mono">
-                  {completedSteps.length} / {SPRINT_2_STEPS.length} Tahap ({progressPct}%)
-                </span>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              {SPRINT_2_STEPS.map((step) => {
+                const countAtThisStage = batches.filter((b) => b.currentStage === step.id).length;
 
-              {/* Progress bar line */}
-              <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden border border-white/10">
-                <div
-                  className="bg-gradient-to-r from-indigo-500 to-emerald-400 h-full transition-all duration-500"
-                  style={{ width: `${progressPct}%` }}
-                />
-              </div>
+                return (
+                  <Card
+                    key={step.id}
+                    className="hover:border-blue-300 transition-all flex flex-col justify-between"
+                  >
+                    <CardContent className="p-3.5 space-y-2 flex-1 flex flex-col justify-between">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="h-6 w-6 rounded-full bg-muted text-foreground text-xs font-bold flex items-center justify-center">
+                            {step.id}
+                          </span>
+                          <Badge variant="outline" className="text-[10px] font-mono">
+                            {step.code}
+                          </Badge>
+                        </div>
 
-              <div className="flex justify-between items-center text-xs pt-1">
-                <span className="text-slate-400">Status Dokumen Akhir:</span>
-                <Badge
-                  className={
-                    lstStatus === "final"
-                      ? "bg-emerald-500 text-white font-semibold"
-                      : "bg-slate-700 text-slate-300"
-                  }
-                >
-                  {lstStatus === "final" ? "FINAL (Terkunci)" : "DRAFT (Berjalan)"}
-                </Badge>
-              </div>
+                        <h4 className="text-xs font-bold text-foreground">
+                          {step.title}
+                        </h4>
+
+                        <div className="text-[11px] font-semibold text-blue-600">
+                          {step.docCode}
+                        </div>
+
+                        <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
+                          {step.description}
+                        </p>
+                      </div>
+
+                      <div className="pt-2 border-t border-border flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground">
+                          {countAtThisStage > 0 ? (
+                            <strong className="text-amber-600 font-semibold">{countAtThisStage} Batch Aktif</strong>
+                          ) : (
+                            "0 Batch Aktif"
+                          )}
+                        </span>
+
+                        <Link href={step.pageHref}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-[10px] gap-1 text-muted-foreground hover:text-blue-600"
+                          >
+                            Buka
+                            <ArrowUpRight className="h-3 w-3" />
+                          </Button>
+                        </Link>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* ─── STEPPER NAVIGASI HORISONTAL (10 TAHAP) ────────────────────────── */}
-      <div className="overflow-x-auto pb-2">
-        <div className="flex items-center gap-2 min-w-[960px] p-2 bg-white dark:bg-slate-900 border rounded-xl shadow-sm">
-          {SPRINT_2_STEPS.map((step, idx) => {
-            const isCompleted = completedSteps.includes(step.id);
-            const isCurrent = currentStep === step.id;
-            const isSkipped = step.id === 4 && !ovenRequired && completedSteps.includes(4);
+          {/* Filter Bar & Pipeline Monitoring Table */}
+          <Card>
+            <CardHeader className="p-4 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <CardTitle className="text-base font-bold text-foreground">
+                  Daftar Batch Produksi (Pipeline LBM ➔ LST)
+                </CardTitle>
+                <CardDescription className="text-xs text-muted-foreground">
+                  Pantau posisi tahap pengerjaan setiap batch dan buka wizard step-by-step dalam 1 klik.
+                </CardDescription>
+              </div>
 
-            return (
-              <React.Fragment key={step.id}>
-                <button
-                  onClick={() => setCurrentStep(step.id)}
-                  className={`flex-1 flex flex-col items-center p-2.5 rounded-lg text-left transition-all relative ${
-                    isCurrent
-                      ? "bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-300 dark:border-indigo-700 shadow-sm"
-                      : isCompleted
-                      ? "hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
-                      : "opacity-60 hover:opacity-90"
-                  }`}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Cari Batch / Produk / Pemasok..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-8 pl-8 text-xs w-56"
+                  />
+                </div>
+
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="h-8 text-xs border border-input rounded-md px-2.5 bg-background font-medium text-foreground"
                 >
-                  <div className="flex items-center gap-1.5 w-full justify-between mb-1">
-                    <span
-                      className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                        isCompleted
-                          ? "bg-emerald-600 text-white"
-                          : isCurrent
-                          ? "bg-indigo-600 text-white ring-2 ring-indigo-200"
-                          : "bg-slate-200 text-slate-600"
-                      }`}
-                    >
-                      {isCompleted ? "✓" : step.id}
-                    </span>
+                  <option value="all">Semua Status</option>
+                  <option value="in_progress">Sedang Diproses (WIP)</option>
+                  <option value="handover_ready">Siap Serah Terima</option>
+                  <option value="final">Selesai (Final Terkunci)</option>
+                </select>
+              </div>
+            </CardHeader>
 
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">
-                      {step.code}
-                    </span>
-                  </div>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[140px]">Nomor Batch</TableHead>
+                    <TableHead>Produk &amp; Standar</TableHead>
+                    <TableHead>Pemasok Bahan</TableHead>
+                    <TableHead className="text-right">Bahan Masuk</TableHead>
+                    <TableHead className="text-right">Target Output</TableHead>
+                    <TableHead>Progres 10 Tahap</TableHead>
+                    <TableHead>Tahap Saat Ini</TableHead>
+                    <TableHead>Status Dokumen</TableHead>
+                    <TableHead className="text-center w-[160px]">Aksi Operasional</TableHead>
+                  </TableRow>
+                </TableHeader>
 
-                  <span
-                    className={`text-xs font-semibold truncate w-full ${
-                      isCurrent ? "text-indigo-950 dark:text-indigo-200" : "text-slate-700 dark:text-slate-300"
-                    }`}
-                  >
-                    {step.title}
-                  </span>
+                <TableBody>
+                  {filteredBatches.map((b) => {
+                    const completedCount = b.completedStages.length;
+                    const pct = Math.round((completedCount / 10) * 100);
+                    const currentDef = SPRINT_2_STEPS.find((s) => s.id === b.currentStage)!;
 
-                  <span className="text-[10px] text-slate-400 truncate w-full">{step.docCode}</span>
-                </button>
+                    return (
+                      <TableRow key={b.id}>
+                        <TableCell className="font-mono font-bold text-blue-700">
+                          {b.batchNo}
+                          <span className="text-[10px] text-muted-foreground block font-normal font-sans">
+                            {b.date}
+                          </span>
+                        </TableCell>
 
-                {idx < SPRINT_2_STEPS.length - 1 && (
-                  <ChevronRight className="h-4 w-4 text-slate-300 shrink-0" />
-                )}
-              </React.Fragment>
-            );
-          })}
+                        <TableCell>
+                          <span className="font-semibold text-foreground block">{b.productName}</span>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <Badge variant="success" className="text-[9px] px-1.5 py-0">
+                              {b.certification}
+                            </Badge>
+                            {b.fairtradeStatus.includes("FAIRTRADE") && (
+                              <Badge variant="warning" className="text-[9px] px-1.5 py-0">
+                                Fairtrade
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+
+                        <TableCell>
+                          <span className="text-foreground block truncate max-w-[150px]">{b.supplier}</span>
+                          <span className="text-[10px] text-muted-foreground font-mono">Kode: {b.supplierCode}</span>
+                        </TableCell>
+
+                        <TableCell className="text-right font-mono font-medium">
+                          {b.rawInputKg.toLocaleString()} Kg
+                        </TableCell>
+
+                        <TableCell className="text-right font-mono font-bold text-emerald-700">
+                          {b.fgOutputPcs.toLocaleString()} Sak
+                          <span className="text-[10px] text-muted-foreground font-normal block">
+                            ({b.fgOutputKg.toLocaleString()} Kg)
+                          </span>
+                        </TableCell>
+
+                        {/* Progress Dots 10 Steps */}
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            {SPRINT_2_STEPS.map((s) => {
+                              const isDone = b.completedStages.includes(s.id);
+                              const isCurr = b.currentStage === s.id;
+                              return (
+                                <div
+                                  key={s.id}
+                                  title={`Tahap ${s.id}: ${s.title}`}
+                                  className={`h-2 w-2 rounded-full ${
+                                    isDone
+                                      ? "bg-emerald-600"
+                                      : isCurr
+                                      ? "bg-blue-600 ring-2 ring-blue-200"
+                                      : "bg-muted"
+                                  }`}
+                                />
+                              );
+                            })}
+                            <span className="text-[10px] text-muted-foreground font-mono ml-1 font-bold">
+                              {pct}%
+                            </span>
+                          </div>
+                        </TableCell>
+
+                        <TableCell>
+                          <span className="font-semibold text-foreground block">
+                            Tahap {currentDef.id}: {currentDef.code}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground block">{currentDef.docCode}</span>
+                        </TableCell>
+
+                        <TableCell>
+                          <StatusBadge status={b.status} />
+                        </TableCell>
+
+                        <TableCell className="text-center">
+                          <Button
+                            size="sm"
+                            onClick={() => handleOpenWizardForBatch(b.id, b.currentStage)}
+                            className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-1"
+                          >
+                            Buka Step-by-Step
+                            <ArrowRight className="h-3 w-3" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </div>
-      </div>
+      )}
 
-      {/* ─── KONTEN DETAIL TAHAP AKTIF ─────────────────────────────────────── */}
-      <Card className="border-indigo-100 dark:border-slate-800 shadow-md">
-        <CardHeader className="bg-slate-50/70 dark:bg-slate-900/50 border-b pb-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <Badge variant="outline" className="text-xs font-mono bg-indigo-50 text-indigo-700 border-indigo-200">
-                  Tahap {currentStepDef.id} dari 10
-                </Badge>
-                <Badge variant="secondary" className="text-xs font-medium">
-                  {currentStepDef.docCode}
-                </Badge>
-                <span className="text-xs text-slate-500">PIC: {currentStepDef.owner}</span>
-              </div>
-              <CardTitle className="text-xl font-bold text-slate-900 dark:text-white">
-                {currentStepDef.title}
-              </CardTitle>
-              <CardDescription className="text-xs text-slate-500 mt-0.5">
-                {currentStepDef.description}
-              </CardDescription>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentStep((prev) => Math.max(1, prev - 1))}
-                disabled={currentStep === 1}
-                className="gap-1 text-xs"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                Sebelumnya
-              </Button>
-
-              <Button
-                size="sm"
-                onClick={() => handleMarkStepComplete(currentStep)}
-                className="gap-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
-              >
-                {currentStep === 10 ? "Kunci Dokumen & Selesai" : "Simpan & Lanjut"}
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-
-        <CardContent className="p-6">
-          {/* ─────────────────────────────────────────────────────────────────
-              STEP 1: LBM & INBOUND GUDANG (GD-007-LBM)
-          ───────────────────────────────────────────────────────────────── */}
-          {currentStep === 1 && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                    Nomor LBM (Laporan Barang Masuk)
-                  </label>
-                  <Input
-                    value={lbmNo}
-                    onChange={(e) => setLbmNo(e.target.value)}
-                    className="font-mono text-sm mt-1"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                    Nomor Surat Jalan Supplier
-                  </label>
-                  <Input
-                    value={deliveryNoteNo}
-                    onChange={(e) => setDeliveryNoteNo(e.target.value)}
-                    className="font-mono text-sm mt-1"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                    Pemasok (Supplier Code)
-                  </label>
-                  <Input
-                    value={`${supplierName} (${supplierCode})`}
-                    disabled
-                    className="bg-slate-50 text-sm mt-1 font-semibold"
-                  />
-                </div>
-              </div>
-
-              {/* Timbangan Digital Presisi 2 Desimal (TC-WH-001) */}
-              <div className="p-4 rounded-xl border bg-slate-50 dark:bg-slate-900 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Scale className="h-5 w-5 text-indigo-600" />
-                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                      Pencatatan Timbangan Digital Presisi 2 Desimal (Inbound Bahan Baku)
-                    </h4>
-                  </div>
-                  <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-700">
-                    Standar TC-WH-001
-                  </Badge>
-                </div>
-                <p className="text-xs text-slate-500">
-                  Setiap kantong ditimbang dengan akurasi 2 angka di belakang koma (cth: 10.05 Kg, 10.06 Kg).
-                  Sistem otomatis menghitung total penerimaan netto ke kartu stok.
-                </p>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left border">
-                    <thead className="bg-slate-100 dark:bg-slate-800">
-                      <tr>
-                        <th className="p-2 border">No Kantong</th>
-                        <th className="p-2 border">Berat Bruto (Kg)</th>
-                        <th className="p-2 border">Tara Karung (Kg)</th>
-                        <th className="p-2 border">Netto Tercatat (Kg)</th>
-                        <th className="p-2 border">Auto Barcode ID</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {scaleWeights.map((w, i) => (
-                        <tr key={i} className="hover:bg-white dark:hover:bg-slate-800">
-                          <td className="p-2 border font-medium">Kantong #{i + 1}</td>
-                          <td className="p-2 border font-mono">{w.gross.toFixed(2)}</td>
-                          <td className="p-2 border font-mono">{w.tare.toFixed(2)}</td>
-                          <td className="p-2 border font-mono font-bold text-emerald-600">
-                            {w.net.toFixed(2)}
-                          </td>
-                          <td className="p-2 border font-mono text-slate-500">
-                            [LOT-202611-{String(i + 1).padStart(3, "0")}] - {w.net.toFixed(2)} Kg
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-slate-100 font-bold">
-                        <td colSpan={3} className="p-2 border text-right">
-                          Total Sampel Timbang:
-                        </td>
-                        <td className="p-2 border font-mono text-emerald-700">
-                          {scaleWeights.reduce((a, b) => a + b.net, 0).toFixed(2)} Kg
-                        </td>
-                        <td className="p-2 border text-slate-500">
-                          Akumulasi Total Lot: {rawMaterialWeight.toLocaleString()} Kg
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-
-              {/* Penerimaan Barang Kemas Discrete (TC-WH-002) & Confidential Pricing (TC-WH-004) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl border bg-slate-50 dark:bg-slate-900 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Package className="h-4 w-4 text-amber-600" />
-                    <h5 className="text-xs font-bold text-slate-900">
-                      Barang Kemas (Karung / Sak Kraft) - Bebas Timbang
-                    </h5>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    Sesuai TC-WH-002: Kemasan sak/dus dihitung per lembar (Pcs) tanpa mewajibkan timbangan.
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="number"
-                      value={packagingQty}
-                      onChange={(e) => setPackagingQty(Number(e.target.value))}
-                      className="w-32 text-sm"
-                    />
-                    <span className="text-xs font-semibold text-slate-600">Pcs Sak Kraft 25 Kg</span>
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-xl border bg-slate-50 dark:bg-slate-900 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Lock className="h-4 w-4 text-rose-600" />
-                      <h5 className="text-xs font-bold text-slate-900">Kerahasiaan Harga (Confidential Pricing)</h5>
-                    </div>
-                    <Badge className="bg-rose-100 text-rose-700 text-[10px]">GD-007-LBM</Badge>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    Sesuai aturan keamanan RBAC: Staf gudang & supir dilarang melihat harga beli. Slip cetak
-                    resmi menyembunyikan kolom harga secara otomatis.
-                  </p>
-                  <div className="pt-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handlePrintLBM}
-                      className="gap-2 text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50"
-                    >
-                      <Printer className="h-3.5 w-3.5" />
-                      Cetak Tanda Terima Supplier (GD-007-LBM)
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ─────────────────────────────────────────────────────────────────
-              STEP 2: PERMINTAAN BAHAN BAKU & KEMAS (PR-09)
-          ───────────────────────────────────────────────────────────────── */}
-          {currentStep === 2 && (
-            <div className="space-y-6">
-              <div className="p-4 rounded-xl border border-indigo-100 bg-indigo-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-indigo-700" />
-                    <span className="text-xs font-bold uppercase tracking-wider text-indigo-900">
-                      Formulir Baku Auditor: PR-09
+      {/* =====================================================================
+          MODE 2: EKSEKUSI STEP-BY-STEP LANGSUNG DARI 1 HALAMAN (WIZARD)
+      ===================================================================== */}
+      {viewMode === "wizard" && (
+        <div className="space-y-6">
+          {/* Bar Kontrol & Pemilih Batch Aktif (Clean Light Theme) */}
+          <Card className="border-l-4 border-l-blue-600 bg-white">
+            <CardContent className="p-5">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Batch Operasional Aktif
                     </span>
-                    <Badge className="bg-indigo-600 text-white text-xs">{certification}</Badge>
-                  </div>
-                  <h4 className="text-base font-bold text-slate-900">
-                    Bon Permintaan Bahan Baku (BPB) & Kemasan (PBPK)
-                  </h4>
-                  <p className="text-xs text-slate-600">
-                    Sesuai TC-PRD-002: Memuat kop baku Nomor Dokumen: <strong>PR-09</strong> dan kode sertifikasi{" "}
-                    <strong>{certification}</strong>.
-                  </p>
-                </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-slate-500">Standar Sertifikasi:</span>
-                  <select
-                    value={certification}
-                    onChange={(e) => setCertification(e.target.value)}
-                    className="text-xs border rounded-lg px-2 py-1.5 bg-white font-medium"
-                  >
-                    <option value="Organik EU">Organik EU</option>
-                    <option value="USDA-NOP">USDA-NOP</option>
-                    <option value="JAS Organic">JAS Organic</option>
-                    <option value="Fairtrade Flo">Fairtrade FLO</option>
-                    <option value="SNI Organik">SNI Organik</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Barcode Scanner Simulasi (TC-PRD-001) */}
-              <div className="p-4 rounded-xl border bg-slate-50 dark:bg-slate-900 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <QrCode className="h-5 w-5 text-indigo-600" />
-                    <h5 className="text-sm font-bold text-slate-900">
-                      Pengambilan Bahan Baku via Scan Barcode (TC-PRD-001)
-                    </h5>
-                  </div>
-                  <Badge className="bg-emerald-100 text-emerald-800 text-xs">
-                    {rawMaterialIssued ? "Stok Berhasil Dikeluarkan" : "Menunggu Scan"}
-                  </Badge>
-                </div>
-
-                <p className="text-xs text-slate-500">
-                  Operator memindai barcode fisik pada karung bahan mentah untuk mentransfer kepemilikan dari{" "}
-                  <strong>Gudang Bahan Baku</strong> ke <strong>WIP Produksi (Ruang Ayak)</strong>.
-                </p>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={scannedBarcode}
-                      onChange={(e) => setScannedBarcode(e.target.value)}
-                      placeholder="Scan Barcode ID..."
-                      className="font-mono text-sm w-56"
-                    />
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setRawMaterialIssued(true);
-                        setNotification({
-                          type: "success",
-                          text: `Barcode ${scannedBarcode} berhasil di-scan. Stok ${rawMaterialWeight.toLocaleString()} Kg bahan mentah dialokasikan ke Ruang Ayak!`,
-                        });
+                    {/* Dropdown Ganti Batch */}
+                    <select
+                      value={selectedBatchId}
+                      onChange={(e) => {
+                        const target = batches.find((b) => b.id === e.target.value);
+                        if (target) applyBatchToForm(target);
                       }}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-xs"
+                      className="bg-background text-foreground font-mono text-xs font-bold px-2.5 py-1 rounded-md border border-input focus:outline-none"
                     >
-                      Konfirmasi Scan
-                    </Button>
-                  </div>
+                      {batches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.batchNo} — {b.productName} ({b.status.toUpperCase()})
+                        </option>
+                      ))}
+                    </select>
 
-                  <div className="text-xs text-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-lg border font-mono">
-                    Rute: Gudang Bahan Baku ➔ WIP Produksi (Ruang Ayak)
-                  </div>
-                </div>
-              </div>
-
-              {/* Tabel Item Permintaan */}
-              <div className="border rounded-xl overflow-hidden">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-100 dark:bg-slate-800">
-                    <tr>
-                      <th className="p-2.5 border-b">Komponen Bahan</th>
-                      <th className="p-2.5 border-b">Kode SKU</th>
-                      <th className="p-2.5 border-b">Jumlah Diminta</th>
-                      <th className="p-2.5 border-b">Satuan</th>
-                      <th className="p-2.5 border-b">Lokasi Sumber</th>
-                      <th className="p-2.5 border-b">Status Pengeluaran</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="hover:bg-slate-50">
-                      <td className="p-2.5 border-b font-medium">Gula Kelapa Curah Mentah</td>
-                      <td className="p-2.5 border-b font-mono">RAW-GSO-01</td>
-                      <td className="p-2.5 border-b font-bold">{rawMaterialWeight.toLocaleString()}</td>
-                      <td className="p-2.5 border-b">Kilogram (Kg)</td>
-                      <td className="p-2.5 border-b text-slate-500">Gudang Bahan Baku</td>
-                      <td className="p-2.5 border-b text-emerald-600 font-semibold">✓ Dialokasikan ke WIP</td>
-                    </tr>
-                    <tr className="hover:bg-slate-50">
-                      <td className="p-2.5 border-b font-medium">Sak Kertas Kraft 25 Kg (Manna Export)</td>
-                      <td className="p-2.5 border-b font-mono">PKG-KRAFT-25</td>
-                      <td className="p-2.5 border-b font-bold">{packagingQty}</td>
-                      <td className="p-2.5 border-b">Pcs</td>
-                      <td className="p-2.5 border-b text-slate-500">Gudang Kemasan</td>
-                      <td className="p-2.5 border-b text-emerald-600 font-semibold">✓ Siap di Ruang Packing</td>
-                    </tr>
-                    <tr className="hover:bg-slate-50">
-                      <td className="p-2.5 border-b font-medium">Plastik Liner PE Inner Bag 25 Kg</td>
-                      <td className="p-2.5 border-b font-mono">PKG-PE-25</td>
-                      <td className="p-2.5 border-b font-bold">{packagingQty}</td>
-                      <td className="p-2.5 border-b">Pcs</td>
-                      <td className="p-2.5 border-b text-slate-500">Gudang Kemasan</td>
-                      <td className="p-2.5 border-b text-emerald-600 font-semibold">✓ Siap di Ruang Packing</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* ─────────────────────────────────────────────────────────────────
-              STEP 3: AYAK MENTAH & MAGNET TRAP
-          ───────────────────────────────────────────────────────────────── */}
-          {currentStep === 3 && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl border bg-slate-50 dark:bg-slate-900 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h5 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                      Form QC-009-MNA.01 (Monitoring Ayak Mentah)
-                    </h5>
+                    <Badge variant="success" className="text-xs">
+                      {activeBatch.certification}
+                    </Badge>
                     <Badge variant="outline" className="text-xs">
-                      Mesin Ayak #1
+                      {activeBatch.fairtradeStatus}
                     </Badge>
                   </div>
 
-                  <div className="space-y-2 text-xs">
-                    <div>
-                      <label className="text-slate-600">Total Bahan Masuk Ayak Mentah (Kg):</label>
-                      <Input
-                        type="number"
-                        value={sievingRawInput}
-                        onChange={(e) => setSievingRawInput(Number(e.target.value))}
-                        className="text-sm font-semibold mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-slate-600">Hasil Lolos Ayak Bersih (Kg):</label>
-                      <Input
-                        type="number"
-                        value={rawCleanSugar}
-                        onChange={(e) => setRawCleanSugar(Number(e.target.value))}
-                        className="text-sm font-semibold text-emerald-700 mt-1"
-                      />
-                    </div>
-                  </div>
-                </div>
+                  <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                    <Factory className="h-5 w-5 text-blue-600" />
+                    {activeBatch.productName}
+                    <span className="text-xs font-normal text-muted-foreground">({activeBatch.productCode})</span>
+                  </h2>
 
-                <div className="p-4 rounded-xl border bg-slate-50 dark:bg-slate-900 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h5 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                      Form QC-038-CMT (Catatan Magnet Trap)
-                    </h5>
-                    <Badge className="bg-emerald-100 text-emerald-800 text-xs">Clean / Bebas Serpihan</Badge>
-                  </div>
-
-                  <p className="text-xs text-slate-500">
-                    Magnet trap dipasang pada corong jatuh ayak untuk menangkap serpihan besi liar sebelum
-                    masuk ke proses oven / ayak matang.
+                  <p className="text-xs text-muted-foreground flex items-center gap-2">
+                    <span>
+                      Pemasok: <strong className="text-foreground">{activeBatch.supplier}</strong>
+                    </span>
+                    <span>•</span>
+                    <span>
+                      Target: <strong className="text-foreground">{packedBagsCount.toLocaleString()} Sak</strong> (
+                      {(packedBagsCount * weightPerBag).toLocaleString()} Kg)
+                    </span>
                   </p>
+                </div>
 
-                  <div className="flex items-center gap-3 pt-2">
-                    <input
-                      type="checkbox"
-                      id="magnetTrap"
-                      checked={magnetTrapChecked}
-                      onChange={(e) => setMagnetTrapChecked(e.target.checked)}
-                      className="h-4 w-4 rounded text-indigo-600"
+                {/* Progress Mini Bar & Status */}
+                <div className="lg:w-80 space-y-2 bg-muted/30 p-3.5 rounded-xl border border-border">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-muted-foreground">Kemajuan Alur Batch</span>
+                    <span className="font-bold text-blue-700 font-mono">
+                      {completedSteps.length} / 10 Tahap ({progressPct}%)
+                    </span>
+                  </div>
+
+                  <div className="w-full bg-muted h-2 rounded-full overflow-hidden border border-border/60">
+                    <div
+                      className="bg-blue-600 h-full transition-all duration-300"
+                      style={{ width: `${progressPct}%` }}
                     />
-                    <label htmlFor="magnetTrap" className="text-xs font-medium text-slate-800">
-                      Magnet Trap telah dibersihkan & diverifikasi bebas kontaminan partikel besi
-                    </label>
+                  </div>
+
+                  <div className="flex justify-between items-center text-xs pt-0.5">
+                    <span className="text-muted-foreground">Status Dokumen:</span>
+                    <StatusBadge status={activeBatch.status} />
                   </div>
                 </div>
               </div>
+            </CardContent>
+          </Card>
 
-              {/* Pencatatan Brontol & Susut (~1%) */}
-              <div className="p-4 rounded-xl border bg-amber-50/60 border-amber-200 space-y-3">
+          {/* Stepper Horizontal 10 Tahap (Clean Light Stepper) */}
+          <div className="overflow-x-auto pb-1">
+            <Card className="p-2">
+              <div className="flex items-center gap-2 min-w-[960px]">
+                {SPRINT_2_STEPS.map((step, idx) => {
+                  const isCompleted = completedSteps.includes(step.id);
+                  const isCurrent = currentStep === step.id;
+
+                  return (
+                    <React.Fragment key={step.id}>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentStep(step.id)}
+                        className={`flex-1 flex flex-col items-center p-2 rounded-lg text-left transition-all cursor-pointer ${
+                          isCurrent
+                            ? "bg-blue-50 border border-blue-300 text-blue-900 shadow-xs"
+                            : isCompleted
+                            ? "hover:bg-slate-50 text-foreground"
+                            : "opacity-60 hover:opacity-90"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1 w-full justify-between mb-1">
+                          <span
+                            className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                              isCompleted
+                                ? "bg-emerald-600 text-white"
+                                : isCurrent
+                                ? "bg-blue-600 text-white ring-2 ring-blue-200"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {isCompleted ? <Check className="h-3 w-3" /> : step.id}
+                          </span>
+
+                          <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-muted text-muted-foreground">
+                            {step.code}
+                          </span>
+                        </div>
+
+                        <span
+                          className={`text-xs font-semibold truncate w-full ${
+                            isCurrent ? "text-blue-900" : "text-foreground"
+                          }`}
+                        >
+                          {step.title}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground truncate w-full">{step.docCode}</span>
+                      </button>
+
+                      {idx < SPRINT_2_STEPS.length - 1 && (
+                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            </Card>
+          </div>
+
+          {/* Kartu Eksekusi Step Aktif */}
+          <Card>
+            <CardHeader className="border-b border-border pb-3.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge variant="secondary" className="text-xs font-mono">
+                      Tahap {currentStepDef.id} dari 10
+                    </Badge>
+                    <Badge variant="outline" className="text-xs font-medium">
+                      {currentStepDef.docCode}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">PIC: {currentStepDef.owner}</span>
+                  </div>
+
+                  <CardTitle className="text-lg font-bold text-foreground">
+                    {currentStepDef.title}
+                  </CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground mt-0.5">
+                    {currentStepDef.description}
+                  </CardDescription>
+                </div>
+
                 <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-700" />
-                  <h5 className="text-xs font-bold uppercase tracking-wider text-amber-900">
-                    Pencatatan Brontol & Susut Produksi (~1%)
-                  </h5>
-                </div>
+                  <Link href={currentStepDef.pageHref}>
+                    <Button variant="ghost" size="sm" className="gap-1 text-xs text-muted-foreground hover:text-blue-600">
+                      Buka Modul Khusus
+                      <ArrowUpRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </Link>
 
-                <p className="text-xs text-slate-600">
-                  Gula yang menggumpal (brontol mentah) dan susut debu/tercecer dipisahkan dan dibukukan ke
-                  kartu stok reject secara transparan.
-                </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentStep((prev) => Math.max(1, prev - 1))}
+                    disabled={currentStep === 1}
+                    className="gap-1 text-xs"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Sebelumnya
+                  </Button>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
-                  <div className="bg-white p-3 rounded-lg border">
-                    <span className="text-[11px] text-slate-500 block">Brontol Mentah Reject</span>
-                    <span className="text-base font-bold text-amber-700">{rawBrontolReject} Kg</span>
-                    <span className="text-[10px] text-slate-400 block">
-                      ({((rawBrontolReject / sievingRawInput) * 100).toFixed(2)}% dari input)
-                    </span>
-                  </div>
-
-                  <div className="bg-white p-3 rounded-lg border">
-                    <span className="text-[11px] text-slate-500 block">Susut Tercecer / Debu</span>
-                    <span className="text-base font-bold text-rose-600">{rawDustLoss} Kg</span>
-                    <span className="text-[10px] text-slate-400 block">
-                      ({((rawDustLoss / sievingRawInput) * 100).toFixed(2)}% dari input)
-                    </span>
-                  </div>
-
-                  <div className="bg-white p-3 rounded-lg border">
-                    <span className="text-[11px] text-slate-500 block">Total Susut Line Ayak 1</span>
-                    <span className="text-base font-bold text-slate-900">
-                      {rawBrontolReject + rawDustLoss} Kg
-                    </span>
-                    <span className="text-[10px] text-emerald-600 font-semibold block">
-                      Toleransi Normal (&lt; 1.5%)
-                    </span>
-                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => handleMarkStepComplete(currentStep)}
+                    className="gap-1 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                  >
+                    {currentStep === 10 ? "Kunci Dokumen & Selesai" : "Simpan & Lanjut"}
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               </div>
-            </div>
-          )}
+            </CardHeader>
 
-          {/* ─────────────────────────────────────────────────────────────────
-              STEP 4: EVALUASI KADAR AIR & ROUTING OVEN KONDISIONAL
-          ───────────────────────────────────────────────────────────────── */}
-          {currentStep === 4 && (
-            <div className="space-y-6">
-              <div className="p-4 rounded-xl border bg-slate-50 dark:bg-slate-900 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <h5 className="text-sm font-bold text-slate-900">
-                      Pengukuran Kadar Air (Moisture Content Analysis)
-                    </h5>
-                    <p className="text-xs text-slate-500">
-                      Standar Manna: Jika Kadar Air &gt; 2.0% ➔ Wajib masuk Oven. Jika Kadar Air ≤ 2.0% ➔
-                      Oven dilewati otomatis (Jalur Cepat).
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-700">Hasil Uji Lab:</span>
-                    <div className="relative">
+            <CardContent className="p-6">
+              {/* TAHAP 1: LBM & INBOUND */}
+              {currentStep === 1 && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="text-xs font-medium text-foreground">Nomor Dokumen LBM</label>
                       <Input
-                        type="number"
-                        step="0.1"
-                        value={moisturePercent}
-                        onChange={(e) => setMoisturePercent(Number(e.target.value))}
-                        className="w-28 text-center font-bold text-base pr-6"
+                        value={lbmNo}
+                        onChange={(e) => setLbmNo(e.target.value)}
+                        className="font-mono text-sm mt-1"
                       />
-                      <span className="absolute right-2 top-2 text-xs text-slate-500 font-bold">%</span>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-foreground">Nomor Surat Jalan Supplier</label>
+                      <Input
+                        value={deliveryNoteNo}
+                        onChange={(e) => setDeliveryNoteNo(e.target.value)}
+                        className="font-mono text-sm mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-foreground">Pemasok Bahan</label>
+                      <Input
+                        value={`${activeBatch.supplier} (${activeBatch.supplierCode})`}
+                        disabled
+                        className="bg-muted text-sm mt-1 font-semibold"
+                      />
                     </div>
                   </div>
-                </div>
 
-                {/* Engine Evaluasi Routing Kondisional */}
-                {moisturePercent > 2.0 ? (
-                  <div className="p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-950 flex items-start gap-3">
-                    <Flame className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
-                    <div className="space-y-1">
+                  {/* Timbangan Presisi 2 Desimal (Table Component) */}
+                  <Card className="border border-border">
+                    <CardHeader className="p-4 border-b border-border flex flex-row items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold uppercase tracking-wider bg-amber-200 text-amber-900 px-2 py-0.5 rounded">
-                          Routing: Wajib Proses Oven (LHO & MNO)
-                        </span>
+                        <Scale className="h-5 w-5 text-blue-600" />
+                        <CardTitle className="text-sm font-bold text-foreground">
+                          Pencatatan Timbangan Digital Presisi 2 Desimal (Inbound Bahan Baku)
+                        </CardTitle>
                       </div>
-                      <p className="text-xs">
-                        Kadar air <strong>{moisturePercent}%</strong> melebihi batas toleransi maksimal 2.0%.
-                        Batch harus dialirkan ke Oven pengering untuk menurunkan kadar air ke batas aman ekspor
-                        (&lt; 1.8%).
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-4 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-950 flex items-start gap-3">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-600 mt-0.5 shrink-0" />
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold uppercase tracking-wider bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded">
-                          Jalur Cepat (Fast-Track) — Lewati Oven
-                        </span>
-                      </div>
-                      <p className="text-xs">
-                        Kadar air <strong>{moisturePercent}%</strong> telah memenuhi syarat mutu (≤ 2.0%).
-                        Bahan baku kering optimal sehingga tahap pemanasan Oven dilewati langsung menuju Ayak Matang.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
+                      <Badge variant="outline" className="text-xs font-mono">
+                        GD-007-LBM
+                      </Badge>
+                    </CardHeader>
 
-              {/* Form Oven jika aktif */}
-              {ovenRequired && (
-                <div className="p-4 rounded-xl border bg-slate-50 dark:bg-slate-900 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h5 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                      Form QC-012-MNO.05 & Laporan Harian Oven (LHO)
-                    </h5>
-                    <Badge className="bg-amber-100 text-amber-900 text-xs">Oven Aktif</Badge>
-                  </div>
+                    <CardContent className="p-0">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>No Kantong</TableHead>
+                            <TableHead>Berat Bruto (Kg)</TableHead>
+                            <TableHead>Tara Karung (Kg)</TableHead>
+                            <TableHead>Netto Diterima (Kg)</TableHead>
+                            <TableHead>Auto Barcode ID</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {scaleWeights.map((w, i) => (
+                            <TableRow key={i}>
+                              <TableCell className="font-medium">Kantong #{i + 1}</TableCell>
+                              <TableCell className="font-mono">{w.gross.toFixed(2)}</TableCell>
+                              <TableCell className="font-mono">{w.tare.toFixed(2)}</TableCell>
+                              <TableCell className="font-mono font-bold text-emerald-700">
+                                {w.net.toFixed(2)}
+                              </TableCell>
+                              <TableCell className="font-mono text-muted-foreground">
+                                [LOT-202611-{String(i + 1).padStart(3, "0")}] - {w.net.toFixed(2)} Kg
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                        <TableFooter>
+                          <TableRow>
+                            <TableCell colSpan={3} className="text-right font-bold">
+                              Total Sampel Timbang:
+                            </TableCell>
+                            <TableCell className="font-mono font-bold text-emerald-700">
+                              {scaleWeights.reduce((a, b) => a + b.net, 0).toFixed(2)} Kg
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              Total Penerimaan: {rawMaterialWeight.toLocaleString()} Kg
+                            </TableCell>
+                          </TableRow>
+                        </TableFooter>
+                      </Table>
+                    </CardContent>
+                  </Card>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                    <div>
-                      <label className="text-slate-600">Suhu Target Ruang Oven (°C):</label>
-                      <Input
-                        type="number"
-                        value={ovenTemp}
-                        onChange={(e) => setOvenTemp(Number(e.target.value))}
-                        className="text-sm font-semibold mt-1"
-                      />
-                      <span className="text-[10px] text-slate-400">Standar: 70°C - 80°C</span>
-                    </div>
+                  {/* Kemasan Sak & Cetak LBM */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Card>
+                      <CardContent className="p-4 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Package className="h-4 w-4 text-amber-600" />
+                          <h5 className="text-xs font-bold text-foreground">
+                            Penerimaan Kemasan Sak Kraft (Bebas Timbang)
+                          </h5>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Barang kemas dihitung per lembar (Pcs) tanpa mewajibkan timbangan.
+                        </p>
+                        <div className="flex items-center gap-2 pt-1">
+                          <Input
+                            type="number"
+                            value={packagingQty}
+                            onChange={(e) => setPackagingQty(Number(e.target.value))}
+                            className="w-32 text-sm"
+                          />
+                          <span className="text-xs font-semibold text-muted-foreground">Pcs Sak Kraft 25 Kg</span>
+                        </div>
+                      </CardContent>
+                    </Card>
 
-                    <div>
-                      <label className="text-slate-600">Durasi Pemanasan (Menit):</label>
-                      <Input
-                        type="number"
-                        value={ovenDurationMins}
-                        onChange={(e) => setOvenDurationMins(Number(e.target.value))}
-                        className="text-sm font-semibold mt-1"
-                      />
-                      <span className="text-[10px] text-slate-400">Rata-rata: 90 - 120 menit</span>
-                    </div>
-
-                    <div>
-                      <label className="text-slate-600">Waktu Pendinginan Rak (Menit):</label>
-                      <Input defaultValue={45} className="text-sm font-semibold mt-1" />
-                      <span className="text-[10px] text-slate-400">Hingga mencapai suhu ruang</span>
-                    </div>
+                    <Card>
+                      <CardContent className="p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Lock className="h-4 w-4 text-rose-600" />
+                            <h5 className="text-xs font-bold text-foreground">
+                              Cetak Bukti Tanda Terima Supplier (GD-007-LBM)
+                            </h5>
+                          </div>
+                          <Badge variant="destructive" className="text-[10px]">Confidential Pricing</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Harga beli dirahasiakan dari dokumen operasional supir &amp; staf gudang.
+                        </p>
+                        <div className="pt-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handlePrintLBM}
+                            className="gap-2 text-xs border-blue-200 text-blue-700 hover:bg-blue-50"
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                            Cetak Slip Tanda Terima Supplier (GD-007-LBM)
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
                 </div>
               )}
-            </div>
-          )}
 
-          {/* ─────────────────────────────────────────────────────────────────
-              STEP 5: AYAK MATANG (SIEVING 2)
-          ───────────────────────────────────────────────────────────────── */}
-          {currentStep === 5 && (
-            <div className="space-y-6">
-              <div className="p-4 rounded-xl border bg-slate-50 dark:bg-slate-900 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h5 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                    Monitoring Ayak Matang (Final Sieving sebelum Packing)
-                  </h5>
-                  <Badge variant="outline" className="text-xs">
-                    Mesin Ayak Matang #2
-                  </Badge>
-                </div>
-
-                <p className="text-xs text-slate-500">
-                  Ayak matang menyaring partikel akhir agar seragam (Mesh 14-16) dan memastikan tidak ada gumpalan
-                  tersisa sebelum masuk hopper timbangan packing.
-                </p>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                  <div>
-                    <label className="text-xs text-slate-600 font-medium">
-                      Gula Semut Bersih Siap Kemas (Kg):
-                    </label>
-                    <Input
-                      type="number"
-                      value={cookedCleanSugar}
-                      onChange={(e) => setCookedCleanSugar(Number(e.target.value))}
-                      className="text-base font-bold text-emerald-600 mt-1"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-slate-600 font-medium">
-                      Brontol Matang Kering Terpisah (Kg):
-                    </label>
-                    <Input
-                      type="number"
-                      value={cookedBrontol}
-                      onChange={(e) => setCookedBrontol(Number(e.target.value))}
-                      className="text-base font-bold text-amber-700 mt-1"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 pt-2">
-                  <input
-                    type="checkbox"
-                    id="meshOk"
-                    checked={meshConditionOk}
-                    onChange={(e) => setMeshConditionOk(e.target.checked)}
-                    className="h-4 w-4 rounded text-indigo-600"
-                  />
-                  <label htmlFor="meshOk" className="text-xs font-medium text-slate-800">
-                    Kondisi Kawat Kassa (Mesh Screen) utuh, kencang, dan tidak ada baut kendor
-                  </label>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ─────────────────────────────────────────────────────────────────
-              STEP 6: RUANG PACKING & TIMBANGAN IOT (SETTLE WEIGHT)
-          ───────────────────────────────────────────────────────────────── */}
-          {currentStep === 6 && (
-            <div className="space-y-6">
-              {/* Form Jarum & Gunting */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl border bg-slate-50 dark:bg-slate-900 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h5 className="text-xs font-bold text-slate-900">
-                      QC-011-MNJ.01 (Monitoring Jarum Jahit)
-                    </h5>
-                    <Badge className="bg-emerald-100 text-emerald-800 text-xs">Utuh / Lengkap</Badge>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    Pemeriksaan jarum mesin jahit karung sebelum dan sesudah shift. Mencegah patahan jarum
-                    jatuh ke dalam kemasan gula.
-                  </p>
-                  <div className="flex items-center gap-2 pt-1">
-                    <input
-                      type="checkbox"
-                      id="needle"
-                      checked={needleCheckOk}
-                      onChange={(e) => setNeedleCheckOk(e.target.checked)}
-                      className="h-4 w-4 rounded text-indigo-600"
-                    />
-                    <label htmlFor="needle" className="text-xs font-medium text-slate-800">
-                      Jarum mesin jahit utuh & nomor seri jarum sesuai catatan log
-                    </label>
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-xl border bg-slate-50 dark:bg-slate-900 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h5 className="text-xs font-bold text-slate-900">Pemeriksaan Gunting & Benda Tajam</h5>
-                    <Badge className="bg-emerald-100 text-emerald-800 text-xs">Terikat Rantai</Badge>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    Seluruh gunting pemotong tali sak wajib terikat rantai ke meja kerja dan dihitung jumlahnya.
-                  </p>
-                  <div className="flex items-center gap-2 pt-1">
-                    <input
-                      type="checkbox"
-                      id="scissor"
-                      checked={scissorCheckOk}
-                      onChange={(e) => setScissorCheckOk(e.target.checked)}
-                      className="h-4 w-4 rounded text-indigo-600"
-                    />
-                    <label htmlFor="scissor" className="text-xs font-medium text-slate-800">
-                      Semua gunting berada pada posisinya dan terikat kuat
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* Timbangan Digital IoT Settle Weight (TC-PRD-004) */}
-              <div className="p-5 rounded-2xl border-2 border-indigo-200 dark:border-indigo-900 bg-gradient-to-br from-slate-900 to-indigo-950 text-white shadow-lg space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Scale className="h-5 w-5 text-indigo-400" />
-                    <h4 className="text-sm font-bold text-white tracking-wide">
-                      Integrasi Timbangan Digital IoT (TC-PRD-004 — Settle Weight)
-                    </h4>
-                  </div>
-                  <Badge
-                    className={
-                      isScaleSettled
-                        ? "bg-emerald-500 text-white font-bold"
-                        : "bg-amber-500 text-black font-bold animate-pulse"
-                    }
-                  >
-                    {isScaleSettled ? "● STABIL (SETTLED)" : "◌ FLUKTUATIF"}
-                  </Badge>
-                </div>
-
-                <p className="text-xs text-slate-300">
-                  Sesuai TC-PRD-004: Fluktuasi angka saat penuangan diabaikan oleh sistem. Berat resmi hanya
-                  tercatat ketika timbangan sudah stabil dan tombol <strong>"Record Settle Weight"</strong> ditekan.
-                </p>
-
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-6 bg-black/40 p-5 rounded-xl border border-white/10">
-                  <div className="text-center sm:text-left">
-                    <span className="text-xs text-indigo-300 block uppercase tracking-wider font-mono">
-                      Pembacaan Digital Display
-                    </span>
-                    <span className="text-4xl font-extrabold font-mono text-emerald-400">
-                      {scaleDisplay.toFixed(2)}{" "}
-                      <span className="text-lg font-normal text-slate-300">Kg / Sak</span>
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setIsScaleSettled(false);
-                        setScaleDisplay(25.14);
-                        setTimeout(() => {
-                          setScaleDisplay(25.0);
-                          setIsScaleSettled(true);
-                        }, 800);
-                      }}
-                      className="text-xs text-black border-slate-400"
-                    >
-                      Simulasi Fluktuasi Bobot
-                    </Button>
-
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        if (!isScaleSettled) {
-                          alert("Timbangan masih fluktuatif! Tunggu hingga angka stabil.");
-                          return;
-                        }
-                        setNotification({
-                          type: "success",
-                          text: `Berat stabil ${scaleDisplay.toFixed(2)} Kg ter-record ke sistem!`,
-                        });
-                      }}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold gap-1.5"
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      Konfirmasi Record Settle Weight
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1">
-                  <div>
-                    <span className="text-slate-400 block">Bobot per Sak:</span>
-                    <span className="font-bold font-mono">{weightPerBag} Kg</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block">Target Jumlah Sak:</span>
-                    <span className="font-bold font-mono">{packedBagsCount.toLocaleString()} Sak</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block">Total Bobot Bersih:</span>
-                    <span className="font-bold font-mono text-emerald-400">
-                      {(packedBagsCount * weightPerBag).toLocaleString()} Kg
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block">Jenis Karung:</span>
-                    <span className="font-bold font-mono">Kraft 3-Ply + PE Inner</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ─────────────────────────────────────────────────────────────────
-              STEP 7: VERIFIKASI METAL DETECTOR CCP (VMD / CPP)
-          ───────────────────────────────────────────────────────────────── */}
-          {currentStep === 7 && (
-            <div className="space-y-6">
-              <div className="p-4 rounded-xl border border-rose-200 bg-rose-50/50 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="h-5 w-5 text-rose-700" />
-                    <h5 className="text-sm font-bold text-rose-950 uppercase tracking-wide">
-                      Critical Control Point (CCP 1) — Form QC-017-VMD
-                    </h5>
-                  </div>
-                  <Badge className="bg-rose-600 text-white text-xs">Mandatory Safety Gate</Badge>
-                </div>
-
-                <p className="text-xs text-rose-900">
-                  Setiap sak yang selesai dijahit wajib dilewatkan melalui sabuk berjalan Metal Detector.
-                  Uji sensitivitas menggunakan 3 test piece bersertifikat dilakukan setiap awal & akhir shift.
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                  <div className="bg-white p-3 rounded-lg border flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-bold block text-slate-900">Fe (Besi / Ferrous)</span>
-                      <span className="text-[11px] text-slate-500 font-mono">Batas: 1.5 mm</span>
-                    </div>
-                    <Badge className="bg-emerald-100 text-emerald-800 text-xs">✓ Lolos (Terdeteksi)</Badge>
-                  </div>
-
-                  <div className="bg-white p-3 rounded-lg border flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-bold block text-slate-900">Non-Fe (Kuningan/Alu)</span>
-                      <span className="text-[11px] text-slate-500 font-mono">Batas: 2.0 mm</span>
-                    </div>
-                    <Badge className="bg-emerald-100 text-emerald-800 text-xs">✓ Lolos (Terdeteksi)</Badge>
-                  </div>
-
-                  <div className="bg-white p-3 rounded-lg border flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-bold block text-slate-900">SS (Stainless Steel 316)</span>
-                      <span className="text-[11px] text-slate-500 font-mono">Batas: 2.5 mm</span>
-                    </div>
-                    <Badge className="bg-emerald-100 text-emerald-800 text-xs">✓ Lolos (Terdeteksi)</Badge>
-                  </div>
-                </div>
-              </div>
-
-              {/* Form CPP: Pembersihan Head & Reject Bin */}
-              <div className="p-4 rounded-xl border bg-slate-50 dark:bg-slate-900 space-y-2">
-                <div className="flex items-center justify-between">
-                  <h5 className="text-xs font-bold text-slate-900 uppercase">
-                    Form CPP (Catatan Pembersihan Metal Detector & Reject Bin)
-                  </h5>
-                  <Badge variant="outline" className="text-xs">
-                    Form QC-CPP
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-2 pt-1">
-                  <input
-                    type="checkbox"
-                    id="cppClean"
-                    checked={metalCleaningOk}
-                    onChange={(e) => setMetalCleaningOk(e.target.checked)}
-                    className="h-4 w-4 rounded text-indigo-600"
-                  />
-                  <label htmlFor="cppClean" className="text-xs font-medium text-slate-800">
-                    Aperture head bebas debu gula & reject bin telah diperiksa kosong oleh tim QA
-                  </label>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ─────────────────────────────────────────────────────────────────
-              STEP 8: PEMERIKSAAN PRODUK JADI (PJD) & LABEL (PLK)
-          ───────────────────────────────────────────────────────────────── */}
-          {currentStep === 8 && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Form PJD */}
-                <div className="p-4 rounded-xl border bg-slate-50 dark:bg-slate-900 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h5 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                      Form QC-004-PJD.05 (Pemeriksaan Produk Jadi)
-                    </h5>
-                    <Badge className="bg-emerald-100 text-emerald-800 text-xs">Lolos Sensori</Badge>
-                  </div>
-
-                  <p className="text-xs text-slate-500">
-                    Evaluasi organoleptik parameter fisik & sensori gula semut hasil kemas.
-                  </p>
-
-                  <div className="space-y-2 text-xs">
-                    <div className="flex justify-between py-1 border-b">
-                      <span className="text-slate-600">Rasa (Taste):</span>
-                      <span className="font-semibold text-slate-900">Manis Gurih Khas Gula Kelapa</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b">
-                      <span className="text-slate-600">Aroma (Smell):</span>
-                      <span className="font-semibold text-slate-900">Wangi Khas Karamel (Bebas Apek)</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b">
-                      <span className="text-slate-600">Warna (Color):</span>
-                      <span className="font-semibold text-slate-900">Coklat Keemasan (Golden Brown)</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b">
-                      <span className="text-slate-600">Kelarutan (Solubility):</span>
-                      <span className="font-semibold text-slate-900">Larut Sempurna tanpa Endapan</span>
-                    </div>
-                    <div className="flex justify-between py-1">
-                      <span className="text-slate-600">Kadar Air Akhir Lab:</span>
-                      <span className="font-semibold font-mono text-emerald-700">1.6% (&lt; 2.0%)</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Form PLK Label Inspection */}
-                <div className="p-4 rounded-xl border bg-slate-50 dark:bg-slate-900 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h5 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                      Form QC-018-PLK (Pemeriksaan Label Kemasan)
-                    </h5>
-                    <Badge className="bg-emerald-100 text-emerald-800 text-xs">Label Compliant</Badge>
-                  </div>
-
-                  <p className="text-xs text-slate-500">
-                    Verifikasi kepatuhan stiker label sak ekspor terhadap regulasi buyer dan sertifikasi.
-                  </p>
-
-                  <div className="space-y-2 text-xs">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                      <span>Nomor Batch & Tanggal Best Before tercetak jelas</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                      <span>Barcode serial per kantong dapat di-scan oleh scanner barcode</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                      <span>Logo Organik EU / CU 820674 & Halal Indonesia tertera rapi</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                      <span>Berat bersih (Net Weight) 25 Kg tercetak tanpa coretan</span>
-                    </div>
-                  </div>
-
-                  <div className="pt-2 border-t flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-800">Keputusan Akhir Mutu (QC Release):</span>
-                    <Badge className="bg-emerald-600 text-white font-bold">RELEASED (LULUS)</Badge>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ─────────────────────────────────────────────────────────────────
-              STEP 9: LAPORAN HASIL PRODUKSI (LHP) & BULK QR SERIAL
-          ───────────────────────────────────────────────────────────────── */}
-          {currentStep === 9 && (
-            <div className="space-y-6">
-              {/* Ringkasan Produksi & Susut */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                <div className="bg-slate-50 p-3 rounded-xl border">
-                  <span className="text-[10px] text-slate-500 uppercase font-semibold block">Total Bahan Masuk</span>
-                  <span className="text-base font-bold text-slate-900">{rawMaterialWeight.toLocaleString()} Kg</span>
-                </div>
-                <div className="bg-slate-50 p-3 rounded-xl border">
-                  <span className="text-[10px] text-slate-500 uppercase font-semibold block">Hasil Jadi (FG)</span>
-                  <span className="text-base font-bold text-emerald-600">
-                    {(packedBagsCount * weightPerBag).toLocaleString()} Kg
-                  </span>
-                  <span className="text-[10px] text-slate-400">({packedBagsCount.toLocaleString()} Sak)</span>
-                </div>
-                <div className="bg-slate-50 p-3 rounded-xl border">
-                  <span className="text-[10px] text-slate-500 uppercase font-semibold block">Brontol Total</span>
-                  <span className="text-base font-bold text-amber-700">
-                    {(rawBrontolReject + cookedBrontol).toFixed(1)} Kg
-                  </span>
-                </div>
-                <div className="bg-slate-50 p-3 rounded-xl border">
-                  <span className="text-[10px] text-slate-500 uppercase font-semibold block">Susut Tercecer</span>
-                  <span className="text-base font-bold text-rose-600">{rawDustLoss} Kg</span>
-                </div>
-                <div className="bg-slate-50 p-3 rounded-xl border">
-                  <span className="text-[10px] text-slate-500 uppercase font-semibold block">Yield Efisiensi</span>
-                  <span className="text-base font-bold text-indigo-700">
-                    {(((packedBagsCount * weightPerBag) / rawMaterialWeight) * 100).toFixed(2)}%
-                  </span>
-                </div>
-              </div>
-
-              {/* Generator Serial Traceability Massal (TC-PRD-005) */}
-              <div className="p-4 rounded-xl border bg-slate-50 dark:bg-slate-900 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <h5 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                      <QrCode className="h-4 w-4 text-indigo-600" />
-                      Algoritma Kodifikasi Traceability Massal (TC-PRD-005)
-                    </h5>
-                    <p className="text-xs text-slate-500">
-                      Format Manna: <strong>YY + Grade/Type (N=Natural) + Week + Supplier (PW) + Serial 3 digit</strong>.
-                      Cth: <code>26N48PW001</code> s/d <code>26N48PW850</code>.
-                    </p>
-                  </div>
-
-                  <Button
-                    onClick={handleGenerateSerials}
-                    className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    Auto-Generate {packedBagsCount} Barcode Serial
-                  </Button>
-                </div>
-
-                {/* Preview Serial List */}
-                {bulkSerials.length > 0 && (
-                  <div className="space-y-3 pt-2">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-600">
-                        Menampilkan sampel kode barcode dari <strong>{bulkSerials.length} unit</strong>:
-                      </span>
-                      <span className="font-mono text-indigo-700 font-bold">
-                        {bulkSerials[0]} ➔ {bulkSerials[bulkSerials.length - 1]}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                      {bulkSerials.slice(0, 12).map((serial, idx) => (
-                        <div
-                          key={idx}
-                          className="bg-white dark:bg-slate-800 p-2 rounded-lg border text-center font-mono text-xs shadow-2xs"
-                        >
-                          <span className="text-[10px] text-slate-400 block">Sak #{idx + 1}</span>
-                          <span className="font-bold text-slate-800 dark:text-slate-200">{serial}</span>
+              {/* TAHAP 2: PERMINTAAN BAHAN & SCANNING */}
+              {currentStep === 2 && (
+                <div className="space-y-6">
+                  <Card className="border-l-4 border-l-blue-600">
+                    <CardContent className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-blue-600" />
+                          <span className="text-xs font-bold uppercase tracking-wider text-blue-900">
+                            Formulir Baku Auditor: PR-09
+                          </span>
+                          <Badge variant="success" className="text-xs">{activeBatch.certification}</Badge>
                         </div>
-                      ))}
-                    </div>
+                        <h4 className="text-base font-bold text-foreground">
+                          Bon Permintaan Bahan Baku (BPB) &amp; Kemasan (PBPK)
+                        </h4>
+                        <p className="text-xs text-muted-foreground">
+                          Memuat nomor formulir baku <strong>PR-09</strong> dan kode sertifikasi{" "}
+                          <strong>{activeBatch.certification}</strong>.
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
 
-                    <div className="text-xs text-slate-500 italic text-center">
-                      ... dan {bulkSerials.length - 12} kode barcode serial unik lainnya siap dicetak ke printer label thermal.
-                    </div>
-                  </div>
-                )}
-              </div>
+                  <Card>
+                    <CardHeader className="p-4 border-b border-border flex flex-row items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <QrCode className="h-4 w-4 text-blue-600" />
+                        <CardTitle className="text-sm font-bold text-foreground">
+                          Scanning Barcode Pengeluaran Bahan ke WIP Ayak
+                        </CardTitle>
+                      </div>
+                      <Badge variant="success" className="text-xs">Stok Dialokasikan</Badge>
+                    </CardHeader>
 
-              {/* Alokasi Palet */}
-              <div className="p-4 rounded-xl border bg-slate-50 dark:bg-slate-900 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Boxes className="h-4 w-4 text-indigo-600" />
-                    <h5 className="text-xs font-bold text-slate-900 uppercase">
-                      Pengelompokan Palet Gudang Barang Jadi (WMS FG)
-                    </h5>
-                  </div>
-                  <Badge variant="outline" className="text-xs font-mono">
-                    Total: {palletCount} Palet
-                  </Badge>
-                </div>
-                <p className="text-xs text-slate-500">
-                  850 Sak dialokasikan ke 22 Palet kayu ekspor (@ 40 sak per palet standar, palet terakhir 10 sak).
-                </p>
-              </div>
-            </div>
-          )}
+                    <CardContent className="p-4 space-y-3">
+                      <p className="text-xs text-muted-foreground">
+                        Operator memindai barcode fisik pada karung bahan mentah untuk mentransfer kepemilikan dari{" "}
+                        <strong>Gudang Bahan Baku</strong> ke <strong>WIP Produksi (Ruang Ayak)</strong>.
+                      </p>
 
-          {/* ─────────────────────────────────────────────────────────────────
-              STEP 10: LAPORAN SERAH TERIMA (LST) - FINAL HANDOVER
-          ───────────────────────────────────────────────────────────────── */}
-          {currentStep === 10 && (
-            <div className="space-y-6">
-              <div className="p-5 rounded-2xl border-2 border-emerald-300 bg-emerald-50/40 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-200/80 px-2 py-0.5 rounded">
-                        Formulir Resmi: GDG-009-LST / QA-044-LST
-                      </span>
-                      <Badge className="bg-emerald-600 text-white text-xs">
-                        {lstStatus === "final" ? "FINAL (TERKUNCI)" : "DRAFT"}
-                      </Badge>
-                    </div>
-                    <h3 className="text-lg font-bold text-slate-900">
-                      Laporan Serah Terima Fisik Barang Jadi (Produksi ➔ Gudang FG)
-                    </h3>
-                    <p className="text-xs text-slate-600">
-                      Penyerahan fisik dan pembukuan resmi stok barang jadi siap jual/ekspor ke Gudang Barang Jadi.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={handlePrintLSTSlip}
-                      className="gap-1.5 text-xs bg-white text-slate-700"
-                    >
-                      <Printer className="h-3.5 w-3.5" />
-                      Cetak LST
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={handleExportLSTExcel}
-                      className="gap-1.5 text-xs bg-white text-emerald-700 border-emerald-300"
-                    >
-                      <FileSpreadsheet className="h-3.5 w-3.5" />
-                      Unduh Excel
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Form Fields Metadata */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs pt-2">
-                  <div>
-                    <label className="text-slate-600 font-medium">Nomor Dokumen LST:</label>
-                    <Input
-                      value={lstNumber}
-                      onChange={(e) => setLstNumber(e.target.value)}
-                      className="font-mono text-xs font-bold mt-1 bg-white"
-                      disabled={lstStatus === "final"}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-slate-600 font-medium">Tanggal Penyerahan:</label>
-                    <Input
-                      type="date"
-                      value={handoverDate}
-                      onChange={(e) => setHandoverDate(e.target.value)}
-                      className="text-xs mt-1 bg-white"
-                      disabled={lstStatus === "final"}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-slate-600 font-medium">PIC Yang Menyerahkan (Produksi):</label>
-                    <Input
-                      value={handedOverBy}
-                      onChange={(e) => setHandedOverBy(e.target.value)}
-                      className="text-xs mt-1 bg-white"
-                      disabled={lstStatus === "final"}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-slate-600 font-medium">PIC Yang Menerima (Gudang):</label>
-                    <Input
-                      value={receivedBy}
-                      onChange={(e) => setReceivedBy(e.target.value)}
-                      className="text-xs mt-1 bg-white"
-                      disabled={lstStatus === "final"}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Tabel Item Serah Terima */}
-              <div className="border rounded-xl overflow-hidden shadow-xs">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-100 dark:bg-slate-800">
-                    <tr>
-                      <th className="p-3 border-b">No</th>
-                      <th className="p-3 border-b">Nama Komoditas / SKU</th>
-                      <th className="p-3 border-b">Batch Number</th>
-                      <th className="p-3 border-b">Bentuk Kemasan</th>
-                      <th className="p-3 border-b text-right">Kuantitas (Sak)</th>
-                      <th className="p-3 border-b text-right">Total Berat (Kg)</th>
-                      <th className="p-3 border-b">Buyer / Pelanggan</th>
-                      <th className="p-3 border-b">Status Kunci</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="hover:bg-slate-50">
-                      <td className="p-3 border-b font-medium">1</td>
-                      <td className="p-3 border-b">
-                        <strong className="text-slate-900 block">{productName}</strong>
-                        <span className="text-[11px] text-slate-500 font-mono">{productCode}</span>
-                      </td>
-                      <td className="p-3 border-b font-mono font-bold text-indigo-700">{batchNo}</td>
-                      <td className="p-3 border-b">Sak Kertas Kraft {weightPerBag} Kg</td>
-                      <td className="p-3 border-b text-right font-mono font-bold">
-                        {packedBagsCount.toLocaleString()} Sak
-                      </td>
-                      <td className="p-3 border-b text-right font-mono font-bold text-emerald-700">
-                        {(packedBagsCount * weightPerBag).toLocaleString()} Kg
-                      </td>
-                      <td className="p-3 border-b">Eco Organic BV</td>
-                      <td className="p-3 border-b">
-                        <Badge
-                          className={
-                            lstStatus === "final"
-                              ? "bg-emerald-600 text-white text-[10px]"
-                              : "bg-slate-200 text-slate-700 text-[10px]"
-                          }
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Input
+                          value={scannedBarcode}
+                          onChange={(e) => setScannedBarcode(e.target.value)}
+                          placeholder="Scan Barcode ID..."
+                          className="font-mono text-sm w-56"
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setNotification({
+                              type: "success",
+                              text: `Barcode ${scannedBarcode} terverifikasi. Stok ${rawMaterialWeight.toLocaleString()} Kg bahan mentah masuk ke Ruang Ayak!`,
+                            });
+                          }}
+                          className="bg-blue-600 hover:bg-blue-700 text-white text-xs"
                         >
-                          {lstStatus === "final" ? "Terkunci (Final)" : "Draft"}
+                          Konfirmasi Scan
+                        </Button>
+                        <span className="text-xs text-muted-foreground bg-muted px-3 py-1.5 rounded-md font-mono border">
+                          Rute: Gudang Bahan Baku ➔ WIP Produksi (Ruang Ayak)
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* TAHAP 3: AYAK MENTAH & MAGNET TRAP */}
+              {currentStep === 3 && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Card>
+                      <CardHeader className="p-4 border-b border-border flex flex-row items-center justify-between">
+                        <CardTitle className="text-xs font-bold uppercase tracking-wider text-foreground">
+                          Form QC-009-MNA.01 (Ayak Mentah)
+                        </CardTitle>
+                        <Badge variant="outline" className="text-xs">
+                          Mesin Ayak #1
                         </Badge>
-                      </td>
-                    </tr>
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-slate-50/80 font-bold border-t">
-                      <td colSpan={4} className="p-3 text-right">
-                        TOTAL SERAH TERIMA KE GUDANG:
-                      </td>
-                      <td className="p-3 text-right font-mono text-slate-900">
-                        {packedBagsCount.toLocaleString()} Sak
-                      </td>
-                      <td className="p-3 text-right font-mono text-emerald-700">
-                        {(packedBagsCount * weightPerBag).toLocaleString()} Kg
-                      </td>
-                      <td colSpan={2} className="p-3 text-xs text-slate-500 font-normal">
-                        Alokasi {palletCount} Palet Kayu Ekspor
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+                      </CardHeader>
 
-              {/* Action Trigger untuk Simpan ke Backend */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-xl border bg-slate-50 dark:bg-slate-900">
-                <div className="text-xs text-slate-600">
-                  {lstStatus === "final" ? (
-                    <div className="flex items-center gap-2 text-emerald-700 font-semibold">
-                      <Lock className="h-4 w-4" />
-                      Dokumen serah terima telah disahkan. Hak edit dikunci sesuai aturan kepatuhan audit.
+                      <CardContent className="p-4 space-y-3 text-xs">
+                        <div>
+                          <label className="text-muted-foreground">Bahan Masuk Ayak (Kg):</label>
+                          <Input
+                            type="number"
+                            value={sievingRawInput}
+                            onChange={(e) => setSievingRawInput(Number(e.target.value))}
+                            className="text-sm font-semibold mt-1"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-muted-foreground">Hasil Lolos Ayak Bersih (Kg):</label>
+                          <Input
+                            type="number"
+                            value={rawCleanSugar}
+                            onChange={(e) => setRawCleanSugar(Number(e.target.value))}
+                            className="text-sm font-semibold text-emerald-700 mt-1"
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="p-4 border-b border-border flex flex-row items-center justify-between">
+                        <CardTitle className="text-xs font-bold uppercase tracking-wider text-foreground">
+                          Form QC-038-CMT (Magnet Trap)
+                        </CardTitle>
+                        <Badge variant="success" className="text-xs">Clean / Bebas Logam</Badge>
+                      </CardHeader>
+
+                      <CardContent className="p-4 space-y-3">
+                        <p className="text-xs text-muted-foreground">
+                          Magnet trap dipasang pada corong jatuh untuk menangkap serpihan besi sebelum proses lanjut.
+                        </p>
+                        <div className="flex items-center gap-3 pt-2">
+                          <input
+                            type="checkbox"
+                            id="magnet"
+                            checked={magnetTrapChecked}
+                            onChange={(e) => setMagnetTrapChecked(e.target.checked)}
+                            className="h-4 w-4 rounded text-blue-600"
+                          />
+                          <label htmlFor="magnet" className="text-xs font-medium text-foreground">
+                            Magnet Trap telah dibersihkan &amp; bebas partikel besi
+                          </label>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Susut & Brontol Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <Card className="border-l-4 border-l-amber-500">
+                      <CardContent className="p-4">
+                        <span className="text-[11px] text-muted-foreground uppercase font-medium block">Brontol Mentah Reject</span>
+                        <h4 className="text-xl font-bold text-amber-700 mt-1">{rawBrontolReject} Kg</h4>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-l-4 border-l-rose-500">
+                      <CardContent className="p-4">
+                        <span className="text-[11px] text-muted-foreground uppercase font-medium block">Susut Tercecer / Debu</span>
+                        <h4 className="text-xl font-bold text-rose-700 mt-1">{rawDustLoss} Kg</h4>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-l-4 border-l-blue-500">
+                      <CardContent className="p-4">
+                        <span className="text-[11px] text-muted-foreground uppercase font-medium block">Total Susut Line 1</span>
+                        <h4 className="text-xl font-bold text-foreground mt-1">
+                          {rawBrontolReject + rawDustLoss} Kg
+                        </h4>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+              )}
+
+              {/* TAHAP 4: KADAR AIR & ROUTING OVEN */}
+              {currentStep === 4 && (
+                <div className="space-y-6">
+                  <Card>
+                    <CardContent className="p-4 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <h5 className="text-sm font-bold text-foreground">
+                            Pengukuran Kadar Air (Moisture Content Analysis)
+                          </h5>
+                          <p className="text-xs text-muted-foreground">
+                            Jika &gt; 2.0% ➔ Wajib masuk Oven. Jika ≤ 2.0% ➔ Otomatis lewati oven (Jalur Cepat).
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-foreground">Hasil Uji Lab:</span>
+                          <div className="relative">
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={moisturePercent}
+                              onChange={(e) => setMoisturePercent(Number(e.target.value))}
+                              className="w-28 text-center font-bold text-base pr-6"
+                            />
+                            <span className="absolute right-2 top-2 text-xs text-muted-foreground font-bold">%</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {ovenRequired ? (
+                        <div className="p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-950 flex items-start gap-3">
+                          <Flame className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                          <div>
+                            <span className="text-xs font-bold uppercase tracking-wider bg-amber-200 text-amber-900 px-2 py-0.5 rounded">
+                              Routing: Wajib Proses Oven (LHO &amp; MNO)
+                            </span>
+                            <p className="text-xs mt-1">
+                              Kadar air <strong>{moisturePercent}%</strong> melebihi 2.0%. Batch harus dipanaskan
+                              pada suhu 70–80°C selama 90–120 menit.
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-4 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-950 flex items-start gap-3">
+                          <CheckCircle2 className="h-5 w-5 text-emerald-600 mt-0.5 shrink-0" />
+                          <div>
+                            <span className="text-xs font-bold uppercase tracking-wider bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded">
+                              Jalur Cepat (Fast-Track) — Lewati Oven
+                            </span>
+                            <p className="text-xs mt-1">
+                              Kadar air <strong>{moisturePercent}%</strong> memenuhi standar (≤ 2.0%). Proses oven
+                              dilewati langsung ke Ayak Matang.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* TAHAP 5: AYAK MATANG */}
+              {currentStep === 5 && (
+                <div className="space-y-6">
+                  <Card>
+                    <CardHeader className="p-4 border-b border-border flex flex-row items-center justify-between">
+                      <CardTitle className="text-xs font-bold uppercase tracking-wider text-foreground">
+                        Monitoring Ayak Matang (Final Sieving sebelum Packing)
+                      </CardTitle>
+                      <Badge variant="outline" className="text-xs">
+                        Mesin Ayak #2
+                      </Badge>
+                    </CardHeader>
+
+                    <CardContent className="p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-xs text-muted-foreground font-medium">Gula Siap Kemas (Kg):</label>
+                          <Input
+                            type="number"
+                            value={cookedCleanSugar}
+                            onChange={(e) => setCookedCleanSugar(Number(e.target.value))}
+                            className="text-base font-bold text-emerald-700 mt-1"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground font-medium">Brontol Matang Kering (Kg):</label>
+                          <Input
+                            type="number"
+                            value={cookedBrontol}
+                            onChange={(e) => setCookedBrontol(Number(e.target.value))}
+                            className="text-base font-bold text-amber-700 mt-1"
+                          />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* TAHAP 6: PACKING & IOT SCALE (CLEAN LIGHT THEME) */}
+              {currentStep === 6 && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Card>
+                      <CardHeader className="p-4 border-b border-border flex flex-row items-center justify-between">
+                        <CardTitle className="text-xs font-bold text-foreground">
+                          QC-011-MNJ.01 (Monitoring Jarum Jahit)
+                        </CardTitle>
+                        <Badge variant="success" className="text-xs">Utuh / Lengkap</Badge>
+                      </CardHeader>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="needle"
+                            checked={needleCheckOk}
+                            onChange={(e) => setNeedleCheckOk(e.target.checked)}
+                            className="h-4 w-4 rounded text-blue-600"
+                          />
+                          <label htmlFor="needle" className="text-xs font-medium text-foreground">
+                            Jarum mesin jahit utuh &amp; nomor seri jarum sesuai log
+                          </label>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="p-4 border-b border-border flex flex-row items-center justify-between">
+                        <CardTitle className="text-xs font-bold text-foreground">
+                          Pemeriksaan Gunting &amp; Benda Tajam
+                        </CardTitle>
+                        <Badge variant="success" className="text-xs">Terikat Rantai</Badge>
+                      </CardHeader>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="scissor"
+                            checked={scissorCheckOk}
+                            onChange={(e) => setScissorCheckOk(e.target.checked)}
+                            className="h-4 w-4 rounded text-blue-600"
+                          />
+                          <label htmlFor="scissor" className="text-xs font-medium text-foreground">
+                            Semua gunting pemotong tali terikat kuat pada meja kerja
+                          </label>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Timbangan Settle Weight (Clean Light Display) */}
+                  <Card className="border-l-4 border-l-blue-600">
+                    <CardHeader className="p-4 border-b border-border flex flex-row items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Scale className="h-5 w-5 text-blue-600" />
+                        <CardTitle className="text-sm font-bold text-foreground">
+                          Integrasi Timbangan Digital IoT (Settle Weight Confirmation)
+                        </CardTitle>
+                      </div>
+                      <Badge variant={isScaleSettled ? "success" : "warning"} className="font-bold">
+                        {isScaleSettled ? "● STABIL (SETTLED)" : "◌ FLUKTUATIF"}
+                      </Badge>
+                    </CardHeader>
+
+                    <CardContent className="p-5 space-y-4">
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-6 bg-slate-50 border border-slate-200 p-5 rounded-xl">
+                        <div>
+                          <span className="text-xs text-muted-foreground block uppercase tracking-wider font-mono">
+                            Digital Display Bobot Sak
+                          </span>
+                          <span className="text-4xl font-extrabold font-mono text-blue-700">
+                            {scaleDisplay.toFixed(2)}{" "}
+                            <span className="text-lg font-normal text-muted-foreground">Kg / Sak</span>
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setIsScaleSettled(false);
+                              setScaleDisplay(25.14);
+                              setTimeout(() => {
+                                setScaleDisplay(25.0);
+                                setIsScaleSettled(true);
+                              }, 800);
+                            }}
+                            className="text-xs"
+                          >
+                            Simulasi Fluktuasi
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setNotification({
+                                type: "success",
+                                text: `Bobot ${scaleDisplay.toFixed(2)} Kg ter-record ke sistem packing!`,
+                              });
+                            }}
+                            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold gap-1.5"
+                          >
+                            <CheckCircle2 className="h-4 w-4" />
+                            Konfirmasi Record Settle Weight
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* TAHAP 7: METAL DETECTOR CCP */}
+              {currentStep === 7 && (
+                <div className="space-y-6">
+                  <Card className="border-l-4 border-l-rose-500">
+                    <CardHeader className="p-4 border-b border-border flex flex-row items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="h-5 w-5 text-rose-600" />
+                        <CardTitle className="text-sm font-bold text-foreground uppercase">
+                          Critical Control Point (CCP 1) — Form QC-017-VMD
+                        </CardTitle>
+                      </div>
+                      <Badge variant="destructive" className="text-xs">Mandatory Gate</Badge>
+                    </CardHeader>
+
+                    <CardContent className="p-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <Card>
+                          <CardContent className="p-3 flex items-center justify-between">
+                            <div>
+                              <span className="text-xs font-bold block text-foreground">Fe (Besi) 1.5mm</span>
+                              <span className="text-[11px] text-muted-foreground">Test Piece Certified</span>
+                            </div>
+                            <Badge variant="success" className="text-xs">✓ Terdeteksi</Badge>
+                          </CardContent>
+                        </Card>
+
+                        <Card>
+                          <CardContent className="p-3 flex items-center justify-between">
+                            <div>
+                              <span className="text-xs font-bold block text-foreground">Non-Fe 2.0mm</span>
+                              <span className="text-[11px] text-muted-foreground">Test Piece Certified</span>
+                            </div>
+                            <Badge variant="success" className="text-xs">✓ Terdeteksi</Badge>
+                          </CardContent>
+                        </Card>
+
+                        <Card>
+                          <CardContent className="p-3 flex items-center justify-between">
+                            <div>
+                              <span className="text-xs font-bold block text-foreground">SS 316 2.5mm</span>
+                              <span className="text-[11px] text-muted-foreground">Test Piece Certified</span>
+                            </div>
+                            <Badge variant="success" className="text-xs">✓ Terdeteksi</Badge>
+                          </CardContent>
+                        </Card>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-4">
+                        <input
+                          type="checkbox"
+                          id="metalClean"
+                          checked={metalCleaningOk}
+                          onChange={(e) => setMetalCleaningOk(e.target.checked)}
+                          className="h-4 w-4 rounded text-blue-600"
+                        />
+                        <label htmlFor="metalClean" className="text-xs font-medium text-foreground">
+                          Aperture head bebas debu gula &amp; reject bin telah diperiksa kosong oleh tim QA (Form CPP)
+                        </label>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* TAHAP 8: QC PRODUK JADI & LABEL */}
+              {currentStep === 8 && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Card>
+                      <CardHeader className="p-4 border-b border-border flex flex-row items-center justify-between">
+                        <CardTitle className="text-xs font-bold uppercase text-foreground">
+                          Form QC-004-PJD.05 (Produk Jadi)
+                        </CardTitle>
+                        <Badge variant="success" className="text-xs">Lolos Sensori</Badge>
+                      </CardHeader>
+                      <CardContent className="p-4 space-y-2 text-xs">
+                        <div className="flex justify-between py-1 border-b border-border">
+                          <span className="text-muted-foreground">Rasa (Taste):</span>
+                          <span className="font-semibold text-foreground">Manis Gurih Khas Kelapa</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-border">
+                          <span className="text-muted-foreground">Aroma:</span>
+                          <span className="font-semibold text-foreground">Wangi Karamel Bebas Apek</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-border">
+                          <span className="text-muted-foreground">Warna:</span>
+                          <span className="font-semibold text-foreground">Coklat Keemasan</span>
+                        </div>
+                        <div className="flex justify-between py-1">
+                          <span className="text-muted-foreground">Kadar Air Akhir Lab:</span>
+                          <span className="font-semibold font-mono text-emerald-700">1.6% (&lt; 2.0%)</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="p-4 border-b border-border flex flex-row items-center justify-between">
+                        <CardTitle className="text-xs font-bold uppercase text-foreground">
+                          Form QC-018-PLK (Label Kemasan)
+                        </CardTitle>
+                        <Badge variant="success" className="text-xs">Label Compliant</Badge>
+                      </CardHeader>
+                      <CardContent className="p-4 space-y-2 text-xs">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                          <span>No Batch &amp; Tanggal Best Before tercetak jelas</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                          <span>Barcode serial per kantong dapat di-scan</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                          <span>Logo Organik EU &amp; Halal Indonesia tertera rapi</span>
+                        </div>
+                        <div className="pt-2 border-t border-border flex justify-between items-center">
+                          <span className="text-xs font-bold text-foreground">Keputusan QC:</span>
+                          <select
+                            value={qcDecision}
+                            onChange={(e) => setQcDecision(e.target.value)}
+                            className="text-xs font-bold border border-input rounded px-2 py-1 bg-background text-emerald-700"
+                          >
+                            <option value="PASSED">RELEASED (LULUS MUTU)</option>
+                            <option value="HOLD">HOLD (UJI ULANG)</option>
+                            <option value="REJECTED">REJECTED (TOLAK)</option>
+                          </select>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+              )}
+
+              {/* TAHAP 9: LHP & BULK BARCODE TRACEABILITY */}
+              {currentStep === 9 && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <Card className="border-l-4 border-l-blue-500">
+                      <CardContent className="p-3">
+                        <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Bahan Masuk</span>
+                        <span className="text-base font-bold text-foreground">
+                          {activeBatch.rawInputKg.toLocaleString()} Kg
+                        </span>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-l-4 border-l-emerald-500">
+                      <CardContent className="p-3">
+                        <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Hasil Jadi (FG)</span>
+                        <span className="text-base font-bold text-emerald-700">
+                          {activeBatch.fgOutputKg.toLocaleString()} Kg
+                        </span>
+                        <span className="text-[10px] text-muted-foreground block">({activeBatch.fgOutputPcs} Sak)</span>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-l-4 border-l-purple-500">
+                      <CardContent className="p-3">
+                        <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Alokasi Palet</span>
+                        <span className="text-base font-bold text-purple-700">{palletCount} Palet</span>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-l-4 border-l-amber-500">
+                      <CardContent className="p-3">
+                        <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Yield Efisiensi</span>
+                        <span className="text-base font-bold text-foreground">
+                          {((activeBatch.fgOutputKg / activeBatch.rawInputKg) * 100).toFixed(2)}%
+                        </span>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Bulk Barcode Generator */}
+                  <Card>
+                    <CardHeader className="p-4 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
+                          <QrCode className="h-4 w-4 text-blue-600" />
+                          Algoritma Barcode Traceability Massal (Manna Coding Standard)
+                        </CardTitle>
+                        <CardDescription className="text-xs text-muted-foreground mt-0.5">
+                          Format: <code>26N48{activeBatch.supplierCode}001</code> s/d{" "}
+                          <code>26N48{activeBatch.supplierCode}{String(packedBagsCount).padStart(3, "0")}</code>.
+                        </CardDescription>
+                      </div>
+
+                      <Button
+                        onClick={handleGenerateSerials}
+                        className="gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Generate {packedBagsCount} Barcode Serial
+                      </Button>
+                    </CardHeader>
+
+                    <CardContent className="p-4 space-y-3">
+                      {bulkSerials.length > 0 && (
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                            {bulkSerials.slice(0, 12).map((serial, idx) => (
+                              <div key={idx} className="bg-muted/40 p-2 rounded-lg border border-border text-center font-mono text-xs">
+                                <span className="text-[10px] text-muted-foreground block">Sak #{idx + 1}</span>
+                                <span className="font-bold text-foreground">{serial}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="text-xs text-muted-foreground italic text-center">
+                            ... dan {bulkSerials.length - 12} barcode serial unik lainnya siap dicetak.
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* TAHAP 10: LAPORAN SERAH TERIMA (LST) */}
+              {currentStep === 10 && (
+                <div className="space-y-6">
+                  <Card className="border-l-4 border-l-emerald-600">
+                    <CardHeader className="p-4 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge variant="success" className="text-xs">
+                            GDG-009-LST
+                          </Badge>
+                          <StatusBadge status={activeBatch.status === "final" ? "final" : "draft"} />
+                        </div>
+                        <CardTitle className="text-lg font-bold text-foreground">
+                          Laporan Serah Terima Fisik Barang Jadi (Produksi ➔ Gudang FG)
+                        </CardTitle>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={handlePrintLSTSlip}
+                          className="gap-1.5 text-xs"
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                          Cetak LST
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={handleExportLSTExcel}
+                          className="gap-1.5 text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+                        >
+                          <FileSpreadsheet className="h-3.5 w-3.5" />
+                          Unduh Excel
+                        </Button>
+                      </div>
+                    </CardHeader>
+
+                    <CardContent className="p-4 space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+                        <div>
+                          <label className="text-muted-foreground font-medium">Nomor LST:</label>
+                          <Input
+                            value={lstNumber}
+                            onChange={(e) => setLstNumber(e.target.value)}
+                            className="font-mono text-xs font-bold mt-1"
+                            disabled={activeBatch.status === "final"}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-muted-foreground font-medium">Tanggal Penyerahan:</label>
+                          <Input
+                            type="date"
+                            value={handoverDate}
+                            onChange={(e) => setHandoverDate(e.target.value)}
+                            className="text-xs mt-1"
+                            disabled={activeBatch.status === "final"}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-muted-foreground font-medium">PIC Produksi:</label>
+                          <Input
+                            value={handedOverBy}
+                            onChange={(e) => setHandedOverBy(e.target.value)}
+                            className="text-xs mt-1"
+                            disabled={activeBatch.status === "final"}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-muted-foreground font-medium">PIC Gudang FG:</label>
+                          <Input
+                            value={receivedBy}
+                            onChange={(e) => setReceivedBy(e.target.value)}
+                            className="text-xs mt-1"
+                            disabled={activeBatch.status === "final"}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Tabel Serah Terima (Table Component) */}
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Produk</TableHead>
+                            <TableHead>Batch Number</TableHead>
+                            <TableHead>Kemasan</TableHead>
+                            <TableHead className="text-right">Kuantitas</TableHead>
+                            <TableHead className="text-right">Total Berat</TableHead>
+                            <TableHead>Buyer</TableHead>
+                            <TableHead>Palet</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          <TableRow>
+                            <TableCell className="font-semibold">{activeBatch.productName}</TableCell>
+                            <TableCell className="font-mono font-bold text-blue-700">{activeBatch.batchNo}</TableCell>
+                            <TableCell>Sak Kraft 25 Kg</TableCell>
+                            <TableCell className="text-right font-mono font-bold">
+                              {packedBagsCount.toLocaleString()} Sak
+                            </TableCell>
+                            <TableCell className="text-right font-mono font-bold text-emerald-700">
+                              {(packedBagsCount * weightPerBag).toLocaleString()} Kg
+                            </TableCell>
+                            <TableCell>Eco Organic BV</TableCell>
+                            <TableCell>Alokasi {palletCount} Palet</TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-t border-border bg-muted/20">
+                      <div className="text-xs text-muted-foreground">
+                        {activeBatch.status === "final" ? (
+                          <div className="flex items-center gap-2 text-emerald-700 font-semibold">
+                            <Lock className="h-4 w-4" />
+                            Dokumen serah terima telah disahkan. Hak edit dikunci sesuai aturan kepatuhan audit.
+                          </div>
+                        ) : (
+                          <span>
+                            Klik tombol di samping untuk menyimpan dan mengunci dokumen secara permanen ke database ERP.
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {activeBatch.status !== "final" && (
+                          <Button
+                            onClick={handleSaveLSTToBackend}
+                            disabled={isSavingLST}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-2 text-xs"
+                          >
+                            <CheckCircle2 className="h-4 w-4" />
+                            {isSavingLST ? "Menyimpan ke Sistem..." : "Kirim & Kunci Final Dokumen LST"}
+                          </Button>
+                        )}
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setViewMode("overview")}
+                          className="gap-1.5 text-xs"
+                        >
+                          <ArrowLeft className="h-3.5 w-3.5" />
+                          Kembali ke Overview Pipeline
+                        </Button>
+                      </div>
                     </div>
-                  ) : (
-                    <span>
-                      Klik tombol di samping untuk menyimpan dan mengunci dokumen secara permanen ke database ERP.
-                    </span>
-                  )}
+                  </Card>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  {lstStatus !== "final" && (
-                    <Button
-                      onClick={handleSaveLSTToBackend}
-                      disabled={isSavingLST}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-2 text-xs"
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      {isSavingLST ? "Menyimpan ke Sistem..." : "Kirim & Kunci Final Dokumen LST"}
-                    </Button>
-                  )}
-
-                  <Link href="/inventory/lst">
-                    <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      Buka Daftar LST di Gudang
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

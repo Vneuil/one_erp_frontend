@@ -236,9 +236,9 @@ export default function TradeInvoicesPage() {
         kind: tab,
         currency: tradeCurrency || undefined,
         dpPercent: tab === "PI" ? (Number(dpPercent) || 0) : undefined,
-        customerPoId: linkedCustomerPoId || (source === "po" ? sourceId : undefined),
+        customerPoId: (linkedCustomerPoId || (source === "po" && sourceId ? sourceId : undefined)) || undefined,
         customerPoNumber: poNumber.trim() || undefined,
-        quotationNumber: source === "quotation" ? linkedQuotationNumber : undefined,
+        quotationNumber: (source === "quotation" && linkedQuotationNumber) ? linkedQuotationNumber : undefined,
         ...(source === "po"
           ? {
               customerName: poCustomer?.name,
@@ -251,9 +251,9 @@ export default function TradeInvoicesPage() {
               }),
             }
           : {}),
-        salesOrderId: source === "order" ? sourceId : undefined,
-        quotationId: source === "quotation" ? sourceId : undefined,
-        parentId: source === "pi" ? sourceId : undefined,
+        salesOrderId: (source === "order" && sourceId) ? sourceId : undefined,
+        quotationId: (source === "quotation" && sourceId) ? sourceId : undefined,
+        parentId: (source === "pi" && sourceId) ? sourceId : undefined,
         paymentTermId: paymentTermId || undefined,
         paymentTerm: paymentTerm || undefined,
         taxRateId: taxRateId || undefined,
@@ -264,6 +264,7 @@ export default function TradeInvoicesPage() {
       setCreateOpen(false);
       load();
     } catch (err) {
+      console.error("Gagal membuat trade invoice:", err);
       await alert({ title: "Gagal Membuat Dokumen", message: err instanceof Error ? err.message : "Kesalahan server", variant: "destructive" });
     } finally {
       setSaving(false);
