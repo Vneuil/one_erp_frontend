@@ -86,6 +86,7 @@ export interface CreateTransferInput {
 
 export interface TransferItem {
   id: string;
+  transferNo?: string;
   productId: string;
   productSku: string;
   productName: string;
@@ -126,6 +127,7 @@ export interface OpnameLineItem {
 
 export interface OpnameItem {
   id: string;
+  opnameNo?: string;
   warehouseId: string;
   warehouseName: string;
   auditDate: string;

@@ -52,7 +52,7 @@ export default function StockOpnamePage() {
 
   const mapOpname = (o: OpnameItem): StockOpname => ({
     id: o.id,
-    opnameNumber: `SO-AUD-${o.auditDate}-${o.id.slice(0, 4).toUpperCase()}`,
+    opnameNumber: o.opnameNo || `SO-AUD-${o.auditDate}-${o.id.slice(0, 4).toUpperCase()}`,
     warehouse: o.warehouseName,
     scheduleDate: o.auditDate,
     totalSKUs: o.lines.length,
@@ -195,7 +195,7 @@ export default function StockOpnamePage() {
       key: "opnameNumber",
       header: "Audit Batch No.",
       sortable: true,
-      render: (op) => <span className="font-mono text-xs font-bold text-brand-primary">{op.opnameNumber}</span>,
+      render: (op) => <span className="font-mono text-xs font-bold text-brand-primary whitespace-nowrap">{op.opnameNumber}</span>,
     },
     {
       key: "warehouse",

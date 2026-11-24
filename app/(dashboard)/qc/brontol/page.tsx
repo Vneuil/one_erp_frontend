@@ -990,7 +990,7 @@ export default function BrontolAndReturnPage() {
                   className="mt-1 bg-white"
                 />
                 <p className="text-[11px] text-rose-700 mt-1">
-                  * Sistem akan otomatis menerbitkan nomor Laporan Retur Barang Reject (RET-BRT-...)
+                  * Sistem akan otomatis menerbitkan nomor Laporan Retur Barang Reject (RTR-...)
                 </p>
               </div>
             )}
@@ -1092,7 +1092,7 @@ export default function BrontolAndReturnPage() {
                   <Input
                     value={returnFormData.poNo || ""}
                     onChange={(e) => setReturnFormData({ ...returnFormData, poNo: e.target.value })}
-                    placeholder="PO-202611-001"
+                    placeholder="PO-001-1126"
                     className="mt-1 text-xs"
                   />
                 </div>

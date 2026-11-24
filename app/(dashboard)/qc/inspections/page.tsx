@@ -449,7 +449,7 @@ export default function QCInspectionsPage() {
               ) : (
                 <div>
                   <label className="block text-xs font-medium text-foreground mb-1">Nomor Lot / Referensi Penerimaan</label>
-                  <Input value={selectedOrderId} onChange={(e) => setSelectedOrderId(e.target.value)} placeholder="e.g. GR-202611-001" required />
+                  <Input value={selectedOrderId} onChange={(e) => setSelectedOrderId(e.target.value)} placeholder="e.g. LBM-001-1126" required />
                 </div>
               )}
             </div>

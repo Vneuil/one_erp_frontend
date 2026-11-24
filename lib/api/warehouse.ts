@@ -34,6 +34,7 @@ export interface PickWaveLineItem {
 
 export interface PickWaveItem {
   id: string;
+  waveNo?: string;
   warehouseId: string;
   warehouseName: string;
   salesOrderId?: string;
@@ -57,6 +58,7 @@ export interface CompletePackingSessionInput {
 
 export interface PackingSessionItem {
   id: string;
+  sessionNo?: string;
   pickWaveId: string;
   status: "open" | "packing" | "completed";
   packageCount: number;
@@ -78,6 +80,7 @@ export interface CreateShipmentInput {
 
 export interface ShipmentItem {
   id: string;
+  shipmentNo?: string;
   pickWaveId: string;
   packingSessionId?: string;
   carrier: string;

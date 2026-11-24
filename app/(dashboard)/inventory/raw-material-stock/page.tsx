@@ -1287,7 +1287,7 @@ function RawMaterialStockContent() {
                     disabled={isEditingPosted}
                     value={formData.lbmNo || ""}
                     onChange={(e) => setFormData((p) => ({ ...p, lbmNo: e.target.value }))}
-                    placeholder="GR-202611-XXXX"
+                    placeholder="LBM-001-1126"
                     className="h-9 text-xs font-mono"
                   />
                 </label>

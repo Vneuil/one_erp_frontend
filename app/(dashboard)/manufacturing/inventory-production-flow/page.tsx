@@ -211,7 +211,10 @@ export default function InventoryProductionFlowPage() {
                   ? "handover_ready"
                   : "in_progress",
               lbmId: matchedReceipt?.id || matchedStock?.goodsReceiptId,
-              lbmNo: matchedStock?.lbmNo || matchedReceipt?.receiptNo || `LBM-${String(idx + 1).padStart(3, "0")}`,
+              lbmNo:
+                matchedStock?.lbmNo ||
+                matchedReceipt?.receiptNo ||
+                `LBM-${String(idx + 1).padStart(3, "0")}-${String(new Date().getMonth() + 1).padStart(2, "0")}${String(new Date().getFullYear()).slice(-2)}`,
               deliveryNoteNo: matchedStock?.deliveryNoteNo || matchedReceipt?.deliveryNoteNo,
               requisitionId: relatedReq?.id,
               requisitionNo: relatedReq?.requestNo,
@@ -342,7 +345,7 @@ export default function InventoryProductionFlowPage() {
       poNo: newBatchData.poNo,
       lbmNo:
         newBatchData.lbmNo ||
-        `LBM-${new Date().toISOString().slice(0, 7).replace("-", "")}-${String(nextNum).padStart(3, "0")}`,
+        `LBM-${String(nextNum).padStart(3, "0")}-${String(new Date().getMonth() + 1).padStart(2, "0")}${String(new Date().getFullYear()).slice(-2)}`,
       deliveryNoteNo: newBatchData.deliveryNoteNo || "",
       lstNo: newBatchData.lstNo || "",
       palletCount: newBatchData.palletCount || Math.ceil((newBatchData.fgOutputPcs || 800) / 40),

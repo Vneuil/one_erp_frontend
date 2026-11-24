@@ -583,7 +583,7 @@ export default function PackagingQualityPage() {
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-muted-foreground whitespace-nowrap">Ref LBM:</span>
             <Input
-              placeholder="Cth: LBM-2026-001"
+              placeholder="Cth: LBM-001-1126"
               value={filterLbm}
               onChange={(e) => setFilterLbm(e.target.value)}
               className="h-8 w-40 text-xs font-mono"
@@ -666,7 +666,7 @@ export default function PackagingQualityPage() {
               <div>
                 <label className="text-xs font-semibold text-slate-700 mb-1 block">Nomor LBM (Opsional)</label>
                 <Input
-                  placeholder="LBM-XXXX-XXX"
+                  placeholder="LBM-001-1126"
                   value={formData.lbmNo || ""}
                   onChange={(e) => setFormData((p) => ({ ...p, lbmNo: e.target.value }))}
                   className="h-9 text-xs font-mono"

@@ -717,7 +717,7 @@ export default function StockMovementsPage() {
             <div className="space-y-1">
               <label className="font-bold text-foreground">Referensi Dokumen</label>
               <Input
-                placeholder={dialogMode === "reject" ? "Contoh: PBPK-002 (Reject Packing)" : dialogMode === "out" ? "Contoh: BPB-2026-051" : "Contoh: LBM-2026-042"}
+                placeholder={dialogMode === "reject" ? "Contoh: PBPK-002 (Reject Packing)" : dialogMode === "out" ? "Contoh: BPB-051-1126" : "Contoh: LBM-042-1126"}
                 value={formReference}
                 onChange={(e) => setFormReference(e.target.value)}
                 className="h-9 text-xs"

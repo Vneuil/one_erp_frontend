@@ -43,7 +43,7 @@ function statusToUi(status: ShipmentItem["status"]): string {
 function toShipment(s: ShipmentItem): Shipment {
   return {
     id: s.id,
-    trackingNumber: s.trackingNumber || `EXP-${s.id.slice(0, 8)}`,
+    trackingNumber: s.trackingNumber || s.shipmentNo || `EXP-${s.id.slice(0, 8)}`,
     carrier: s.carrier || "-",
     destination: s.destinationAddress || "-",
     dispatchTime: s.dispatchedAt || (s.createdAt ? s.createdAt.slice(0, 16).replace("T", " ") : "-"),

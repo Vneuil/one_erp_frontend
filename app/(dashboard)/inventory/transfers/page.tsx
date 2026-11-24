@@ -55,7 +55,7 @@ export default function TransfersPage() {
           setTransfers(
             (res.data || []).map((t) => ({
               id: t.id,
-              transferNumber: t.id.slice(0, 8).toUpperCase(),
+              transferNumber: t.transferNo || t.id.slice(0, 8).toUpperCase(),
               productId: t.productId,
               sourceWH: t.fromWarehouseName,
               destWH: t.toWarehouseName,
@@ -157,7 +157,7 @@ export default function TransfersPage() {
       key: "transferNumber",
       header: "Transfer No.",
       sortable: true,
-      render: (tr) => <span className="font-mono text-xs font-bold text-brand-primary">{tr.transferNumber}</span>,
+      render: (tr) => <span className="font-mono text-xs font-bold text-brand-primary whitespace-nowrap">{tr.transferNumber}</span>,
     },
     {
       key: "route",

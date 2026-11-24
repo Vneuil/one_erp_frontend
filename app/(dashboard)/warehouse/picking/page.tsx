@@ -36,7 +36,7 @@ function statusToUi(status: PickWaveItem["status"]): string {
 function toPickList(w: PickWaveItem): PickList {
   return {
     id: w.id,
-    pickListNo: `PCK-${w.id.slice(0, 8)}`,
+    pickListNo: w.waveNo || `PCK-${w.id.slice(0, 8)}`,
     soNumber: w.salesOrderId ? `SO-${w.salesOrderId.slice(0, 8)}` : "Manual",
     pickerName: w.assignedTo || "Unassigned",
     zone: w.warehouseName || "-",

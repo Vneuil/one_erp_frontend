@@ -105,9 +105,10 @@ export function BatchOverviewTable({
         }
       }
 
-      // Generate suggested LBM number based on date and seq
-      const datePart = new Date().toISOString().slice(0, 7).replace("-", "");
-      setFormLbmNo(`GD-007-LBM-${datePart}-${seq}`);
+      // Generate suggested LBM number based on date and seq (MMYY)
+      const now = new Date();
+      const mmyy = `${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getFullYear()).slice(-2)}`;
+      setFormLbmNo(`LBM-${seq}-${mmyy}`);
     }
   };
 
@@ -140,8 +141,10 @@ export function BatchOverviewTable({
         setFormBuyerName(buyer);
 
         const seq = String(batches.length + 1).padStart(3, "0");
+        const now = new Date();
+        const mmyy = `${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getFullYear()).slice(-2)}`;
         setFormBatchNo(`26N48${suppCode}${seq}`);
-        setFormLbmNo(`GD-007-LBM-${new Date().toISOString().slice(0, 7).replace("-", "")}-${seq}`);
+        setFormLbmNo(`LBM-${seq}-${mmyy}`);
       }
     }
   }, [isCreateModalOpen, purchaseOrders, suppliers, products, customers, batches.length]);
@@ -228,7 +231,9 @@ export function BatchOverviewTable({
       buyerId: formBuyerId,
       buyerName: formBuyerName,
       lbmId: formLbmId,
-      lbmNo: formLbmNo || `LBM-${new Date().toISOString().slice(0, 7).replace("-", "")}-${String(batches.length + 1).padStart(3, "0")}`,
+      lbmNo:
+        formLbmNo ||
+        `LBM-${String(batches.length + 1).padStart(3, "0")}-${String(new Date().getMonth() + 1).padStart(2, "0")}${String(new Date().getFullYear()).slice(-2)}`,
       deliveryNoteNo: formDeliveryNoteNo,
       certification: formCertification,
       fairtradeStatus: formFairtrade,
@@ -538,7 +543,7 @@ export function BatchOverviewTable({
                   value={formLbmNo}
                   onChange={(e) => setFormLbmNo(e.target.value)}
                   className="font-mono text-xs font-bold"
-                  placeholder="GD-007-LBM-202611-001"
+                  placeholder="LBM-001-1126"
                   required
                 />
               </div>

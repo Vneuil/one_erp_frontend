@@ -530,7 +530,7 @@ export default function OvenProductionPage() {
               <div>
                 <label className="text-xs font-semibold text-foreground">No. Order / SPK (Opsional)</label>
                 <Input
-                  placeholder="Misal: MO-202611-001"
+                  placeholder="Misal: PRD-001-1126"
                   value={formData.orderNumber || ""}
                   onChange={(e) => setFormData({ ...formData, orderNumber: e.target.value })}
                   className="mt-1 h-9 text-xs"

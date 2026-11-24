@@ -33,7 +33,7 @@ function statusToUi(status: PackingSessionItem["status"]): string {
 function toPackingOrder(s: PackingSessionItem): PackingOrder {
   return {
     id: s.id,
-    packingSlipNo: `PCK-SLP-${s.id.slice(0, 8)}`,
+    packingSlipNo: s.sessionNo || `PCK-SLP-${s.id.slice(0, 8)}`,
     pickListNo: `PCK-${s.pickWaveId.slice(0, 8)}`,
     customerName: "Unassigned",
     boxCount: s.packageCount,

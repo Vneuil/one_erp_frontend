@@ -169,8 +169,9 @@ export function Step1LBMInbound({
       ? batch.batchNo.replace(batch.supplierCode, suppCode)
       : `26N48${suppCode}001`;
 
-    const datePart = new Date().toISOString().slice(0, 7).replace("-", "");
-    const generatedLbm = lbmNo || `GD-007-LBM-${datePart}-001`;
+    const now = new Date();
+    const mmyy = `${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getFullYear()).slice(-2)}`;
+    const generatedLbm = lbmNo || `LBM-001-${mmyy}`;
 
     onUpdateBatch({
       poId: po.id,
@@ -496,9 +497,9 @@ export function Step1LBMInbound({
             value={lbmNo}
             onChange={(e) => setLbmNo(e.target.value)}
             className="font-mono text-sm mt-1 font-bold"
-            placeholder="GD-007-LBM-202611-001"
+            placeholder="LBM-001-1126"
           />
-          <p className="text-[11px] text-muted-foreground mt-0.5">Format standar: GD-007-LBM-YYYYMM-XXX</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Format standar: LBM-XXX-MMYY (contoh: LBM-001-1126)</p>
         </div>
         <div>
           <label className="text-xs font-medium text-foreground">

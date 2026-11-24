@@ -46,7 +46,8 @@ export function Step10LSTHandover({
   isCompleted,
 }: Step10LSTHandoverProps) {
   const [lstNumber, setLstNumber] = useState(
-    batch.lstNo || `GDG-009-LST-${new Date().toISOString().slice(0, 7).replace("-", "")}-${batch.batchNo.slice(-3)}`
+    batch.lstNo ||
+      `LST-001-${String(new Date().getMonth() + 1).padStart(2, "0")}${String(new Date().getFullYear()).slice(-2)}`
   );
   const [handoverDate, setHandoverDate] = useState(batch.handoverDate || new Date().toISOString().slice(0, 10));
   const [handedOverBy, setHandedOverBy] = useState(batch.handedOverBy || "Spv Produksi");
