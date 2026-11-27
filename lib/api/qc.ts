@@ -591,6 +591,91 @@ export const qcApi = {
   deleteRejectReturn: async (id: string): Promise<ApiResponse<{ id: string }>> => {
     return apiClient<{ id: string }>(`/qc/brontol/returns/${id}`, { method: "DELETE" });
   },
+
+  // ─── Flow Gula Cair dari Gula Semut (MSS, PVK, MNC, PJC, VHC) ────────────────
+  getLiquidSugarFlowStatus: async (params?: { month?: string; batchNo?: string }): Promise<ApiResponse<LiquidSugarFlowStatusItem>> => {
+    return apiClient<LiquidSugarFlowStatusItem>("/qc/liquid-sugar/flow-status", { params });
+  },
+
+  listSterilizationTempLogs: async (params?: { month?: string; stage?: string; batchNo?: string }): Promise<ApiResponse<SterilizationTempItem[]>> => {
+    return apiClient<SterilizationTempItem[]>("/qc/liquid-sugar/mss", { params });
+  },
+  getSterilizationTempLog: async (id: string): Promise<ApiResponse<SterilizationTempItem>> => {
+    return apiClient<SterilizationTempItem>(`/qc/liquid-sugar/mss/${id}`);
+  },
+  createSterilizationTempLog: async (input: CreateSterilizationTempInput): Promise<ApiResponse<SterilizationTempItem>> => {
+    return apiClient<SterilizationTempItem>("/qc/liquid-sugar/mss", { method: "POST", body: JSON.stringify(input) });
+  },
+  updateSterilizationTempLog: async (id: string, input: UpdateSterilizationTempInput): Promise<ApiResponse<SterilizationTempItem>> => {
+    return apiClient<SterilizationTempItem>(`/qc/liquid-sugar/mss/${id}`, { method: "PUT", body: JSON.stringify(input) });
+  },
+  deleteSterilizationTempLog: async (id: string): Promise<ApiResponse<{ id: string }>> => {
+    return apiClient<{ id: string }>(`/qc/liquid-sugar/mss/${id}`, { method: "DELETE" });
+  },
+
+  listLiquidPackagingVisualChecks: async (params?: { month?: string; batchNo?: string }): Promise<ApiResponse<LiquidPackagingVisualItem[]>> => {
+    return apiClient<LiquidPackagingVisualItem[]>("/qc/liquid-sugar/pvk", { params });
+  },
+  getLiquidPackagingVisualCheck: async (id: string): Promise<ApiResponse<LiquidPackagingVisualItem>> => {
+    return apiClient<LiquidPackagingVisualItem>(`/qc/liquid-sugar/pvk/${id}`);
+  },
+  createLiquidPackagingVisualCheck: async (input: CreateLiquidPackagingVisualInput): Promise<ApiResponse<LiquidPackagingVisualItem>> => {
+    return apiClient<LiquidPackagingVisualItem>("/qc/liquid-sugar/pvk", { method: "POST", body: JSON.stringify(input) });
+  },
+  updateLiquidPackagingVisualCheck: async (id: string, input: UpdateLiquidPackagingVisualInput): Promise<ApiResponse<LiquidPackagingVisualItem>> => {
+    return apiClient<LiquidPackagingVisualItem>(`/qc/liquid-sugar/pvk/${id}`, { method: "PUT", body: JSON.stringify(input) });
+  },
+  deleteLiquidPackagingVisualCheck: async (id: string): Promise<ApiResponse<{ id: string }>> => {
+    return apiClient<{ id: string }>(`/qc/liquid-sugar/pvk/${id}`, { method: "DELETE" });
+  },
+
+  listLiquidSugarProcessingLogs: async (params?: { month?: string; batchNo?: string; productCode?: string }): Promise<ApiResponse<LiquidSugarProcessingItem[]>> => {
+    return apiClient<LiquidSugarProcessingItem[]>("/qc/liquid-sugar/mnc", { params });
+  },
+  getLiquidSugarProcessingLog: async (id: string): Promise<ApiResponse<LiquidSugarProcessingItem>> => {
+    return apiClient<LiquidSugarProcessingItem>(`/qc/liquid-sugar/mnc/${id}`);
+  },
+  createLiquidSugarProcessingLog: async (input: CreateLiquidSugarProcessingInput): Promise<ApiResponse<LiquidSugarProcessingItem>> => {
+    return apiClient<LiquidSugarProcessingItem>("/qc/liquid-sugar/mnc", { method: "POST", body: JSON.stringify(input) });
+  },
+  updateLiquidSugarProcessingLog: async (id: string, input: UpdateLiquidSugarProcessingInput): Promise<ApiResponse<LiquidSugarProcessingItem>> => {
+    return apiClient<LiquidSugarProcessingItem>(`/qc/liquid-sugar/mnc/${id}`, { method: "PUT", body: JSON.stringify(input) });
+  },
+  deleteLiquidSugarProcessingLog: async (id: string): Promise<ApiResponse<{ id: string }>> => {
+    return apiClient<{ id: string }>(`/qc/liquid-sugar/mnc/${id}`, { method: "DELETE" });
+  },
+
+  listLiquidSugarFinishedGoodsLogs: async (params?: { month?: string; batchNo?: string; decision?: string }): Promise<ApiResponse<LiquidSugarFinishedGoodsItem[]>> => {
+    return apiClient<LiquidSugarFinishedGoodsItem[]>("/qc/liquid-sugar/pjc", { params });
+  },
+  getLiquidSugarFinishedGoodsLog: async (id: string): Promise<ApiResponse<LiquidSugarFinishedGoodsItem>> => {
+    return apiClient<LiquidSugarFinishedGoodsItem>(`/qc/liquid-sugar/pjc/${id}`);
+  },
+  createLiquidSugarFinishedGoodsLog: async (input: CreateLiquidSugarFinishedGoodsInput): Promise<ApiResponse<LiquidSugarFinishedGoodsItem>> => {
+    return apiClient<LiquidSugarFinishedGoodsItem>("/qc/liquid-sugar/pjc", { method: "POST", body: JSON.stringify(input) });
+  },
+  updateLiquidSugarFinishedGoodsLog: async (id: string, input: UpdateLiquidSugarFinishedGoodsInput): Promise<ApiResponse<LiquidSugarFinishedGoodsItem>> => {
+    return apiClient<LiquidSugarFinishedGoodsItem>(`/qc/liquid-sugar/pjc/${id}`, { method: "PUT", body: JSON.stringify(input) });
+  },
+  deleteLiquidSugarFinishedGoodsLog: async (id: string): Promise<ApiResponse<{ id: string }>> => {
+    return apiClient<{ id: string }>(`/qc/liquid-sugar/pjc/${id}`, { method: "DELETE" });
+  },
+
+  listLiquidSugarWashVerifications: async (params?: { month?: string; batchNo?: string }): Promise<ApiResponse<LiquidSugarWashVerificationItem[]>> => {
+    return apiClient<LiquidSugarWashVerificationItem[]>("/qc/liquid-sugar/vhc", { params });
+  },
+  getLiquidSugarWashVerification: async (id: string): Promise<ApiResponse<LiquidSugarWashVerificationItem>> => {
+    return apiClient<LiquidSugarWashVerificationItem>(`/qc/liquid-sugar/vhc/${id}`);
+  },
+  createLiquidSugarWashVerification: async (input: CreateLiquidSugarWashVerificationInput): Promise<ApiResponse<LiquidSugarWashVerificationItem>> => {
+    return apiClient<LiquidSugarWashVerificationItem>("/qc/liquid-sugar/vhc", { method: "POST", body: JSON.stringify(input) });
+  },
+  updateLiquidSugarWashVerification: async (id: string, input: UpdateLiquidSugarWashVerificationInput): Promise<ApiResponse<LiquidSugarWashVerificationItem>> => {
+    return apiClient<LiquidSugarWashVerificationItem>(`/qc/liquid-sugar/vhc/${id}`, { method: "PUT", body: JSON.stringify(input) });
+  },
+  deleteLiquidSugarWashVerification: async (id: string): Promise<ApiResponse<{ id: string }>> => {
+    return apiClient<{ id: string }>(`/qc/liquid-sugar/vhc/${id}`, { method: "DELETE" });
+  },
 };
 
 export const qcFormsApi = qcApi;
@@ -1172,6 +1257,7 @@ export interface FilterMeshMonitoringItem {
   dayOfWeek?: string;
   productName: string;
   productCode?: string;
+  batchNo?: string;
   meshSize: string;
   picResponsible: string;
   initialCondition: string;
@@ -1203,6 +1289,7 @@ export interface CreateFilterMeshInput {
   dayOfWeek?: string;
   productName?: string;
   productCode?: string;
+  batchNo?: string;
   meshSize: string;
   picResponsible: string;
   initialCondition?: string;
@@ -1233,6 +1320,7 @@ export interface UpdateFilterMeshInput {
   dayOfWeek?: string;
   productName?: string;
   productCode?: string;
+  batchNo?: string;
   meshSize?: string;
   picResponsible?: string;
   initialCondition?: string;
@@ -1665,6 +1753,7 @@ export interface MetalVerificationItem {
   checkDate: string;
   productType: "gula_semut" | "gula_cair" | string;
   location: string;
+  batchNo?: string;
   packageCategory: string;
   monitoringRound: number;
   checkTime: string;
@@ -1698,6 +1787,7 @@ export interface CreateMetalVerificationInput {
   checkDate: string;
   productType?: string;
   location?: string;
+  batchNo?: string;
   packageCategory?: string;
   monitoringRound?: number;
   checkTime: string;
@@ -1725,6 +1815,7 @@ export interface UpdateMetalVerificationInput {
   checkDate?: string;
   productType?: string;
   location?: string;
+  batchNo?: string;
   packageCategory?: string;
   monitoringRound?: number;
   checkTime?: string;
@@ -2305,4 +2396,300 @@ export interface BrontolStockCardItem {
   returnNo?: string;
   supplierName?: string;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Flow Gula Cair dari Gula Semut Types (MSS, PVK, MNC, PJC, VHC)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface LiquidSugarFlowStatusItem {
+  month: string;
+  batchNo?: string;
+  mssStage1Count: number;
+  pvkCount: number;
+  vmdCount: number;
+  cppCount: number;
+  mssStage2Count: number;
+  mnpCount: number;
+  mnbCount: number;
+  mncCount: number;
+  pjcCount: number;
+  vhcCount: number;
+  stage1Done: boolean;
+  mnpDone: boolean;
+  mnbDone: boolean;
+  qc011Done: boolean;
+  stage2Done: boolean;
+  stage3Done: boolean;
+  stage4Done: boolean;
+  stage5Done: boolean;
+  completedStagesCount: number;
+  currentStage: number;
+  batchNumbers: string[];
+}
+
+export interface SterilizationTempItem {
+  id: string;
+  documentNo: string;
+  documentCode: string;
+  stage: "tahap_1" | "tahap_2" | string;
+  checkMonth: string;
+  checkDate: string;
+  batchNo?: string;
+  packagingType: string;
+  initialTime: string;
+  initialTemp: number;
+  heatingTime: string;
+  heatingTemp: number;
+  finalTime: string;
+  finalTemp: number;
+  durationMinutes: number;
+  isStandardMet: boolean;
+  issues?: string;
+  actionTaken?: string;
+  qcName?: string;
+  qaVerifiedBy?: string;
+  overallStatus: "passed" | "action_required" | string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface CreateSterilizationTempInput {
+  stage?: "tahap_1" | "tahap_2" | string;
+  checkMonth?: string;
+  checkDate: string;
+  batchNo?: string;
+  packagingType: string;
+  initialTime: string;
+  initialTemp: number;
+  heatingTime: string;
+  heatingTemp: number;
+  finalTime: string;
+  finalTemp: number;
+  issues?: string;
+  actionTaken?: string;
+  qcName?: string;
+  qaVerifiedBy?: string;
+  notes?: string;
+}
+
+export type UpdateSterilizationTempInput = Partial<CreateSterilizationTempInput> & { overallStatus?: string };
+
+export interface LiquidPackagingVisualItem {
+  id: string;
+  documentNo: string;
+  documentCode: string;
+  revisionCode: string;
+  checkMonth: string;
+  checkDate: string;
+  batchNo?: string;
+  picResponsible: string;
+  packagingType: string;
+  quantity: number;
+  buyerName?: string;
+  sterilizationInfo?: string;
+  packagingCondition: "B" | "K" | string;
+  findings?: string;
+  actionTaken?: string;
+  picName: string;
+  qcName?: string;
+  qcKnownBy?: string;
+  qcKnownDate?: string;
+  qaVerifiedBy?: string;
+  qaVerifiedDate?: string;
+  overallStatus: "passed" | "action_required" | string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface CreateLiquidPackagingVisualInput {
+  checkMonth?: string;
+  checkDate: string;
+  batchNo?: string;
+  picResponsible?: string;
+  packagingType: string;
+  quantity: number;
+  buyerName?: string;
+  sterilizationInfo?: string;
+  packagingCondition?: "B" | "K" | string;
+  findings?: string;
+  actionTaken?: string;
+  picName: string;
+  qcName?: string;
+  qcKnownBy?: string;
+  qcKnownDate?: string;
+  qaVerifiedBy?: string;
+  qaVerifiedDate?: string;
+  notes?: string;
+}
+
+export type UpdateLiquidPackagingVisualInput = Partial<CreateLiquidPackagingVisualInput> & { overallStatus?: string };
+
+export interface LiquidSugarProcessingItem {
+  id: string;
+  documentNo: string;
+  documentCode: string;
+  revisionCode: string;
+  checkMonth: string;
+  checkDate: string;
+  batchNo?: string;
+  productCode: string;
+  productName?: string;
+  initialTime: string;
+  initialTemp: number;
+  initialMoisture: number;
+  initialBrix: number;
+  initialPh: number;
+  heatingTime: string;
+  heatingTemp: number;
+  heatingDurationMin: number;
+  isCcpPassed: boolean;
+  finalTime: string;
+  finalProductTemp: number;
+  finalMoisture: number;
+  finalBrix: number;
+  finalPh: number;
+  issues?: string;
+  actionTaken?: string;
+  picName: string;
+  qcName?: string;
+  qaVerifiedBy?: string;
+  overallStatus: "passed" | "ccp_alert" | "action_required" | string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface CreateLiquidSugarProcessingInput {
+  checkMonth?: string;
+  checkDate: string;
+  batchNo?: string;
+  productCode: string;
+  productName?: string;
+  initialTime: string;
+  initialTemp: number;
+  initialMoisture: number;
+  initialBrix: number;
+  initialPh: number;
+  heatingTime: string;
+  heatingTemp: number;
+  finalTime: string;
+  finalProductTemp: number;
+  finalMoisture: number;
+  finalBrix: number;
+  finalPh: number;
+  issues?: string;
+  actionTaken?: string;
+  picName: string;
+  qcName?: string;
+  qaVerifiedBy?: string;
+  notes?: string;
+}
+
+export type UpdateLiquidSugarProcessingInput = Partial<CreateLiquidSugarProcessingInput> & { overallStatus?: string };
+
+export interface LiquidSugarFinishedGoodsItem {
+  id: string;
+  documentNo: string;
+  documentCode: string;
+  revisionCode: string;
+  checkMonth: string;
+  checkDate: string;
+  productName: string;
+  batchNo: string;
+  rawMaterialCode?: string;
+  checkPackaging: boolean;
+  checkWeight: boolean;
+  weightValue?: number;
+  checkShape: boolean;
+  checkAroma: boolean;
+  colorScore: number;
+  colorDescription?: string;
+  checkTaste: boolean;
+  checkFreeForeignMatter: boolean;
+  checkSolubility: boolean;
+  moistureContent: number;
+  phValue: number;
+  brixValue: number;
+  inspectionDecision: "LOLOS" | "DITOLAK" | string;
+  notes?: string;
+  qcPersonnelName: string;
+  qaVerifiedBy?: string;
+  qaVerifiedDate?: string;
+  createdAt: string;
+}
+
+export interface CreateLiquidSugarFinishedGoodsInput {
+  checkMonth?: string;
+  checkDate: string;
+  productName: string;
+  batchNo: string;
+  rawMaterialCode?: string;
+  checkPackaging?: boolean;
+  checkWeight?: boolean;
+  weightValue?: number;
+  checkShape?: boolean;
+  checkAroma?: boolean;
+  colorScore: number;
+  colorDescription?: string;
+  checkTaste?: boolean;
+  checkFreeForeignMatter?: boolean;
+  checkSolubility?: boolean;
+  moistureContent: number;
+  phValue: number;
+  brixValue: number;
+  inspectionDecision?: "LOLOS" | "DITOLAK" | string;
+  notes?: string;
+  qcPersonnelName: string;
+  qaVerifiedBy?: string;
+  qaVerifiedDate?: string;
+}
+
+export type UpdateLiquidSugarFinishedGoodsInput = Partial<CreateLiquidSugarFinishedGoodsInput>;
+
+export interface LiquidSugarWashVerificationItem {
+  id: string;
+  documentNo: string;
+  documentCode: string;
+  revisionCode: string;
+  checkMonth: string;
+  checkDate: string;
+  batchNo?: string;
+  location: string;
+  picResponsible: string;
+  waterTempActual: number;
+  isTempStandardMet: boolean;
+  circulationStartTime: string;
+  circulationEndTime: string;
+  circulationDurationMin: number;
+  isCirculationStandardMet: boolean;
+  rinseColor: "Bening" | "Keruh" | string;
+  rinseAroma: "Normal" | "Aroma sabun" | "Aroma gula" | string;
+  rinseDirt: "Bebas kotoran" | "Kotoran terdeteksi" | string;
+  isRinseStandardMet: boolean;
+  qcVerifierName: string;
+  qaVerifiedBy?: string;
+  qaVerifiedDate?: string;
+  overallStatus: "passed" | "re_wash" | string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface CreateLiquidSugarWashVerificationInput {
+  checkMonth?: string;
+  checkDate: string;
+  batchNo?: string;
+  location?: string;
+  picResponsible?: string;
+  waterTempActual: number;
+  circulationStartTime: string;
+  circulationEndTime: string;
+  rinseColor?: string;
+  rinseAroma?: string;
+  rinseDirt?: string;
+  qcVerifierName: string;
+  qaVerifiedBy?: string;
+  qaVerifiedDate?: string;
+  notes?: string;
+}
+
+export type UpdateLiquidSugarWashVerificationInput = Partial<CreateLiquidSugarWashVerificationInput> & { overallStatus?: string };
 

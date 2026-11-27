@@ -151,7 +151,7 @@ export const navigationConfig: NavGroup[] = [
           { title: "Monitoring Ayak (MNA/CMT/MNM)", href: "/qc/sieving" },
           { title: "Monitoring Oven (MNO)", href: "/qc/oven" },
           { title: "Ruang Packing (MNJ/MNG)", href: "/qc/packing" },
-          { title: "QC Gula Cair (MNP/MNB)", href: "/qc/liquid-sugar" },
+          { title: "Flow Gula Cair (MSS/PVK/MNC/PJC/VHC)", href: "/qc/liquid-sugar" },
           { title: "QC VCO (MMV)", href: "/qc/vco" },
           { title: "Metal Detector CCP (CPP/VMD)", href: "/qc/metal-detector" },
           { title: "Pemeriksaan Produk Jadi (PJD)", href: "/qc/finished-goods" },

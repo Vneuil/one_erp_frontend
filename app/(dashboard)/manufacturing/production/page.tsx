@@ -177,9 +177,21 @@ export default function ProductionRunPage() {
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
-          <span className="font-semibold text-muted-foreground whitespace-nowrap">Alur Khusus Lainnya:</span>
-          <Link href="/qc/liquid-sugar" className="px-2.5 py-1 rounded bg-amber-50 text-amber-900 hover:bg-amber-100 font-medium border border-amber-300 whitespace-nowrap">
-            🍯 Flow Gula Cair: Saringan Mesh (MNP) & Tangki Masak (MNB)
+          <span className="font-semibold text-muted-foreground whitespace-nowrap">Flow Gula Cair (dari Gula Semut):</span>
+          <Link href="/qc/liquid-sugar?stage=1" className="px-2.5 py-1 rounded bg-amber-50 text-amber-900 hover:bg-amber-100 font-medium border border-amber-300 whitespace-nowrap">
+            1. Persiapan (MSS, PVK, VMD, CPP)
+          </Link>
+          <Link href="/qc/liquid-sugar?stage=2" className="px-2.5 py-1 rounded bg-amber-50 text-amber-900 hover:bg-amber-100 font-medium border border-amber-300 whitespace-nowrap">
+            2. Pra-Masak (MSS, QC-011 MNP/MNB)
+          </Link>
+          <Link href="/qc/liquid-sugar?stage=3" className="px-2.5 py-1 rounded bg-amber-50 text-amber-900 hover:bg-amber-100 font-medium border border-amber-300 whitespace-nowrap">
+            3. Pengolahan (MNC)
+          </Link>
+          <Link href="/qc/liquid-sugar?stage=4" className="px-2.5 py-1 rounded bg-amber-50 text-amber-900 hover:bg-amber-100 font-medium border border-amber-300 whitespace-nowrap">
+            4. Produk Jadi (PJC)
+          </Link>
+          <Link href="/qc/liquid-sugar?stage=5" className="px-2.5 py-1 rounded bg-amber-50 text-amber-900 hover:bg-amber-100 font-medium border border-amber-300 whitespace-nowrap">
+            5. Verifikasi Cuci (VHC)
           </Link>
           <Link href="/qc/vco" className="px-2.5 py-1 rounded bg-cyan-50 text-cyan-900 hover:bg-cyan-100 font-medium border border-cyan-300 whitespace-nowrap">
             🥥 Flow VCO: Saringan Mesh Minyak Kelapa (MMV)

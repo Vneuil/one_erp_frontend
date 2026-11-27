@@ -432,7 +432,18 @@ export default function QCMetalDetectorPage() {
           {activeTab === "vmd" && (
             <div className="flex items-center gap-1 bg-muted p-1 rounded-lg border border-border">
               <button
-                onClick={() => setProductType("gula_semut")}
+                onClick={() => {
+                  setProductType("gula_semut");
+                  setVerifForm((f) => ({
+                    ...f,
+                    productType: "gula_semut",
+                    location: "Ruang Packing",
+                    packageCategory: "<= 12.5 kg",
+                    feTestPieceSize: "Fe >= 2.0mm",
+                    nonFeTestPieceSize: "Non-Fe >= 2.0mm",
+                    ssTestPieceSize: "SS >= 3.5mm",
+                  }));
+                }}
                 className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
                   productType === "gula_semut"
                     ? "bg-amber-600 text-white shadow-sm"
@@ -442,7 +453,18 @@ export default function QCMetalDetectorPage() {
                 Gula Semut (QC-017 Rev 03)
               </button>
               <button
-                onClick={() => setProductType("gula_cair")}
+                onClick={() => {
+                  setProductType("gula_cair");
+                  setVerifForm((f) => ({
+                    ...f,
+                    productType: "gula_cair",
+                    location: "Gula Cair",
+                    packageCategory: "Gula Cair",
+                    feTestPieceSize: "Fe >= 1.5mm",
+                    nonFeTestPieceSize: "Non-Fe >= 1.5mm",
+                    ssTestPieceSize: "SS >= 2.5mm",
+                  }));
+                }}
                 className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
                   productType === "gula_cair"
                     ? "bg-blue-600 text-white shadow-sm"
@@ -731,15 +753,23 @@ export default function QCMetalDetectorPage() {
             </div>
 
             <div className="col-span-3">
-              <label className="font-semibold block mb-1">Ukuran Kemasan</label>
-              <select
-                value={verifForm.packageCategory}
-                onChange={(e) => setVerifForm({ ...verifForm, packageCategory: e.target.value })}
-                className="w-full text-xs h-8 border rounded-md px-2 bg-background"
-              >
-                <option value="<= 12.5 kg">Kemasan &le; 12.5 kg (Fe &ge;2mm, Non-Fe &ge;2mm, SS &ge;3.5mm)</option>
-                <option value="> 12.5 kg">Kemasan &gt; 12.5 kg (Fe &ge;2.5mm, Non-Fe &ge;3mm, SS &ge;3.5mm)</option>
-              </select>
+              {productType === "gula_cair" ? (
+                <div className="p-2 rounded-md bg-blue-50 border border-blue-200 text-xs text-blue-900">
+                  Test Piece Gula Cair (QC-017 Rev 01): <strong>Fe ≥ 1.5 mm</strong>, <strong>Non-Fe ≥ 1.5 mm</strong>, <strong>SS ≥ 2.5 mm</strong> (Lokasi: Gula Cair).
+                </div>
+              ) : (
+                <>
+                  <label className="font-semibold block mb-1">Ukuran Kemasan</label>
+                  <select
+                    value={verifForm.packageCategory}
+                    onChange={(e) => setVerifForm({ ...verifForm, packageCategory: e.target.value })}
+                    className="w-full text-xs h-8 border rounded-md px-2 bg-background"
+                  >
+                    <option value="<= 12.5 kg">Kemasan &le; 12.5 kg (Fe &ge;2mm, Non-Fe &ge;2mm, SS &ge;3.5mm)</option>
+                    <option value="> 12.5 kg">Kemasan &gt; 12.5 kg (Fe &ge;2.5mm, Non-Fe &ge;3mm, SS &ge;3.5mm)</option>
+                  </select>
+                </>
+              )}
             </div>
 
             {/* Test Piece 1: Fe */}
