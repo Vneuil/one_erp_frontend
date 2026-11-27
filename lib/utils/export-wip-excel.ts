@@ -373,133 +373,242 @@ export async function exportLSTExcel(report: HandoverReportItem): Promise<void> 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. Export Form QC-018-PLK (Pemeriksaan Label Kemasan QC)
+// 3. Export Form QC-016-PLK. 01 (Pemeriksaan Label Kemasan - Rev 01 Line Check)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function exportPLKExcel(report: PackagingLabelCheckItem): Promise<void> {
+const PLK_MONTH_NAMES_ID = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
+
+function formatPLKMonthYear(monthStr?: string): string {
+  if (!monthStr || !/^\d{4}-\d{2}/.test(monthStr)) return monthStr || "";
+  const [yr, mo] = monthStr.split("-");
+  const idx = parseInt(mo, 10) - 1;
+  return `${PLK_MONTH_NAMES_ID[idx] || mo} ${yr}`;
+}
+
+export async function exportPLKExcel(
+  input: PackagingLabelCheckItem | PackagingLabelCheckItem[],
+  filterMonth?: string
+): Promise<void> {
+  const reports = Array.isArray(input) ? input : [input];
+  const sample = reports[0];
+
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "One ERP - CV. Manna Anugerah Sejahtera";
   workbook.created = new Date();
 
-  const ws = workbook.addWorksheet("Pemeriksaan Label Kemasan", {
-    pageSetup: { paperSize: 9, orientation: "landscape" },
+  const ft = sample?.fairtradeStatus || "";
+  const ftHeaderText =
+    ft === "FAIRTRADE"
+      ? "FAIRTRADE / [NON FAIRTRADE]"
+      : ft === "NON FAIRTRADE"
+        ? "[FAIRTRADE] / NON FAIRTRADE"
+        : "FAIRTRADE / NON FAIRTRADE";
+
+  const ws = workbook.addWorksheet("rev-01 penambahan line check", {
+    pageSetup: {
+      paperSize: 9,
+      orientation: "landscape",
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 1,
+    },
+    headerFooter: {
+      oddHeader: `&LCV. Manna Anugerah Sejahtera\nCU 820674 D-11\n104464OC\nFLO-ID 43683&RQC-016-PLK\n${ftHeaderText}`,
+      oddFooter: "&CRevisi 01",
+    },
   });
 
-  // Header Manna
-  ws.mergeCells("A2:D2");
-  ws.getCell("A2").value = "CV. Manna Anugerah Sejahtera";
-  ws.getCell("A2").font = { name: "Arial", size: 11, bold: true };
+  // Explicit header rows at top of sheet so it's visible in Normal view as well
+  ws.getCell("A1").value = "CV. Manna Anugerah Sejahtera";
+  ws.getCell("A1").font = { name: "Arial", size: 9, bold: true };
+  ws.getCell("A2").value = "CU 820674 D-11 | 104464OC | FLO-ID 43683";
+  ws.getCell("A2").font = { name: "Arial", size: 8 };
 
-  ws.mergeCells("M2:O2");
-  ws.getCell("M2").value = "QC-018-PLK";
-  ws.getCell("M2").font = { name: "Arial", size: 10, bold: true };
-  ws.getCell("M2").alignment = { horizontal: "right" };
+  ws.mergeCells("Q1:S1");
+  ws.getCell("Q1").value = "QC-016-PLK";
+  ws.getCell("Q1").font = { name: "Arial", size: 9, bold: true };
+  ws.getCell("Q1").alignment = { horizontal: "right", vertical: "middle" };
 
-  // Title
-  ws.mergeCells("A5:O5");
-  ws.getCell("A5").value = "Form Pemeriksaan Label Kemasan QC (PLK)";
-  ws.getCell("A5").font = { name: "Arial", size: 13, bold: true };
-  ws.getCell("A5").alignment = { horizontal: "center", vertical: "middle" };
+  ws.mergeCells("Q2:S2");
+  ws.getCell("Q2").value = ftHeaderText;
+  ws.getCell("Q2").font = { name: "Arial", size: 8, bold: true };
+  ws.getCell("Q2").alignment = { horizontal: "right", vertical: "middle" };
 
-  ws.mergeCells("A6:O6");
-  ws.getCell("A6").value = `${report.fairtradeStatus.toUpperCase()} - ${report.certification || "NATURAL"}`;
-  ws.getCell("A6").font = { name: "Arial", size: 10, bold: true };
-  ws.getCell("A6").alignment = { horizontal: "center", vertical: "middle" };
+  // Title (Rows 3-4 matching original)
+  ws.mergeCells("A3:S3");
+  ws.getCell("A3").value = "Pemeriksaan Label Kemasan";
+  ws.getCell("A3").font = { name: "Arial", size: 12, bold: true };
+  ws.getCell("A3").alignment = { horizontal: "center", vertical: "middle" };
 
-  ws.getCell("A8").value = "No. Dokumen";
-  ws.getCell("B8").value = `: ${report.documentNo}`;
-  ws.getCell("H8").value = "Tanggal Periksa";
-  ws.getCell("I8").value = `: ${report.checkDate}`;
+  ws.mergeCells("A4:S4");
+  ws.getCell("A4").value = "(PLK)";
+  ws.getCell("A4").font = { name: "Arial", size: 11, bold: true };
+  ws.getCell("A4").alignment = { horizontal: "center", vertical: "middle" };
 
-  ws.getCell("A9").value = "No. Batch";
-  ws.getCell("B9").value = `: ${report.batchNo || "-"}`;
-  ws.getCell("H9").value = "Keputusan QC";
-  ws.getCell("I9").value = `: ${report.overallDecision.toUpperCase()}`;
+  const periodSource = filterMonth || sample?.checkMonth || new Date().toISOString().slice(0, 7);
+  ws.mergeCells("A6:F6");
+  ws.getCell("A6").value = `Bulan / Tahun : ${formatPLKMonthYear(periodSource)}`;
+  ws.getCell("A6").font = { name: "Arial", size: 9, bold: true };
 
-  for (const addr of ["A8", "H8", "A9", "H9"]) {
-    ws.getCell(addr).font = { name: "Arial", size: 9, bold: true };
+  // 2-tier Table Headers (Rows 7-8, Columns A..S = 19 cols)
+  const mergedSingleCols: [string, string][] = [
+    ["A", "Tanggal"],
+    ["B", "Customer"],
+    ["C", "Nama Produk"],
+    ["D", "Batch Number"],
+    ["E", "Production Date"],
+    ["F", "Expired Date"],
+    ["P", "Line Check"],
+    ["Q", "Lolos/ Tidak"],
+    ["R", "Keterangan"],
+    ["S", "Paraf QC"],
+  ];
+  for (const [col, label] of mergedSingleCols) {
+    ws.mergeCells(`${col}7:${col}8`);
+    ws.getCell(`${col}7`).value = label;
   }
 
-  // Table Headers
-  const headerCols = [
-    "No", "Nama Barang", "Kode Barang", "Nomor Batch", "Buyer", "Kemasan",
-    "No. Stiker", "Batch Sesuai", "Exp Date", "Logo Sertifikasi", "Kualitas Cetak",
-    "Posisi Rapi", "Diperiksa", "Lolos", "Keputusan",
-  ];
+  ws.mergeCells("G7:O7");
+  ws.getCell("G7").value = "Kesesuaian Label & Kemasan*";
 
-  ws.getRow(11).height = 24;
-  headerCols.forEach((title, i) => {
-    const colNum = i + 1;
-    const c = ws.getRow(11).getCell(colNum);
-    c.value = title;
-    c.font = { name: "Arial", size: 8, bold: true };
-    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
-    c.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
-    c.border = thinBorder;
+  const subCheckCols: [string, string][] = [
+    ["G", "Nama Produk"],
+    ["H", "Batch Number"],
+    ["I", "Production Date"],
+    ["J", "Best Before Date"],
+    ["K", "Negara Asal"],
+    ["L", "Berat"],
+    ["M", "Kemasan"],
+    ["N", "No Sticker"],
+    ["O", "Allergen Information"],
+  ];
+  for (const [col, label] of subCheckCols) {
+    ws.getCell(`${col}8`).value = label;
+  }
+
+  ws.getRow(7).height = 22;
+  ws.getRow(8).height = 78;
+  for (let r = 7; r <= 8; r++) {
+    for (let c = 1; c <= 19; c++) {
+      const cell = ws.getRow(r).getCell(c);
+      cell.font = { name: "Arial", size: 8, bold: true };
+      cell.border = thinBorder;
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
+      const isVertical = (r === 8 && c >= 7 && c <= 15) || (r === 7 && c === 16);
+      cell.alignment = {
+        horizontal: "center",
+        vertical: "middle",
+        wrapText: true,
+        textRotation: isVertical ? 90 : 0,
+      };
+    }
+  }
+
+  // Flatten all items from reports
+  const flatRows = reports.flatMap((rep) => {
+    const items = rep.items && rep.items.length > 0 ? rep.items : [];
+    return items.map((it) => ({ rep, it }));
   });
 
-  let rowIdx = 12;
-  const items = report.items || [];
-  for (const it of items) {
-    ws.getCell(`A${rowIdx}`).value = it.itemNo;
-    ws.getCell(`B${rowIdx}`).value = it.itemName;
-    ws.getCell(`C${rowIdx}`).value = it.itemCode;
-    ws.getCell(`D${rowIdx}`).value = it.batchNo;
-    ws.getCell(`E${rowIdx}`).value = it.buyerName || "-";
-    ws.getCell(`F${rowIdx}`).value = it.packagingType || "-";
-    ws.getCell(`G${rowIdx}`).value = it.stickerNo || "-";
-    ws.getCell(`H${rowIdx}`).value = it.isBatchMatch ? "Sesuai" : "Tdk Sesuai";
-    ws.getCell(`I${rowIdx}`).value = it.isExpiryMatch ? "Sesuai" : "Tdk Sesuai";
-    ws.getCell(`J${rowIdx}`).value = it.isCertLogoMatch ? "Sesuai" : "Tdk Sesuai";
-    ws.getCell(`K${rowIdx}`).value = it.isPrintQualityGood ? "Baik" : "Cacat";
-    ws.getCell(`L${rowIdx}`).value = it.isPositionAligned ? "Rapi" : "Miring";
-    ws.getCell(`M${rowIdx}`).value = it.inspectedQty;
-    ws.getCell(`N${rowIdx}`).value = it.passedQty;
-    ws.getCell(`O${rowIdx}`).value = it.itemDecision.toUpperCase();
+  const totalRows = Math.max(14, flatRows.length);
+  let rowIdx = 9;
+  for (let i = 0; i < totalRows; i++) {
+    const entry = flatRows[i];
+    const row = ws.getRow(rowIdx);
+    row.height = 19;
 
-    for (let c = 1; c <= 15; c++) {
-      const cell = ws.getRow(rowIdx).getCell(c);
+    if (entry) {
+      const { rep, it } = entry;
+      const ck = (v?: boolean) => (v !== false ? "✓" : "✗");
+      const decisionLabel =
+        it.itemDecision === "ditolak" || rep.overallDecision === "ditolak" ? "Tidak" : "Lolos";
+
+      row.getCell(1).value = it.itemCheckDate || rep.checkDate;
+      row.getCell(2).value = it.buyerName || "-";
+      row.getCell(3).value = it.itemName;
+      row.getCell(4).value = it.batchNo || rep.batchNo || "-";
+      row.getCell(5).value = it.productionDate || "-";
+      row.getCell(6).value = it.expiredDate || "-";
+      row.getCell(7).value = ck(it.isProductNameMatch);
+      row.getCell(8).value = ck(it.isBatchMatch);
+      row.getCell(9).value = ck(it.isProductionDateMatch);
+      row.getCell(10).value = ck(it.isExpiryMatch);
+      row.getCell(11).value = ck(it.isOriginCountryMatch);
+      row.getCell(12).value = ck(it.isWeightMatch);
+      row.getCell(13).value = ck(it.isPackagingMatch);
+      row.getCell(14).value = ck(it.isStickerNoMatch);
+      row.getCell(15).value = ck(it.isAllergenInfoMatch);
+      row.getCell(16).value = ck(it.isLineCheckPassed);
+      row.getCell(17).value = decisionLabel;
+      row.getCell(18).value = it.notes || rep.notes || "-";
+      row.getCell(19).value = it.qcPicName || rep.qcInspectorName || "-";
+    }
+
+    for (let c = 1; c <= 19; c++) {
+      const cell = row.getCell(c);
       cell.border = thinBorder;
       cell.font = { name: "Arial", size: 8 };
-      cell.alignment = { vertical: "middle" };
-      if ([1, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14, 15].includes(c)) {
-        cell.alignment = { horizontal: "center", vertical: "middle" };
-      }
+      const isLeft = c === 2 || c === 3 || c === 18;
+      cell.alignment = {
+        horizontal: isLeft ? "left" : "center",
+        vertical: "middle",
+        wrapText: true,
+      };
     }
     rowIdx++;
   }
 
-  // Signatures
-  rowIdx += 2;
-  ws.mergeCells(`B${rowIdx}:D${rowIdx}`);
-  ws.getCell(`B${rowIdx}`).value = "Diperiksa Oleh (QC Inspector)";
-  ws.getCell(`B${rowIdx}`).font = { name: "Arial", size: 8, bold: true };
-  ws.getCell(`B${rowIdx}`).alignment = { horizontal: "center" };
+  // Footer Notes (exact 4 lines from form-QC-016-PLK.01)
+  const noteStart = rowIdx + 1;
+  const noteLines = [
+    "Keterangan : - (*) Ceklis apabila sesuai dengan ketentuan",
+    "                        - Pemeriksaan dilakukan sebelum produk memasuki area penyimpanan produk jadi",
+    "                        - Jika pada saat proses produksi label belum tersedia, pemeriksaan dilakukan setelah tersedianya label",
+    "                        - Tempel label karantina jika produk belum dilakukan pemeriksaan dan label lolos jika produk telah sesuai standar",
+  ];
+  noteLines.forEach((txt, idx) => {
+    const r = noteStart + idx;
+    ws.getCell(`A${r}`).value = txt;
+    ws.getCell(`A${r}`).font = { name: "Arial", size: 8 };
+  });
 
-  ws.mergeCells(`L${rowIdx}:N${rowIdx}`);
-  ws.getCell(`L${rowIdx}`).value = "Diverifikasi Oleh (QC Supervisor / QA)";
-  ws.getCell(`L${rowIdx}`).font = { name: "Arial", size: 8, bold: true };
-  ws.getCell(`L${rowIdx}`).alignment = { horizontal: "center" };
-
-  rowIdx += 3;
-  ws.mergeCells(`B${rowIdx}:D${rowIdx}`);
-  ws.getCell(`B${rowIdx}`).value = `${report.qcInspectorName} (${report.qcInspectorSignDate || report.checkDate})`;
-  ws.getCell(`B${rowIdx}`).font = { name: "Arial", size: 8 };
-  ws.getCell(`B${rowIdx}`).alignment = { horizontal: "center" };
-
-  ws.mergeCells(`L${rowIdx}:N${rowIdx}`);
-  ws.getCell(`L${rowIdx}`).value = `${report.qcSupervisorName || "-"} (${report.qcSupervisorSignDate || "-"})`;
-  ws.getCell(`L${rowIdx}`).font = { name: "Arial", size: 8 };
-  ws.getCell(`L${rowIdx}`).alignment = { horizontal: "center" };
+  const revRow = noteStart + 5;
+  ws.mergeCells(`A${revRow}:S${revRow}`);
+  ws.getCell(`A${revRow}`).value = "Revisi 01";
+  ws.getCell(`A${revRow}`).font = { name: "Arial", size: 8 };
+  ws.getCell(`A${revRow}`).alignment = { horizontal: "center", vertical: "middle" };
 
   ws.columns = [
-    { width: 5 }, { width: 18 }, { width: 12 }, { width: 16 }, { width: 16 },
-    { width: 14 }, { width: 14 }, { width: 12 }, { width: 12 }, { width: 14 },
-    { width: 12 }, { width: 12 }, { width: 10 }, { width: 10 }, { width: 12 },
+    { width: 12 }, // A: Tanggal
+    { width: 16 }, // B: Customer
+    { width: 20 }, // C: Nama Produk
+    { width: 16 }, // D: Batch Number
+    { width: 13 }, // E: Production Date
+    { width: 13 }, // F: Expired Date
+    { width: 4.5 }, // G
+    { width: 4.5 }, // H
+    { width: 4.5 }, // I
+    { width: 4.5 }, // J
+    { width: 4.5 }, // K
+    { width: 4.5 }, // L
+    { width: 4.5 }, // M
+    { width: 4.5 }, // N
+    { width: 4.5 }, // O
+    { width: 5.5 }, // P: Line Check
+    { width: 10 },  // Q: Lolos/ Tidak
+    { width: 22 },  // R: Keterangan
+    { width: 11 },  // S: Paraf QC
   ];
 
   const buffer = await workbook.xlsx.writeBuffer();
-  triggerDownload(buffer, `Form-QC-PLK-${report.documentNo}.xlsx`);
+  const filename =
+    reports.length === 1 && sample?.documentNo
+      ? `Form-QC-016-PLK-${sample.documentNo}.xlsx`
+      : `Form-QC-016-PLK-${periodSource}.xlsx`;
+  triggerDownload(buffer, filename);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

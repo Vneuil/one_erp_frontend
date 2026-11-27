@@ -64,12 +64,19 @@ export function Step7MetalDetector({
         await qcApi.createMetalCleaningLog({
           checkDate: batch.date || new Date().toISOString().slice(0, 10),
           machineNo: "Metal Detector Conveyor #1",
+          equipmentName: "Metal Detector",
+          location: "R. Packing",
+          batchNo: batch.batchNo,
           startTime: "08:00",
           endTime: "08:30",
-          sensorCleanliness: "clean",
-          rejectBinCleanliness: "empty",
+          cleaningStartTime: "08:30",
+          cleaningEndTime: "08:45",
+          finding: "-",
+          sensorCleanliness: "Bersih",
+          rejectBinCleanliness: "Bersih & Kosong",
           operatorName: batch.handedOverBy || "Operator Packing",
-          notes: `Aperture bersih & bin kosong untuk batch ${batch.batchNo}.`,
+          qcInspectorName: qaInspector,
+          notes: `Aperture bersih & bin kosong untuk batch ${batch.batchNo} (PRO-007-CPP).`,
         }).catch(() => {});
       }
     } finally {
@@ -171,7 +178,7 @@ export function Step7MetalDetector({
             className="h-4 w-4 mt-0.5 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer"
           />
           <label htmlFor="metalClean" className="text-xs font-medium text-foreground cursor-pointer">
-            Aperture head bebas debu gula &amp; reject bin telah diperiksa kosong oleh tim QA (Form CPP Sesuai Standar HACCP).
+            Aperture head bebas debu gula &amp; reject bin telah diperiksa kosong oleh tim QA (Form PRO-007-CPP Sesuai Standar HACCP).
           </label>
         </div>
 

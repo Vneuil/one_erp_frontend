@@ -14,6 +14,9 @@ import {
   Layers,
   Clock,
   Radio,
+  Pencil,
+  Trash2,
+  Printer,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -27,7 +30,134 @@ import {
   MetalVerificationItem,
   CreateMetalVerificationInput,
 } from "@/lib/api/qc";
-import { exportCPPExcel, exportVMDExcel } from "@/lib/utils/export-qc-excel";
+import {
+  exportCPPExcel,
+  exportVMDExcel,
+  cppSheetKey,
+  cppLocationLabel,
+  cppMonthLabel,
+} from "@/lib/utils/export-qc-excel";
+
+type CPPSheetKey = "MD" | "MD GC" | "X-Ray";
+const CPP_SHEETS: { key: CPPSheetKey; label: string; equipment: string; location: string }[] = [
+  { key: "MD", label: "Metal Detector – R. Packing", equipment: "Metal Detector", location: "R. Packing" },
+  { key: "MD GC", label: "Metal Detector – R. Gula Cair", equipment: "Metal Detector", location: "R. Gula Cair" },
+  { key: "X-Ray", label: "X-Ray – R. Packing", equipment: "X-Ray", location: "R. Packing" },
+];
+
+const emptyCleaningForm = (): CreateMetalCleaningInput => ({
+  checkDate: new Date().toISOString().slice(0, 10),
+  machineNo: "MD-01",
+  location: "R. Packing",
+  equipmentName: "Metal Detector",
+  cleaningType: "post_operational",
+  sensorCleanliness: "Bersih",
+  beltCleanliness: "Bersih",
+  rejectBinCleanliness: "Bersih & Kosong",
+  physicalCondition: "Normal",
+  productName: "",
+  batchNo: "",
+  customerName: "",
+  quantity: "",
+  startTime: "08:00",
+  endTime: "16:00",
+  finding: "",
+  analysisResult: "",
+  correctiveAction: "",
+  cleaningStartTime: "16:00",
+  cleaningEndTime: "16:15",
+  operatorName: "",
+  qcInspectorName: "",
+  qaVerifiedDate: "",
+  notes: "",
+});
+
+const escapeHtml = (s?: string | number) =>
+  String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+const fmtDate = (d?: string) => {
+  if (!d || d.length < 10) return d || "";
+  const [y, m, day] = d.slice(0, 10).split("-");
+  return `${day}/${m}/${y}`;
+};
+
+function printCPPForm(groups: { key: CPPSheetKey; rows: MetalCleaningItem[] }[], month: string) {
+  const pages = groups
+    .map(({ key, rows }) => {
+      const minRows = 12;
+      const body = Array.from({ length: Math.max(minRows, rows.length) })
+        .map((_, i) => {
+          const it = rows[i];
+          if (!it) return `<tr>${"<td>&nbsp;</td>".repeat(14)}</tr>`;
+          return `<tr>
+            <td>${i + 1}</td><td>${fmtDate(it.checkDate)}</td><td class="l">${escapeHtml(it.productName)}</td>
+            <td>${escapeHtml(it.batchNo)}</td><td>${escapeHtml(it.customerName)}</td><td>${escapeHtml(it.quantity)}</td>
+            <td>${escapeHtml(it.startTime)}</td><td>${escapeHtml(it.endTime)}</td>
+            <td class="l">${escapeHtml(it.finding || "-")}</td><td class="l">${escapeHtml(it.analysisResult || "-")}</td>
+            <td class="l">${escapeHtml(it.correctiveAction || "-")}</td>
+            <td>${escapeHtml(it.cleaningStartTime)}</td><td>${escapeHtml(it.cleaningEndTime)}</td>
+            <td>${escapeHtml(it.operatorName)}</td></tr>`;
+        })
+        .join("");
+      const lastQA = [...rows].reverse().find((x) => x.qcInspectorName);
+      return `<section class="page">
+        <div class="hdr"><div>CV. Manna Anugerah Sejahtera<br/>CU 820674 D-11<br/>104464OC<br/>FLO-ID 43683</div>
+          <div class="r">PRO-007-CPP<br/>FAIRTRADE / NON FAIRTRADE</div></div>
+        <h1>Catatan Pemakaian dan Pembersihan Alat</h1><h1>(CPP)</h1>
+        <table class="info">
+          <tr><td>Lokasi</td><td>: ${cppLocationLabel(key)}</td></tr>
+          <tr><td>Nama Alat</td><td>: ${key === "X-Ray" ? "X-Ray" : "Metal Detector"}</td></tr>
+          <tr><td>Bulan/Tahun</td><td>: ${cppMonthLabel(month)}</td></tr>
+        </table>
+        <table class="grid">
+          <colgroup>${[3.6, 12.4, 7.9, 15, 11.1, 5.1, 8, 8.4, 14.1, 22.9, 19, 8.4, 7.6, 5.3]
+            .map((w) => `<col style="width:${w}%"/>`)
+            .join("")}</colgroup>
+          <thead>
+            <tr><th rowspan="3">No</th><th rowspan="3">Tanggal</th><th rowspan="3">Nama Produk</th><th rowspan="3">No. Batch</th>
+              <th rowspan="3">Customer</th><th rowspan="3">Jumlah</th><th colspan="5">Pemakaian</th><th colspan="2">Pembersihan</th><th rowspan="3">PIC</th></tr>
+            <tr><th colspan="2">Jam (WIB)</th><th rowspan="2">Temuan</th><th rowspan="2">Hasil Analisa</th><th rowspan="2">Tindakan Perbaikan</th><th colspan="2">Jam (WIB)</th></tr>
+            <tr><th>Mulai</th><th>Selesai</th><th>Mulai</th><th>Selesai</th></tr>
+          </thead>
+          <tbody>${body}</tbody>
+        </table>
+        <div class="foot">
+          <div class="notes"><b>Catatan :</b><br/> - Isi sebelum dan sesudah penggunaan alat<br/> - Bersihkan alat setiap selesai penggunaan<br/> - Jika ada temuan, catat hasil temuan, hasil analisa, dan tindakan yang dilakukan</div>
+          <div class="sign"><div>Diketahui Oleh:</div><div class="sp">Tgl. ${escapeHtml(fmtDate(lastQA?.qaVerifiedDate))}<br/>${escapeHtml(lastQA?.qcInspectorName)}</div><div><b>QA</b></div></div>
+        </div>
+        <div class="rev">Revisi 01</div>
+      </section>`;
+    })
+    .join("");
+
+  const w = window.open("", "_blank");
+  if (!w) return;
+  w.document.write(`<!doctype html><html><head><title>PRO-007-CPP ${month}</title><style>
+    @page { size: A4 landscape; margin: 10mm; }
+    body { font-family: Arial, sans-serif; font-size: 10px; color: #000; }
+    .page { page-break-after: always; position: relative; min-height: 180mm; }
+    .page:last-child { page-break-after: auto; }
+    .hdr { display: flex; justify-content: space-between; font-size: 9px; margin-bottom: 6px; }
+    .hdr .r { text-align: right; }
+    h1 { text-align: center; font-size: 16px; margin: 2px 0; }
+    .info td { padding: 1px 8px 1px 0; font-size: 11px; }
+    .info td:first-child { font-weight: bold; width: 90px; }
+    table.grid { width: 100%; border-collapse: collapse; margin-top: 6px; table-layout: fixed; }
+    .grid th, .grid td { border: 1px solid #000; padding: 2px 3px; text-align: center; vertical-align: middle; font-size: 9px; word-wrap: break-word; }
+    .grid th { font-weight: bold; }
+    .grid td { height: 18px; }
+    .grid td.l { text-align: left; }
+    .foot { display: flex; justify-content: space-between; margin-top: 8px; font-size: 9px; }
+    .sign { width: 21%; text-align: center; }
+    .sign .sp { height: 46px; padding-top: 4px; }
+    .rev { text-align: center; font-size: 9px; margin-top: 8px; }
+  </style></head><body>${pages}<script>window.onload=()=>{window.print();}</script></body></html>`);
+  w.document.close();
+}
 
 export default function QCMetalDetectorPage() {
   const [activeTab, setActiveTab] = React.useState<"cpp" | "vmd">("vmd");
@@ -45,21 +175,9 @@ export default function QCMetalDetectorPage() {
   const [isVerifOpen, setIsVerifOpen] = React.useState<boolean>(false);
 
   // Form states
-  const [cleaningForm, setCleaningForm] = React.useState<CreateMetalCleaningInput>({
-    checkDate: new Date().toISOString().slice(0, 10),
-    machineNo: "MD-01",
-    location: "Ruang Packing",
-    cleaningType: "pre_operational",
-    sensorCleanliness: "Bersih",
-    beltCleanliness: "Bersih",
-    rejectBinCleanliness: "Bersih & Kosong",
-    physicalCondition: "Normal",
-    startTime: "07:30",
-    endTime: "16:30",
-    operatorName: "Teknisi Operasional",
-    qcInspectorName: "Staff QC",
-    notes: "",
-  });
+  const [cppSheet, setCppSheet] = React.useState<"all" | CPPSheetKey>("all");
+  const [editingCleaningId, setEditingCleaningId] = React.useState<string | null>(null);
+  const [cleaningForm, setCleaningForm] = React.useState<CreateMetalCleaningInput>(emptyCleaningForm());
 
   const [verifForm, setVerifForm] = React.useState<CreateMetalVerificationInput>({
     checkDate: new Date().toISOString().slice(0, 10),
@@ -106,14 +224,109 @@ export default function QCMetalDetectorPage() {
   }, [fetchData]);
 
   // Submit handlers
+  const filteredCleaningLogs = React.useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return cleaningLogs
+      .filter((l) => cppSheet === "all" || cppSheetKey(l) === cppSheet)
+      .filter((l) =>
+        !q ||
+        [l.documentNo, l.productName, l.batchNo, l.customerName, l.finding, l.operatorName]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(q))
+      )
+      .sort((a, b) => `${a.checkDate} ${a.startTime}`.localeCompare(`${b.checkDate} ${b.startTime}`));
+  }, [cleaningLogs, cppSheet, searchQuery]);
+
+  const openCreateCleaning = () => {
+    const sheet = CPP_SHEETS.find((s) => s.key === cppSheet) || CPP_SHEETS[0];
+    setEditingCleaningId(null);
+    setCleaningForm({ ...emptyCleaningForm(), equipmentName: sheet.equipment, location: sheet.location });
+    setIsCleaningOpen(true);
+  };
+
+  const openEditCleaning = (log: MetalCleaningItem) => {
+    setEditingCleaningId(log.id);
+    setCleaningForm({
+      ...emptyCleaningForm(),
+      checkDate: log.checkDate,
+      machineNo: log.machineNo,
+      location: cppLocationLabel(cppSheetKey(log)),
+      equipmentName: cppSheetKey(log) === "X-Ray" ? "X-Ray" : "Metal Detector",
+      cleaningType: log.cleaningType,
+      sensorCleanliness: log.sensorCleanliness,
+      beltCleanliness: log.beltCleanliness,
+      rejectBinCleanliness: log.rejectBinCleanliness,
+      physicalCondition: log.physicalCondition,
+      productName: log.productName || "",
+      batchNo: log.batchNo || "",
+      customerName: log.customerName || "",
+      quantity: log.quantity || "",
+      startTime: log.startTime,
+      endTime: log.endTime,
+      finding: log.finding || "",
+      analysisResult: log.analysisResult || "",
+      correctiveAction: log.correctiveAction || "",
+      cleaningStartTime: log.cleaningStartTime || "",
+      cleaningEndTime: log.cleaningEndTime || "",
+      operatorName: log.operatorName,
+      qcInspectorName: log.qcInspectorName || "",
+      qaVerifiedDate: log.qaVerifiedDate || "",
+      notes: log.notes || "",
+    });
+    setIsCleaningOpen(true);
+  };
+
   const handleSaveCleaning = async () => {
+    if (!cleaningForm.checkDate || !cleaningForm.startTime || !cleaningForm.endTime || !cleaningForm.operatorName?.trim()) {
+      alert("Tanggal, jam pemakaian (mulai/selesai), dan PIC wajib diisi.");
+      return;
+    }
     try {
-      await qcApi.createMetalCleaningLog(cleaningForm);
+      if (editingCleaningId) {
+        await qcApi.updateMetalCleaningLog(editingCleaningId, cleaningForm);
+      } else {
+        await qcApi.createMetalCleaningLog(cleaningForm);
+      }
       setIsCleaningOpen(false);
+      setEditingCleaningId(null);
       fetchData();
     } catch (err) {
-      alert("Gagal menyimpan pembersihan metal detector: " + (err as Error).message);
+      alert("Gagal menyimpan catatan CPP: " + (err as Error).message);
     }
+  };
+
+  const handleDeleteCleaning = async (log: MetalCleaningItem) => {
+    if (!confirm(`Hapus catatan CPP ${log.documentNo}?`)) return;
+    try {
+      await qcApi.deleteMetalCleaningLog(log.id);
+      fetchData();
+    } catch (err) {
+      alert("Gagal menghapus catatan CPP: " + (err as Error).message);
+    }
+  };
+
+  const handlePrintCPP = () => {
+    const keys: CPPSheetKey[] = cppSheet === "all" ? ["MD GC", "X-Ray", "MD"] : [cppSheet];
+    const groups = keys
+      .map((key) => ({ key, rows: filteredCleaningLogs.filter((l) => cppSheetKey(l) === key) }))
+      .filter((g) => g.rows.length > 0 || cppSheet !== "all");
+    printCPPForm(groups.length ? groups : [{ key: "MD", rows: [] }], month);
+  };
+
+  const cppStatusBadge = (status: string) => {
+    const map: Record<string, { label: string; cls: string }> = {
+      passed: { label: "Bersih / OK", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400" },
+      finding: { label: "Ada Temuan", cls: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400" },
+      needs_cleaning: { label: "Perlu Dibersihkan", cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" },
+      maintenance: { label: "Perlu Perbaikan", cls: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400" },
+    };
+    const s = map[status] || { label: status, cls: "bg-muted text-muted-foreground" };
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${s.cls}`}>
+        {status === "passed" ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+        {s.label}
+      </span>
+    );
   };
 
   const handleSaveVerif = async () => {
@@ -130,14 +343,20 @@ export default function QCMetalDetectorPage() {
     <div className="space-y-6">
       <PageHeader
         title="Metal Detector CCP Control"
-        description="Pembersihan berkala (CPP) & verifikasi rutin test piece sensor (VMD) untuk Critical Control Point keamanan pangan"
+        description="Catatan pemakaian & pembersihan alat (PRO-007-CPP) & verifikasi rutin test piece sensor (VMD) untuk Critical Control Point keamanan pangan"
       >
         <div className="flex items-center gap-2">
+          {activeTab === "cpp" && (
+            <Button variant="outline" size="sm" onClick={handlePrintCPP} className="flex items-center gap-1.5">
+              <Printer className="h-4 w-4" />
+              Cetak Form
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
             onClick={() => {
-              if (activeTab === "cpp") exportCPPExcel(cleaningLogs);
+              if (activeTab === "cpp") exportCPPExcel(filteredCleaningLogs, month);
               else exportVMDExcel(verifLogs);
             }}
             className="flex items-center gap-1.5"
@@ -148,13 +367,13 @@ export default function QCMetalDetectorPage() {
           <Button
             size="sm"
             onClick={() => {
-              if (activeTab === "cpp") setIsCleaningOpen(true);
+              if (activeTab === "cpp") openCreateCleaning();
               else setIsVerifOpen(true);
             }}
             className="flex items-center gap-1.5 bg-primary"
           >
             <Plus className="h-4 w-4" />
-            Catat {activeTab === "cpp" ? "Pembersihan" : "Verifikasi CCP"} Baru
+            Catat {activeTab === "cpp" ? "Pemakaian & Pembersihan" : "Verifikasi CCP"} Baru
           </Button>
         </div>
       </PageHeader>
@@ -184,9 +403,30 @@ export default function QCMetalDetectorPage() {
               }`}
             >
               <Sparkles className="h-4 w-4 text-cyan-400" />
-              CPP: Pembersihan & Pemakaian
+              CPP: Pemakaian & Pembersihan (PRO-007)
             </button>
           </div>
+
+          {/* Sub-toggle for CPP sheet (Alat + Lokasi) */}
+          {activeTab === "cpp" && (
+            <div className="flex items-center gap-1 bg-muted p-1 rounded-lg border border-border">
+              {([{ key: "all", label: "Semua" }, ...CPP_SHEETS.map((s) => ({ key: s.key, label: s.key }))] as {
+                key: "all" | CPPSheetKey;
+                label: string;
+              }[]).map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => setCppSheet(opt.key)}
+                  title={CPP_SHEETS.find((s) => s.key === opt.key)?.label || "Semua alat & lokasi"}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
+                    cppSheet === opt.key ? "bg-cyan-600 text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Sub-toggle for VMD product type */}
           {activeTab === "vmd" && (
@@ -356,56 +596,93 @@ export default function QCMetalDetectorPage() {
               <table className="w-full text-xs text-left">
                 <thead className="bg-muted/60 text-muted-foreground font-semibold border-b border-border">
                   <tr>
-                    <th className="py-2.5 px-3">No. Dokumen</th>
-                    <th className="py-2.5 px-3">Tanggal</th>
-                    <th className="py-2.5 px-3">Mesin & Lokasi</th>
-                    <th className="py-2.5 px-3">Tipe Pembersihan</th>
-                    <th className="py-2.5 px-3">Sensor & Belt</th>
-                    <th className="py-2.5 px-3">Reject Bin</th>
-                    <th className="py-2.5 px-3">Jam Operasional</th>
-                    <th className="py-2.5 px-3">Operator</th>
-                    <th className="py-2.5 px-3 text-center">Status</th>
+                    <th rowSpan={2} className="py-2 px-2">No. Dokumen</th>
+                    <th rowSpan={2} className="py-2 px-2">Tanggal</th>
+                    <th rowSpan={2} className="py-2 px-2">Alat / Lokasi</th>
+                    <th rowSpan={2} className="py-2 px-2">Nama Produk</th>
+                    <th rowSpan={2} className="py-2 px-2">No. Batch</th>
+                    <th rowSpan={2} className="py-2 px-2">Customer</th>
+                    <th rowSpan={2} className="py-2 px-2 text-center">Jumlah</th>
+                    <th colSpan={4} className="py-1 px-2 text-center border-l border-border">Pemakaian</th>
+                    <th className="py-1 px-2 text-center border-l border-border">Pembersihan</th>
+                    <th rowSpan={2} className="py-2 px-2 border-l border-border">PIC</th>
+                    <th rowSpan={2} className="py-2 px-2 text-center">Status</th>
+                    <th rowSpan={2} className="py-2 px-2 text-center">Aksi</th>
+                  </tr>
+                  <tr>
+                    <th className="py-1 px-2 text-center border-l border-border">Jam (WIB)</th>
+                    <th className="py-1 px-2">Temuan</th>
+                    <th className="py-1 px-2">Hasil Analisa</th>
+                    <th className="py-1 px-2">Tindakan Perbaikan</th>
+                    <th className="py-1 px-2 text-center border-l border-border">Jam (WIB)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {isLoading ? (
                     <tr>
-                      <td colSpan={9} className="text-center py-8 text-muted-foreground">
-                        Memuat catatan pembersihan metal detector...
+                      <td colSpan={15} className="text-center py-8 text-muted-foreground">
+                        Memuat catatan pemakaian & pembersihan alat...
                       </td>
                     </tr>
-                  ) : cleaningLogs.length === 0 ? (
+                  ) : filteredCleaningLogs.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="text-center py-8 text-muted-foreground">
-                        Belum ada catatan pembersihan untuk periode ini.
+                      <td colSpan={15} className="text-center py-8 text-muted-foreground">
+                        Belum ada catatan CPP untuk periode / filter ini.
                       </td>
                     </tr>
                   ) : (
-                    cleaningLogs.map((log) => (
-                      <tr key={log.id} className="hover:bg-muted/30">
-                        <td className="py-2.5 px-3 font-mono font-medium">{log.documentNo}</td>
-                        <td className="py-2.5 px-3">{log.checkDate}</td>
-                        <td className="py-2.5 px-3 font-medium">
-                          {log.machineNo} <span className="text-muted-foreground">({log.location})</span>
-                        </td>
-                        <td className="py-2.5 px-3 capitalize">{log.cleaningType.replace("_", " ")}</td>
-                        <td className="py-2.5 px-3">
-                          Sensor: <span className="font-semibold">{log.sensorCleanliness}</span> | Belt:{" "}
-                          <span className="font-semibold">{log.beltCleanliness}</span>
-                        </td>
-                        <td className="py-2.5 px-3">{log.rejectBinCleanliness}</td>
-                        <td className="py-2.5 px-3">
-                          {log.startTime} - {log.endTime}
-                        </td>
-                        <td className="py-2.5 px-3">{log.operatorName}</td>
-                        <td className="py-2.5 px-3 text-center">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">
-                            <CheckCircle2 className="h-3 w-3" />
-                            {log.overallStatus === "passed" ? "Bersih / OK" : log.overallStatus}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
+                    filteredCleaningLogs.map((log) => {
+                      const key = cppSheetKey(log);
+                      const hasIssue = log.overallStatus !== "passed";
+                      return (
+                        <tr key={log.id} className={`hover:bg-muted/30 ${hasIssue ? "bg-red-50/40 dark:bg-red-950/20" : ""}`}>
+                          <td className="py-2 px-2 font-mono font-medium">{log.documentNo}</td>
+                          <td className="py-2 px-2 whitespace-nowrap">{fmtDate(log.checkDate)}</td>
+                          <td className="py-2 px-2">
+                            <span className="font-medium">{key === "X-Ray" ? "X-Ray" : "Metal Detector"}</span>
+                            <span className="block text-muted-foreground text-[10px]">{cppLocationLabel(key)}</span>
+                          </td>
+                          <td className="py-2 px-2">{log.productName || "-"}</td>
+                          <td className="py-2 px-2 font-mono">{log.batchNo || "-"}</td>
+                          <td className="py-2 px-2">{log.customerName || "-"}</td>
+                          <td className="py-2 px-2 text-center">{log.quantity || "-"}</td>
+                          <td className="py-2 px-2 text-center whitespace-nowrap border-l border-border">
+                            {log.startTime} - {log.endTime}
+                          </td>
+                          <td className="py-2 px-2 max-w-[160px]">{log.finding || "-"}</td>
+                          <td className="py-2 px-2 max-w-[160px]">{log.analysisResult || "-"}</td>
+                          <td className="py-2 px-2 max-w-[160px]">{log.correctiveAction || "-"}</td>
+                          <td className="py-2 px-2 text-center whitespace-nowrap border-l border-border">
+                            {log.cleaningStartTime || log.cleaningEndTime
+                              ? `${log.cleaningStartTime || "?"} - ${log.cleaningEndTime || "?"}`
+                              : "-"}
+                          </td>
+                          <td className="py-2 px-2 border-l border-border">
+                            {log.operatorName}
+                            {log.qcInspectorName && (
+                              <span className="block text-muted-foreground text-[10px]">QA: {log.qcInspectorName}</span>
+                            )}
+                          </td>
+                          <td className="py-2 px-2 text-center">{cppStatusBadge(log.overallStatus)}</td>
+                          <td className="py-2 px-2 text-center whitespace-nowrap">
+                            <button
+                              onClick={() => openEditCleaning(log)}
+                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                              title="Edit"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCleaning(log)}
+                              className="p-1 rounded hover:bg-red-100 text-muted-foreground hover:text-red-600"
+                              title="Hapus"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -589,17 +866,58 @@ export default function QCMetalDetectorPage() {
 
       {/* Modal Dialog: CPP Pembersihan */}
       <Dialog open={isCleaningOpen} onOpenChange={setIsCleaningOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <Sparkles className="h-5 w-5 text-cyan-500" />
-              Catat Pembersihan & Pemakaian Metal Detector (CPP)
+              {editingCleaningId ? "Edit" : "Catat"} Pemakaian & Pembersihan Alat (Form PRO-007-CPP Rev. 01)
             </DialogTitle>
           </DialogHeader>
 
-          <div className="grid grid-cols-2 gap-3 text-xs py-2">
+          <div className="grid grid-cols-4 gap-3 text-xs py-2">
+            {/* Header form */}
+            <div className="col-span-4">
+              <span className="font-bold text-muted-foreground uppercase text-[10px]">Identitas Alat</span>
+            </div>
             <div>
-              <label className="font-semibold block mb-1">Tanggal</label>
+              <label className="font-semibold block mb-1">Nama Alat</label>
+              <select
+                value={cleaningForm.equipmentName}
+                onChange={(e) => {
+                  const equipmentName = e.target.value;
+                  setCleaningForm({
+                    ...cleaningForm,
+                    equipmentName,
+                    location: equipmentName === "X-Ray" ? "R. Packing" : cleaningForm.location,
+                  });
+                }}
+                className="w-full text-xs h-8 border rounded-md px-2 bg-background"
+              >
+                <option value="Metal Detector">Metal Detector</option>
+                <option value="X-Ray">X-Ray</option>
+              </select>
+            </div>
+            <div>
+              <label className="font-semibold block mb-1">Lokasi</label>
+              <select
+                value={cleaningForm.location}
+                onChange={(e) => setCleaningForm({ ...cleaningForm, location: e.target.value })}
+                className="w-full text-xs h-8 border rounded-md px-2 bg-background"
+              >
+                <option value="R. Packing">R. Packing</option>
+                {cleaningForm.equipmentName !== "X-Ray" && <option value="R. Gula Cair">R. Gula Cair</option>}
+              </select>
+            </div>
+            <div>
+              <label className="font-semibold block mb-1">No Mesin</label>
+              <Input
+                value={cleaningForm.machineNo || ""}
+                onChange={(e) => setCleaningForm({ ...cleaningForm, machineNo: e.target.value })}
+                className="text-xs h-8"
+              />
+            </div>
+            <div>
+              <label className="font-semibold block mb-1">Tanggal *</label>
               <Input
                 type="date"
                 value={cleaningForm.checkDate}
@@ -607,26 +925,114 @@ export default function QCMetalDetectorPage() {
                 className="text-xs h-8"
               />
             </div>
+
+            {/* Produk */}
+            <div className="col-span-4 border-t pt-2 mt-1">
+              <span className="font-bold text-muted-foreground uppercase text-[10px]">Produk</span>
+            </div>
             <div>
-              <label className="font-semibold block mb-1">No Mesin</label>
+              <label className="font-semibold block mb-1">Nama Produk</label>
               <Input
-                value={cleaningForm.machineNo || "MD-01"}
-                onChange={(e) => setCleaningForm({ ...cleaningForm, machineNo: e.target.value })}
+                value={cleaningForm.productName || ""}
+                onChange={(e) => setCleaningForm({ ...cleaningForm, productName: e.target.value })}
+                className="text-xs h-8"
+              />
+            </div>
+            <div>
+              <label className="font-semibold block mb-1">No. Batch</label>
+              <Input
+                value={cleaningForm.batchNo || ""}
+                onChange={(e) => setCleaningForm({ ...cleaningForm, batchNo: e.target.value })}
+                className="text-xs h-8"
+              />
+            </div>
+            <div>
+              <label className="font-semibold block mb-1">Customer</label>
+              <Input
+                value={cleaningForm.customerName || ""}
+                onChange={(e) => setCleaningForm({ ...cleaningForm, customerName: e.target.value })}
+                className="text-xs h-8"
+              />
+            </div>
+            <div>
+              <label className="font-semibold block mb-1">Jumlah</label>
+              <Input
+                value={cleaningForm.quantity || ""}
+                onChange={(e) => setCleaningForm({ ...cleaningForm, quantity: e.target.value })}
+                placeholder="mis. 40 sak"
                 className="text-xs h-8"
               />
             </div>
 
+            {/* Pemakaian */}
+            <div className="col-span-4 border-t pt-2 mt-1">
+              <span className="font-bold text-amber-700 dark:text-amber-400 uppercase text-[10px]">Pemakaian</span>
+            </div>
             <div>
-              <label className="font-semibold block mb-1">Tipe Pembersihan</label>
-              <select
-                value={cleaningForm.cleaningType}
-                onChange={(e) => setCleaningForm({ ...cleaningForm, cleaningType: e.target.value })}
-                className="w-full text-xs h-8 border rounded-md px-2 bg-background"
-              >
-                <option value="pre_operational">Sebelum Operasional</option>
-                <option value="batch_change">Ganti Batch Produk</option>
-                <option value="post_operational">Setelah Operasional</option>
-              </select>
+              <label className="font-semibold block mb-1">Jam Mulai (WIB) *</label>
+              <Input
+                type="time"
+                value={cleaningForm.startTime}
+                onChange={(e) => setCleaningForm({ ...cleaningForm, startTime: e.target.value })}
+                className="text-xs h-8"
+              />
+            </div>
+            <div>
+              <label className="font-semibold block mb-1">Jam Selesai (WIB) *</label>
+              <Input
+                type="time"
+                value={cleaningForm.endTime}
+                onChange={(e) => setCleaningForm({ ...cleaningForm, endTime: e.target.value })}
+                className="text-xs h-8"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="font-semibold block mb-1">Temuan</label>
+              <Input
+                value={cleaningForm.finding || ""}
+                onChange={(e) => setCleaningForm({ ...cleaningForm, finding: e.target.value })}
+                placeholder="Kosongkan / '-' bila tidak ada temuan"
+                className="text-xs h-8"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="font-semibold block mb-1">Hasil Analisa</label>
+              <Input
+                value={cleaningForm.analysisResult || ""}
+                onChange={(e) => setCleaningForm({ ...cleaningForm, analysisResult: e.target.value })}
+                className="text-xs h-8"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="font-semibold block mb-1">Tindakan Perbaikan</label>
+              <Input
+                value={cleaningForm.correctiveAction || ""}
+                onChange={(e) => setCleaningForm({ ...cleaningForm, correctiveAction: e.target.value })}
+                className="text-xs h-8"
+              />
+            </div>
+
+            {/* Pembersihan */}
+            <div className="col-span-4 border-t pt-2 mt-1">
+              <span className="font-bold text-cyan-700 dark:text-cyan-400 uppercase text-[10px]">Pembersihan</span>
+            </div>
+            <div>
+              <label className="font-semibold block mb-1">Jam Mulai (WIB)</label>
+              <Input
+                type="time"
+                value={cleaningForm.cleaningStartTime || ""}
+                onChange={(e) => setCleaningForm({ ...cleaningForm, cleaningStartTime: e.target.value })}
+                className="text-xs h-8"
+              />
+            </div>
+            <div>
+              <label className="font-semibold block mb-1">Jam Selesai (WIB)</label>
+              <Input
+                type="time"
+                value={cleaningForm.cleaningEndTime || ""}
+                onChange={(e) => setCleaningForm({ ...cleaningForm, cleaningEndTime: e.target.value })}
+                className="text-xs h-8"
+              />
             </div>
             <div>
               <label className="font-semibold block mb-1">Kebersihan Sensor</label>
@@ -639,28 +1045,25 @@ export default function QCMetalDetectorPage() {
                 <option value="Perlu Dibersihkan">Perlu Dibersihkan</option>
               </select>
             </div>
-
             <div>
-              <label className="font-semibold block mb-1">Jam Mulai</label>
-              <Input
-                type="time"
-                value={cleaningForm.startTime}
-                onChange={(e) => setCleaningForm({ ...cleaningForm, startTime: e.target.value })}
-                className="text-xs h-8"
-              />
-            </div>
-            <div>
-              <label className="font-semibold block mb-1">Jam Selesai</label>
-              <Input
-                type="time"
-                value={cleaningForm.endTime}
-                onChange={(e) => setCleaningForm({ ...cleaningForm, endTime: e.target.value })}
-                className="text-xs h-8"
-              />
+              <label className="font-semibold block mb-1">Kondisi Fisik</label>
+              <select
+                value={cleaningForm.physicalCondition}
+                onChange={(e) => setCleaningForm({ ...cleaningForm, physicalCondition: e.target.value })}
+                className="w-full text-xs h-8 border rounded-md px-2 bg-background"
+              >
+                <option value="Normal">Normal</option>
+                <option value="Cacat">Cacat</option>
+                <option value="Kabel Terbuka">Kabel Terbuka</option>
+              </select>
             </div>
 
+            {/* PIC & QA */}
+            <div className="col-span-4 border-t pt-2 mt-1">
+              <span className="font-bold text-muted-foreground uppercase text-[10px]">PIC & Diketahui Oleh QA</span>
+            </div>
             <div>
-              <label className="font-semibold block mb-1">Operator Pelaksana</label>
+              <label className="font-semibold block mb-1">PIC *</label>
               <Input
                 value={cleaningForm.operatorName}
                 onChange={(e) => setCleaningForm({ ...cleaningForm, operatorName: e.target.value })}
@@ -668,10 +1071,27 @@ export default function QCMetalDetectorPage() {
               />
             </div>
             <div>
-              <label className="font-semibold block mb-1">Inspector QC</label>
+              <label className="font-semibold block mb-1">QA</label>
               <Input
                 value={cleaningForm.qcInspectorName || ""}
                 onChange={(e) => setCleaningForm({ ...cleaningForm, qcInspectorName: e.target.value })}
+                className="text-xs h-8"
+              />
+            </div>
+            <div>
+              <label className="font-semibold block mb-1">Tgl. Diketahui QA</label>
+              <Input
+                type="date"
+                value={cleaningForm.qaVerifiedDate || ""}
+                onChange={(e) => setCleaningForm({ ...cleaningForm, qaVerifiedDate: e.target.value })}
+                className="text-xs h-8"
+              />
+            </div>
+            <div>
+              <label className="font-semibold block mb-1">Catatan</label>
+              <Input
+                value={cleaningForm.notes || ""}
+                onChange={(e) => setCleaningForm({ ...cleaningForm, notes: e.target.value })}
                 className="text-xs h-8"
               />
             </div>
@@ -682,7 +1102,7 @@ export default function QCMetalDetectorPage() {
               Batal
             </Button>
             <Button size="sm" onClick={handleSaveCleaning} className="bg-primary">
-              Simpan Data CPP
+              {editingCleaningId ? "Simpan Perubahan" : "Simpan Data CPP"}
             </Button>
           </DialogFooter>
         </DialogContent>

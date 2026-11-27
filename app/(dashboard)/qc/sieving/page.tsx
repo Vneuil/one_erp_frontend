@@ -30,7 +30,7 @@ import {
   MeshBoltMonitoringItem,
   CreateMeshBoltInput,
 } from "@/lib/api/qc";
-import { exportMNAExcel, exportCMTExcel, exportMNMExcel } from "@/lib/utils/export-qc-excel";
+import { exportMNAExcel, exportCMTExcel, exportMNMExcel, exportMasterQC011Excel } from "@/lib/utils/export-qc-excel";
 
 export default function QCSievingPage() {
   const [activeTab, setActiveTab] = React.useState<"mna" | "cmt" | "mnm">("mna");
@@ -95,25 +95,28 @@ export default function QCSievingPage() {
   });
 
   const [mnmForm, setMnmForm] = React.useState<CreateMeshBoltInput>({
+    documentCode: "QC-011-MNM. 01",
+    formType: "MNM",
+    stageCategory: "mentah",
     machineNo: "Mesin Ayak 01",
     checkDate: new Date().toISOString().slice(0, 10),
     room: "Ayak Mentah",
     meshSize: "Mesh 18",
-    picResponsible: "Mandor Ayak",
+    picResponsible: "Azis",
     initialBoltCount: 16,
     initialIsComplete: true,
     initialIsTight: true,
     initialCondition: "SS304 Utuh & Bebas Karat",
     initialFindings: "",
     initialAction: "",
-    initialPicName: "Operator Ayak",
+    initialPicName: "Azis",
     initialQcName: "Staff QC",
     finalBoltCount: 16,
     finalIsComplete: true,
     finalIsTight: true,
     finalFindings: "",
     finalAction: "",
-    finalPicName: "Operator Ayak",
+    finalPicName: "Azis",
     finalQcName: "Staff QC",
     qaVerifiedBy: "Supervisor QA",
     notes: "",
@@ -141,7 +144,8 @@ export default function QCSievingPage() {
         const res = await qcApi.listMeshBoltLogs({
           month,
           machineNo: machineNo || undefined,
-          room: stage === "matang" ? "Ayak Matang" : "Ayak Mentah",
+          formType: "MNM",
+          stageCategory: stage,
         });
         setMnmList(res.data || []);
       }
@@ -213,12 +217,22 @@ export default function QCSievingPage() {
             onClick={() => {
               if (activeTab === "mna") exportMNAExcel(mnaList);
               else if (activeTab === "cmt") exportCMTExcel(cmtList);
-              else if (activeTab === "mnm") exportMNMExcel(mnmList);
+              else if (activeTab === "mnm") exportMNMExcel(mnmList, stage);
             }}
             className="flex items-center gap-1.5"
           >
             <Download className="h-4 w-4 text-emerald-600" />
-            Export Excel
+            Export {activeTab.toUpperCase()}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportMasterQC011Excel()}
+            className="flex items-center gap-1.5 border-emerald-500 text-emerald-700 hover:bg-emerald-50"
+            title="Download Master Workbook 9 Sheet (MNJ, MNG, MNP, MNB, MNM Mentah/Matang, MMV, MBB, MPB)"
+          >
+            <Download className="h-4 w-4" />
+            Export Master QC-011 (9 Sheet)
           </Button>
           <Button
             size="sm"
@@ -245,7 +259,14 @@ export default function QCSievingPage() {
                 setStage("mentah");
                 setMnaForm((prev) => ({ ...prev, category: "Mentah" }));
                 setCmtForm((prev) => ({ ...prev, room: "Ayak Mentah" }));
-                setMnmForm((prev) => ({ ...prev, room: "Ayak Mentah" }));
+                setMnmForm((prev) => ({
+                  ...prev,
+                  room: "Ayak Mentah",
+                  stageCategory: "mentah",
+                  picResponsible: "Azis",
+                  initialPicName: "Azis",
+                  finalPicName: "Azis",
+                }));
               }}
               className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
                 stage === "mentah"
@@ -253,14 +274,21 @@ export default function QCSievingPage() {
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              🌱 Ayak Mentah
+              🌱 Ayak Mentah (PIC: Azis)
             </button>
             <button
               onClick={() => {
                 setStage("matang");
                 setMnaForm((prev) => ({ ...prev, category: "Matang" }));
                 setCmtForm((prev) => ({ ...prev, room: "Ayak Matang" }));
-                setMnmForm((prev) => ({ ...prev, room: "Ayak Matang" }));
+                setMnmForm((prev) => ({
+                  ...prev,
+                  room: "Ayak Matang",
+                  stageCategory: "matang",
+                  picResponsible: "Adi",
+                  initialPicName: "Adi",
+                  finalPicName: "Adi",
+                }));
               }}
               className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
                 stage === "matang"
@@ -268,7 +296,7 @@ export default function QCSievingPage() {
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              🔥 Ayak Matang
+              🔥 Ayak Matang (PIC: Adi)
             </button>
           </div>
 
@@ -844,7 +872,9 @@ export default function QCSievingPage() {
       <Dialog open={isMnmOpen} onOpenChange={setIsMnmOpen}>
         <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Form QC-010-MNM.01: Monitoring Mur & Baut Mesh Ayakan</DialogTitle>
+            <DialogTitle>
+              Form QC-011-MNM. 01: Monitoring Mur & Baut Mesh Ayakan ({stage === "matang" ? "Matang" : "Mentah"})
+            </DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 text-xs">
             <div>

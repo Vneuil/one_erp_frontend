@@ -156,7 +156,7 @@ export function Step8QCFinished({
         <Card>
           <CardHeader className="p-4 border-b border-border flex flex-row items-center justify-between">
             <CardTitle className="text-xs font-bold uppercase text-foreground">
-              Form QC-018-PLK (Label Kemasan)
+              Form QC-016-PLK (Label Kemasan)
             </CardTitle>
             <Badge variant="success" className="text-xs">Label Compliant</Badge>
           </CardHeader>

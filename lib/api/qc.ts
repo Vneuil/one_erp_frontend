@@ -310,8 +310,8 @@ export const qcApi = {
     return apiClient<{ id: string }>(`/qc/armada/${id}`, { method: "DELETE" });
   },
 
-  // Raw Material Incoming Check (PBD - QC-001)
-  listIncomingChecks: async (params?: { date?: string; lbmNo?: string }): Promise<ApiResponse<IncomingCheckItem[]>> => {
+  // Raw Material / Goods Incoming Check (PBD - QC-002-PBD Rev. 05)
+  listIncomingChecks: async (params?: { month?: string; date?: string; lbmNo?: string }): Promise<ApiResponse<IncomingCheckItem[]>> => {
     return apiClient<IncomingCheckItem[]>("/qc/incoming", { params });
   },
   getIncomingCheck: async (id: string): Promise<ApiResponse<IncomingCheckItem>> => {
@@ -361,8 +361,8 @@ export const qcApi = {
     return apiClient<{ id: string }>(`/qc/sieving/cmt/${id}`, { method: "DELETE" });
   },
 
-  // ─── Mesh Bolt Monitoring (MNM — Form QC-010-MNM.01) ───────────────────────
-  listMeshBoltLogs: async (params?: { month?: string; room?: string; machineNo?: string }): Promise<ApiResponse<MeshBoltMonitoringItem[]>> => {
+  // ─── Mesh Bolt Monitoring (MNM / MNB / MBB — Form QC-011) ─────────────────
+  listMeshBoltLogs: async (params?: { month?: string; room?: string; machineNo?: string; formType?: string; stageCategory?: string }): Promise<ApiResponse<MeshBoltMonitoringItem[]>> => {
     return apiClient<MeshBoltMonitoringItem[]>("/qc/sieving/mnm", { params });
   },
   getMeshBoltLog: async (id: string): Promise<ApiResponse<MeshBoltMonitoringItem>> => {
@@ -376,6 +376,40 @@ export const qcApi = {
   },
   deleteMeshBoltLog: async (id: string): Promise<ApiResponse<{ id: string }>> => {
     return apiClient<{ id: string }>(`/qc/sieving/mnm/${id}`, { method: "DELETE" });
+  },
+
+  // ─── Filter Mesh Monitoring (MNP - Gula Cair & MMV - VCO — Form QC-011-MNP / MMV) ─
+  listFilterMeshLogs: async (params?: { month?: string; category?: string; location?: string; formType?: string }): Promise<ApiResponse<FilterMeshMonitoringItem[]>> => {
+    return apiClient<FilterMeshMonitoringItem[]>("/qc/filter-mesh", { params });
+  },
+  getFilterMeshLog: async (id: string): Promise<ApiResponse<FilterMeshMonitoringItem>> => {
+    return apiClient<FilterMeshMonitoringItem>(`/qc/filter-mesh/${id}`);
+  },
+  createFilterMeshLog: async (input: CreateFilterMeshInput): Promise<ApiResponse<FilterMeshMonitoringItem>> => {
+    return apiClient<FilterMeshMonitoringItem>("/qc/filter-mesh", { method: "POST", body: JSON.stringify(input) });
+  },
+  updateFilterMeshLog: async (id: string, input: UpdateFilterMeshInput): Promise<ApiResponse<FilterMeshMonitoringItem>> => {
+    return apiClient<FilterMeshMonitoringItem>(`/qc/filter-mesh/${id}`, { method: "PUT", body: JSON.stringify(input) });
+  },
+  deleteFilterMeshLog: async (id: string): Promise<ApiResponse<{ id: string }>> => {
+    return apiClient<{ id: string }>(`/qc/filter-mesh/${id}`, { method: "DELETE" });
+  },
+
+  // ─── Brontol Blade Monitoring (MPB — Form QC-011-MPB.01) ───────────────────
+  listBrontolBladeLogs: async (params?: { month?: string; productCode?: string }): Promise<ApiResponse<BrontolBladeMonitoringItem[]>> => {
+    return apiClient<BrontolBladeMonitoringItem[]>("/qc/brontol/mpb", { params });
+  },
+  getBrontolBladeLog: async (id: string): Promise<ApiResponse<BrontolBladeMonitoringItem>> => {
+    return apiClient<BrontolBladeMonitoringItem>(`/qc/brontol/mpb/${id}`);
+  },
+  createBrontolBladeLog: async (input: CreateBrontolBladeInput): Promise<ApiResponse<BrontolBladeMonitoringItem>> => {
+    return apiClient<BrontolBladeMonitoringItem>("/qc/brontol/mpb", { method: "POST", body: JSON.stringify(input) });
+  },
+  updateBrontolBladeLog: async (id: string, input: UpdateBrontolBladeInput): Promise<ApiResponse<BrontolBladeMonitoringItem>> => {
+    return apiClient<BrontolBladeMonitoringItem>(`/qc/brontol/mpb/${id}`, { method: "PUT", body: JSON.stringify(input) });
+  },
+  deleteBrontolBladeLog: async (id: string): Promise<ApiResponse<{ id: string }>> => {
+    return apiClient<{ id: string }>(`/qc/brontol/mpb/${id}`, { method: "DELETE" });
   },
 
   // ─── Oven Monitoring (MNO — Form QC-012-MNO.05) ────────────────────────────
@@ -429,7 +463,7 @@ export const qcApi = {
     return apiClient<{ id: string }>(`/qc/packing/mng/${id}`, { method: "DELETE" });
   },
 
-  // ─── Metal Detector Cleaning (CPP — Form CPP) ───────────────────────────────
+  // ─── Pemakaian & Pembersihan Alat (CPP — Form PRO-007-CPP Rev. 01) ─────────
   listMetalCleaningLogs: async (params?: { month?: string; machineNo?: string; location?: string }): Promise<ApiResponse<MetalCleaningItem[]>> => {
     return apiClient<MetalCleaningItem[]>("/qc/metal-detector/cpp", { params });
   },
@@ -480,7 +514,7 @@ export const qcApi = {
     return apiClient<{ id: string }>(`/qc/finished-goods/pjd/${id}`, { method: "DELETE" });
   },
 
-  // ─── Packaging Label Check (PLK — Form QC-018-PLK) ───────────────────────────
+  // ─── Packaging Label Check (PLK — Form QC-016-PLK. 01 Rev. 01) ─────────────
   listPackagingLabelChecks: async (params?: { month?: string; batchNo?: string; decision?: string }): Promise<ApiResponse<PackagingLabelCheckItem[]>> => {
     return apiClient<PackagingLabelCheckItem[]>("/qc/label-inspection/plk", { params });
   },
@@ -736,10 +770,15 @@ export interface UpdateArmadaCheckInput {
   notes?: string;
 }
 
-// ─── PBD (QC-001) Types ─────────────────────────────────────────────────────
+// ─── PBD (QC-002-PBD Rev. 05) Types ──────────────────────────────────────────
 
 export interface IncomingCheckItem {
   id: string;
+  documentNo: string;
+  documentCode: string;
+  revisionCode: string;
+  fairtradeStatus: "FAIRTRADE" | "NON FAIRTRADE" | string;
+  certifications: string;
   goodsReceiptId?: string;
   lbmNo?: string;
   checkDate: string; // YYYY-MM-DD
@@ -749,6 +788,8 @@ export interface IncomingCheckItem {
   deliveryNoteNo?: string;
   poNo?: string;
   productName: string;
+  itemCode?: string;
+  itemType?: string;
   batchNo?: string;
   totalBags: number;
   sampleBags: number;
@@ -756,13 +797,23 @@ export interface IncomingCheckItem {
   netWeight: number;
   acceptedWeight: number;
   rejectedWeight: number;
+  checkPackaging: boolean;
+  checkShape: boolean;
+  checkTaste: boolean;
+  checkAroma: boolean;
+  colorScore: number; // 1: light brown, 2: normal, 3: dark brown
+  moistureContent?: number;
+  brixValue?: number;
+  checkSolubility: boolean;
+  phValue?: number;
+  checkPackageLabel: boolean;
+  passRatePercent: number;
+  inspectionDecision: "LOLOS" | "DITOLAK" | string;
   sugarCondition: string;
   colorAppearance?: string;
   aromaFlavor?: string;
   foreignMatterClean: boolean;
   packagingCondition?: string;
-  moistureContent?: number;
-  brixValue?: number;
   meshSize?: string;
   recommendedAction?: string;
   overallStatus: "passed" | "conditional" | "rejected";
@@ -776,6 +827,8 @@ export interface IncomingCheckItem {
 }
 
 export interface CreateIncomingCheckInput {
+  fairtradeStatus?: string;
+  certifications?: string;
   goodsReceiptId?: string;
   lbmNo?: string;
   checkDate: string;
@@ -785,6 +838,8 @@ export interface CreateIncomingCheckInput {
   deliveryNoteNo?: string;
   poNo?: string;
   productName: string;
+  itemCode?: string;
+  itemType?: string;
   batchNo?: string;
   totalBags?: number;
   sampleBags?: number;
@@ -792,13 +847,23 @@ export interface CreateIncomingCheckInput {
   netWeight?: number;
   acceptedWeight?: number;
   rejectedWeight?: number;
-  sugarCondition: string;
+  checkPackaging?: boolean;
+  checkShape?: boolean;
+  checkTaste?: boolean;
+  checkAroma?: boolean;
+  colorScore?: number;
+  moistureContent?: number;
+  brixValue?: number;
+  checkSolubility?: boolean;
+  phValue?: number;
+  checkPackageLabel?: boolean;
+  passRatePercent?: number;
+  inspectionDecision?: string;
+  sugarCondition?: string;
   colorAppearance?: string;
   aromaFlavor?: string;
   foreignMatterClean?: boolean;
   packagingCondition?: string;
-  moistureContent?: number;
-  brixValue?: number;
   meshSize?: string;
   recommendedAction?: string;
   qcName?: string;
@@ -806,36 +871,7 @@ export interface CreateIncomingCheckInput {
   notes?: string;
 }
 
-export interface UpdateIncomingCheckInput {
-  goodsReceiptId?: string;
-  lbmNo?: string;
-  checkDate?: string;
-  checkMonth?: string;
-  supplierId?: string;
-  supplierName?: string;
-  deliveryNoteNo?: string;
-  poNo?: string;
-  productName?: string;
-  batchNo?: string;
-  totalBags?: number;
-  sampleBags?: number;
-  grossWeight?: number;
-  netWeight?: number;
-  acceptedWeight?: number;
-  rejectedWeight?: number;
-  sugarCondition?: string;
-  colorAppearance?: string;
-  aromaFlavor?: string;
-  foreignMatterClean?: boolean;
-  packagingCondition?: string;
-  moistureContent?: number;
-  brixValue?: number;
-  meshSize?: string;
-  recommendedAction?: string;
-  qcName?: string;
-  qaName?: string;
-  notes?: string;
-}
+export interface UpdateIncomingCheckInput extends Partial<CreateIncomingCheckInput> {}
 
 // ─── MNA (Sieving Monitoring Log) Interfaces ────────────────────────────────
 
@@ -1014,16 +1050,19 @@ export interface UpdateMagnetTrapInput {
   notes?: string;
 }
 
-// ─── MNM (Mesh Bolt Monitoring Log) Interfaces ──────────────────────────────
+// ─── MNM / MNB / MBB (Mesh & Equipment Bolt Monitoring Log) Interfaces ─────
 
 export interface MeshBoltMonitoringItem {
   id: string;
   documentNo: string;
+  documentCode?: string;
+  formType?: string; // MNM, MNB, MBB
+  stageCategory?: string; // mentah, matang, gula_cair, brontol
   checkMonth: string;
   checkDate: string;
   room: string;
   machineNo: string;
-  meshSize: string;
+  meshSize?: string;
   picResponsible: string;
   productionOrderId?: string;
   productionStepId?: string;
@@ -1052,11 +1091,14 @@ export interface MeshBoltMonitoringItem {
 }
 
 export interface CreateMeshBoltInput {
+  documentCode?: string;
+  formType?: string;
+  stageCategory?: string;
   checkMonth?: string;
   checkDate: string;
   room?: string;
-  machineNo: string;
-  meshSize: string;
+  machineNo?: string;
+  meshSize?: string;
   picResponsible: string;
   productionOrderId?: string;
   productionStepId?: string;
@@ -1072,6 +1114,7 @@ export interface CreateMeshBoltInput {
   finalBoltCount?: number;
   finalIsComplete?: boolean;
   finalIsTight?: boolean;
+  finalCondition?: string;
   finalFindings?: string;
   finalAction?: string;
   finalPicName: string;
@@ -1081,6 +1124,9 @@ export interface CreateMeshBoltInput {
 }
 
 export interface UpdateMeshBoltInput {
+  documentCode?: string;
+  formType?: string;
+  stageCategory?: string;
   checkMonth?: string;
   checkDate?: string;
   room?: string;
@@ -1101,6 +1147,194 @@ export interface UpdateMeshBoltInput {
   finalBoltCount?: number;
   finalIsComplete?: boolean;
   finalIsTight?: boolean;
+  finalCondition?: string;
+  finalFindings?: string;
+  finalAction?: string;
+  finalPicName?: string;
+  finalQcName?: string;
+  qaVerifiedBy?: string;
+  overallStatus?: string;
+  notes?: string;
+}
+
+// ─── MNP / MMV (Filter Mesh Monitoring Log) Interfaces ──────────────────────
+
+export interface FilterMeshMonitoringItem {
+  id: string;
+  documentNo: string;
+  documentCode: string; // QC-011-MNP, QC-011-MMV
+  formType?: string;
+  category: string; // gula_cair, vco
+  location: string; // Ruang Gula Cair, Ruang VCO
+  machineNo?: string;
+  checkMonth: string;
+  checkDate: string;
+  dayOfWeek?: string;
+  productName: string;
+  productCode?: string;
+  meshSize: string;
+  picResponsible: string;
+  initialCondition: string;
+  initialFindings?: string;
+  initialAction?: string;
+  initialPicName: string;
+  initialQcName?: string;
+  initialQcPassed?: boolean;
+  finalCondition: string;
+  finalFindings?: string;
+  finalAction?: string;
+  finalPicName: string;
+  finalQcName?: string;
+  finalQcPassed?: boolean;
+  qaVerifiedBy?: string;
+  overallStatus: "passed" | "action_required" | string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface CreateFilterMeshInput {
+  documentCode?: string;
+  formType?: string;
+  category?: string;
+  location?: string;
+  machineNo?: string;
+  checkMonth?: string;
+  checkDate: string;
+  dayOfWeek?: string;
+  productName?: string;
+  productCode?: string;
+  meshSize: string;
+  picResponsible: string;
+  initialCondition?: string;
+  initialFindings?: string;
+  initialAction?: string;
+  initialPicName: string;
+  initialQcName?: string;
+  initialQcPassed?: boolean;
+  finalCondition?: string;
+  finalFindings?: string;
+  finalAction?: string;
+  finalPicName: string;
+  finalQcName?: string;
+  finalQcPassed?: boolean;
+  qaVerifiedBy?: string;
+  overallStatus?: string;
+  notes?: string;
+}
+
+export interface UpdateFilterMeshInput {
+  documentCode?: string;
+  formType?: string;
+  category?: string;
+  location?: string;
+  machineNo?: string;
+  checkMonth?: string;
+  checkDate?: string;
+  dayOfWeek?: string;
+  productName?: string;
+  productCode?: string;
+  meshSize?: string;
+  picResponsible?: string;
+  initialCondition?: string;
+  initialFindings?: string;
+  initialAction?: string;
+  initialPicName?: string;
+  initialQcName?: string;
+  initialQcPassed?: boolean;
+  finalCondition?: string;
+  finalFindings?: string;
+  finalAction?: string;
+  finalPicName?: string;
+  finalQcName?: string;
+  finalQcPassed?: boolean;
+  qaVerifiedBy?: string;
+  overallStatus?: string;
+  notes?: string;
+}
+
+// ─── MPB (Brontol Blade Monitoring Log) Interfaces ──────────────────────────
+
+export interface BrontolBladeMonitoringItem {
+  id: string;
+  documentNo: string;
+  documentCode: string; // QC-011-MPB
+  checkMonth: string;
+  checkDate: string;
+  dayOfWeek?: string;
+  location: string;
+  machineNo?: string;
+  picResponsible: string;
+  productName: string;
+  productCode?: string;
+  initialCondition: string; // Baik, Gompal, Tumpul, Retak
+  initialBladeCondition?: string;
+  initialHasCrack?: boolean;
+  initialFindings?: string;
+  initialAction?: string;
+  initialPicName: string;
+  initialQcName?: string;
+  finalCondition: string;
+  finalBladeCondition?: string;
+  finalHasCrack?: boolean;
+  finalFindings?: string;
+  finalAction?: string;
+  finalPicName: string;
+  finalQcName?: string;
+  qaVerifiedBy?: string;
+  overallStatus: "passed" | "hazard_alert" | string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface CreateBrontolBladeInput {
+  documentCode?: string;
+  checkMonth?: string;
+  checkDate: string;
+  dayOfWeek?: string;
+  location?: string;
+  machineNo?: string;
+  picResponsible: string;
+  productName?: string;
+  productCode?: string;
+  initialCondition?: string;
+  initialBladeCondition?: string;
+  initialHasCrack?: boolean;
+  initialFindings?: string;
+  initialAction?: string;
+  initialPicName: string;
+  initialQcName?: string;
+  finalCondition?: string;
+  finalBladeCondition?: string;
+  finalHasCrack?: boolean;
+  finalFindings?: string;
+  finalAction?: string;
+  finalPicName: string;
+  finalQcName?: string;
+  qaVerifiedBy?: string;
+  overallStatus?: string;
+  notes?: string;
+}
+
+export interface UpdateBrontolBladeInput {
+  documentCode?: string;
+  checkMonth?: string;
+  checkDate?: string;
+  dayOfWeek?: string;
+  location?: string;
+  machineNo?: string;
+  picResponsible?: string;
+  productName?: string;
+  productCode?: string;
+  initialCondition?: string;
+  initialBladeCondition?: string;
+  initialHasCrack?: boolean;
+  initialFindings?: string;
+  initialAction?: string;
+  initialPicName?: string;
+  initialQcName?: string;
+  finalCondition?: string;
+  finalBladeCondition?: string;
+  finalHasCrack?: boolean;
   finalFindings?: string;
   finalAction?: string;
   finalPicName?: string;
@@ -1350,12 +1584,41 @@ export interface MetalCleaningItem {
   totalHours: number;
   operatorName: string;
   qcInspectorName?: string;
-  overallStatus: "passed" | "needs_cleaning" | "maintenance" | string;
+  overallStatus: "passed" | "needs_cleaning" | "maintenance" | "finding" | string;
   notes?: string;
   createdAt: string;
+  // Form PRO-007-CPP Revisi 01 (Catatan Pemakaian dan Pembersihan Alat)
+  documentCode?: string;
+  revisionCode?: string;
+  equipmentName?: string; // Metal Detector | X-Ray
+  productName?: string;
+  batchNo?: string;
+  customerName?: string;
+  quantity?: string;
+  finding?: string;
+  analysisResult?: string;
+  correctiveAction?: string;
+  cleaningStartTime?: string;
+  cleaningEndTime?: string;
+  qaVerifiedDate?: string;
 }
 
-export interface CreateMetalCleaningInput {
+/** Field tambahan Form PRO-007-CPP Revisi 01 */
+export interface CPPFormFields {
+  equipmentName?: string;
+  productName?: string;
+  batchNo?: string;
+  customerName?: string;
+  quantity?: string;
+  finding?: string;
+  analysisResult?: string;
+  correctiveAction?: string;
+  cleaningStartTime?: string;
+  cleaningEndTime?: string;
+  qaVerifiedDate?: string;
+}
+
+export interface CreateMetalCleaningInput extends CPPFormFields {
   checkMonth?: string;
   checkDate: string;
   machineNo?: string;
@@ -1373,7 +1636,7 @@ export interface CreateMetalCleaningInput {
   notes?: string;
 }
 
-export interface UpdateMetalCleaningInput {
+export interface UpdateMetalCleaningInput extends CPPFormFields {
   checkMonth?: string;
   checkDate?: string;
   machineNo?: string;
@@ -1580,35 +1843,52 @@ export interface UpdateFinishedGoodsInput {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PLK: Packaging Label Check Types (Form QC-018-PLK)
+// PLK: Packaging Label Check Types (Form QC-016-PLK. 01 Revisi 01)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface PackagingLabelCheckLineItem {
   id?: string;
   logId?: string;
   itemNo: number;
+  itemCheckDate?: string;
   itemName: string;
-  itemCode: string;
+  itemCode?: string;
   batchNo: string;
   buyerName?: string;
+  productionDate?: string;
+  expiredDate?: string;
+  originCountry?: string;
+  weightLabel?: string;
   packagingType?: string;
   stickerNo?: string;
+  allergenInfo?: string;
+  isProductNameMatch?: boolean;
   isBatchMatch: boolean;
+  isProductionDateMatch?: boolean;
   isExpiryMatch: boolean;
-  isCertLogoMatch: boolean;
-  isPrintQualityGood: boolean;
-  isPositionAligned: boolean;
-  inspectedQty: number;
-  passedQty: number;
-  rejectedQty: number;
+  isOriginCountryMatch?: boolean;
+  isWeightMatch?: boolean;
+  isPackagingMatch?: boolean;
+  isStickerNoMatch?: boolean;
+  isAllergenInfoMatch?: boolean;
+  isLineCheckPassed?: boolean;
+  isCertLogoMatch?: boolean;
+  isPrintQualityGood?: boolean;
+  isPositionAligned?: boolean;
+  inspectedQty?: number;
+  passedQty?: number;
+  rejectedQty?: number;
   itemDecision: "lolos" | "ditolak" | string;
   correctiveAction?: string;
+  qcPicName?: string;
   notes?: string;
 }
 
 export interface PackagingLabelCheckItem {
   id: string;
   documentNo: string;
+  documentCode?: string;
+  revisionCode?: string;
   checkDate: string;
   checkMonth: string;
   handoverReportId?: string;
@@ -1644,20 +1924,7 @@ export interface CreatePackagingLabelCheckInput {
   items: PackagingLabelCheckLineItem[];
 }
 
-export interface UpdatePackagingLabelCheckInput {
-  checkDate?: string;
-  checkMonth?: string;
-  batchNo?: string;
-  fairtradeStatus?: string;
-  certification?: string;
-  qcInspectorName?: string;
-  qcInspectorSignDate?: string;
-  qcSupervisorName?: string;
-  qcSupervisorSignDate?: string;
-  overallDecision?: string;
-  notes?: string;
-  items?: PackagingLabelCheckLineItem[];
-}
+export interface UpdatePackagingLabelCheckInput extends Partial<CreatePackagingLabelCheckInput> {}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CCO: Container Checklist Types (Form QC-008-CCO.02)

@@ -143,7 +143,7 @@ export function printSBBForm(item: RawMaterialStockItem): void {
       <td class="lbl">Klasifikasi Organik</td><td class="val"><strong>${esc(item.organicStatus)}</strong></td>
     </tr>
     <tr>
-      <td class="lbl">QC-001-PBD (Bahan Datang)</td><td class="val"><strong>${esc(QC_STATUS_LABEL[item.pbdStatus] || item.pbdStatus)}</strong></td>
+      <td class="lbl">QC-002-PBD (Barang Datang)</td><td class="val"><strong>${esc(QC_STATUS_LABEL[item.pbdStatus] || item.pbdStatus)}</strong></td>
       <td class="lbl">Halal / Kosher</td><td class="val">${esc(item.halalStatus)} / ${esc(item.kosherStatus)}</td>
     </tr>
     <tr>

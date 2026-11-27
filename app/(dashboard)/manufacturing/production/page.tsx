@@ -135,38 +135,56 @@ export default function ProductionRunPage() {
       <PageHeader title="Live Production Floor Execution" description="Catat output tiap proses, selesaikan unit yang sudah melewati seluruh rute, dan jeda atau lanjutkan order." />
 
       {/* Production & QC Flow Navigation Bar */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
-        <span className="font-semibold text-muted-foreground whitespace-nowrap">Alur Proses:</span>
-        <Link href="/manufacturing/requisitions" className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground font-medium whitespace-nowrap">
-          1. Permintaan Bahan (BPB/LBB)
-        </Link>
-        <Link href="/qc/sieving" className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground font-medium whitespace-nowrap">
-          2. Ayak Mentah/Matang (MNA/CMT/MNM)
-        </Link>
-        <Link href="/qc/oven" className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground font-medium whitespace-nowrap">
-          3. Pengeringan Oven (MNO)
-        </Link>
-        <Link href="/qc/packing" className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground font-medium whitespace-nowrap">
-          4. Ruang Packing (MNJ/MNG)
-        </Link>
-        <Link href="/qc/metal-detector" className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground font-medium whitespace-nowrap">
-          5. Metal Detector CCP (CPP/VMD)
-        </Link>
-        <Link href="/qc/finished-goods" className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground font-medium whitespace-nowrap">
-          6. Produk Jadi (PJD)
-        </Link>
-        <Link href="/manufacturing/lhp" className="px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold border border-emerald-200 whitespace-nowrap">
-          7. Hasil Produksi (LHP)
-        </Link>
-        <Link href="/inventory/lst" className="px-2.5 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold border border-blue-200 whitespace-nowrap">
-          8. Serah Terima WIP (LST)
-        </Link>
-        <Link href="/qc/label-inspection" className="px-2.5 py-1 rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold border border-indigo-200 whitespace-nowrap">
-          9. Label Kemasan (PLK)
-        </Link>
-        <Link href="/qc/container" className="px-2.5 py-1 rounded bg-purple-50 text-purple-700 hover:bg-purple-100 font-bold border border-purple-200 whitespace-nowrap">
-          10. Kontainer Ekspor (CCO)
-        </Link>
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+          <span className="font-semibold text-muted-foreground whitespace-nowrap">Alur Gula Semut:</span>
+          <Link href="/manufacturing/requisitions" className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground font-medium whitespace-nowrap">
+            1. Permintaan Bahan (BPB/LBB)
+          </Link>
+          <Link href="/qc/sieving" className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground font-medium whitespace-nowrap">
+            2. Ayak Mentah (MNA/CMT/MNM)
+          </Link>
+          <Link href="/qc/oven" className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground font-medium whitespace-nowrap">
+            3. Pengeringan Oven (MNO)
+          </Link>
+          <Link href="/qc/brontol" className="px-2.5 py-1 rounded bg-amber-50 text-amber-800 hover:bg-amber-100 font-medium border border-amber-200 whitespace-nowrap">
+            4. Mesin Brontol (MBB/MPB) & Reject
+          </Link>
+          <Link href="/qc/sieving" className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground font-medium whitespace-nowrap">
+            5. Ayak Matang (MNA/CMT/MNM)
+          </Link>
+          <Link href="/qc/packing" className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground font-medium whitespace-nowrap">
+            6. Ruang Packing (MNJ/MNG)
+          </Link>
+          <Link href="/qc/metal-detector" className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground font-medium whitespace-nowrap">
+            7. Metal Detector CCP (CPP/VMD)
+          </Link>
+          <Link href="/qc/finished-goods" className="px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground font-medium whitespace-nowrap">
+            8. Produk Jadi (PJD)
+          </Link>
+          <Link href="/manufacturing/lhp" className="px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold border border-emerald-200 whitespace-nowrap">
+            9. Hasil Produksi (LHP)
+          </Link>
+          <Link href="/inventory/lst" className="px-2.5 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold border border-blue-200 whitespace-nowrap">
+            10. Serah Terima WIP (LST)
+          </Link>
+          <Link href="/qc/label-inspection" className="px-2.5 py-1 rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold border border-indigo-200 whitespace-nowrap">
+            11. Label Kemasan (PLK)
+          </Link>
+          <Link href="/qc/container" className="px-2.5 py-1 rounded bg-purple-50 text-purple-700 hover:bg-purple-100 font-bold border border-purple-200 whitespace-nowrap">
+            12. Kontainer Ekspor (CCO)
+          </Link>
+        </div>
+
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+          <span className="font-semibold text-muted-foreground whitespace-nowrap">Alur Khusus Lainnya:</span>
+          <Link href="/qc/liquid-sugar" className="px-2.5 py-1 rounded bg-amber-50 text-amber-900 hover:bg-amber-100 font-medium border border-amber-300 whitespace-nowrap">
+            🍯 Flow Gula Cair: Saringan Mesh (MNP) & Tangki Masak (MNB)
+          </Link>
+          <Link href="/qc/vco" className="px-2.5 py-1 rounded bg-cyan-50 text-cyan-900 hover:bg-cyan-100 font-medium border border-cyan-300 whitespace-nowrap">
+            🥥 Flow VCO: Saringan Mesh Minyak Kelapa (MMV)
+          </Link>
+        </div>
       </div>
 
       {loadError && <div role="alert" className="px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">{loadError}</div>}
@@ -301,7 +319,7 @@ export default function ProductionRunPage() {
                                   <Link
                                     href="/qc/metal-detector"
                                     className="inline-flex items-center gap-1 text-[9px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-1.5 py-0.5 rounded"
-                                    title="Form CPP (Pembersihan) & VMD (Verifikasi CCP Fe/Non-Fe/SS)"
+                                    title="Form PRO-007-CPP (Pemakaian & Pembersihan) & VMD (Verifikasi CCP Fe/Non-Fe/SS)"
                                   >
                                     Metal Detector (CPP/VMD)
                                   </Link>

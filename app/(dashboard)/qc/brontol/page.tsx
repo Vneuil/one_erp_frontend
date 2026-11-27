@@ -21,6 +21,10 @@ import {
   Boxes,
   Eye,
   RefreshCw,
+  Download,
+  Wrench,
+  Scissors,
+  Nut,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -45,7 +49,12 @@ import {
   CreateBrontolReportInput,
   CreateRejectReturnInput,
   UpdateRejectReturnInput,
+  MeshBoltMonitoringItem,
+  CreateMeshBoltInput,
+  BrontolBladeMonitoringItem,
+  CreateBrontolBladeInput,
 } from "@/lib/api/qc";
+import { exportMBBExcel, exportMPBExcel, exportMasterQC011Excel } from "@/lib/utils/export-qc-excel";
 
 export default function BrontolAndReturnPage() {
   const [activeTab, setActiveTab] = React.useState<string>("brontol");
@@ -60,6 +69,8 @@ export default function BrontolAndReturnPage() {
   const [reports, setReports] = React.useState<BrontolReportItem[]>([]);
   const [returns, setReturns] = React.useState<RejectReturnItem[]>([]);
   const [stockCards, setStockCards] = React.useState<BrontolStockCardItem[]>([]);
+  const [mbbList, setMbbList] = React.useState<MeshBoltMonitoringItem[]>([]);
+  const [mpbList, setMpbList] = React.useState<BrontolBladeMonitoringItem[]>([]);
   const [stats, setStats] = React.useState<BrontolStats>({
     totalCount: 0,
     totalQuantityKg: 0,
@@ -70,6 +81,8 @@ export default function BrontolAndReturnPage() {
 
   // Modal states
   const [isCreateOpen, setIsCreateOpen] = React.useState<boolean>(false);
+  const [isMbbOpen, setIsMbbOpen] = React.useState<boolean>(false);
+  const [isMpbOpen, setIsMpbOpen] = React.useState<boolean>(false);
   const [isReturnModalOpen, setIsReturnModalOpen] = React.useState<boolean>(false);
   const [isUpdateReturnOpen, setIsUpdateReturnOpen] = React.useState<boolean>(false);
   const [isDetailOpen, setIsDetailOpen] = React.useState<boolean>(false);
@@ -93,6 +106,55 @@ export default function BrontolAndReturnPage() {
     supplierName: "",
     operatorName: "",
     qcInspectorName: "Staff QC",
+    notes: "",
+  });
+
+  const [mbbForm, setMbbForm] = React.useState<CreateMeshBoltInput>({
+    documentCode: "QC-011-MBB. 01",
+    formType: "MBB",
+    stageCategory: "brontol",
+    room: "Ruang Brontol",
+    machineNo: "Mesin Brontol 01",
+    checkDate: new Date().toISOString().slice(0, 10),
+    picResponsible: "Sajiman",
+    initialBoltCount: 12,
+    initialIsComplete: true,
+    initialIsTight: true,
+    initialCondition: "Lengkap & Kencang",
+    initialFindings: "",
+    initialAction: "",
+    initialPicName: "Sajiman",
+    initialQcName: "Staff QC",
+    finalBoltCount: 12,
+    finalIsComplete: true,
+    finalIsTight: true,
+    finalCondition: "Lengkap & Kencang",
+    finalFindings: "",
+    finalAction: "",
+    finalPicName: "Sajiman",
+    finalQcName: "Staff QC",
+    qaVerifiedBy: "Supervisor QA",
+    notes: "",
+  });
+
+  const [mpbForm, setMpbForm] = React.useState<CreateBrontolBladeInput>({
+    documentCode: "QC-011-MPB. 01",
+    machineNo: "Mesin Brontol 01",
+    checkDate: new Date().toISOString().slice(0, 10),
+    picResponsible: "Sajiman",
+    initialBladeCondition: "Tajam & Utuh",
+    initialHasCrack: false,
+    initialFindings: "",
+    initialAction: "",
+    initialPicName: "Sajiman",
+    initialQcName: "Staff QC",
+    finalBladeCondition: "Tajam & Utuh",
+    finalHasCrack: false,
+    finalFindings: "",
+    finalAction: "",
+    finalPicName: "Sajiman",
+    finalQcName: "Staff QC",
+    qaVerifiedBy: "Supervisor QA",
     notes: "",
   });
 
@@ -124,7 +186,7 @@ export default function BrontolAndReturnPage() {
   const fetchData = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      const [reportsRes, returnsRes, cardsRes, statsRes] = await Promise.all([
+      const [reportsRes, returnsRes, cardsRes, statsRes, mbbRes, mpbRes] = await Promise.all([
         qcApi.listBrontolReports({
           month: month || undefined,
           stage: stageFilter || undefined,
@@ -138,6 +200,13 @@ export default function BrontolAndReturnPage() {
         }),
         qcApi.getBrontolStockCard({ month: month || undefined }),
         qcApi.getBrontolStats(),
+        qcApi.listMeshBoltLogs({
+          month: month || undefined,
+          formType: "MBB",
+        }),
+        qcApi.listBrontolBladeLogs({
+          month: month || undefined,
+        }),
       ]);
 
       setReports(reportsRes.data || []);
@@ -146,6 +215,8 @@ export default function BrontolAndReturnPage() {
       if (statsRes.data) {
         setStats(statsRes.data);
       }
+      setMbbList(mbbRes.data || []);
+      setMpbList(mpbRes.data || []);
     } catch (err) {
       console.error("Error fetching brontol & return data:", err);
     } finally {
@@ -165,6 +236,26 @@ export default function BrontolAndReturnPage() {
       fetchData();
     } catch (err) {
       alert("Gagal mencatat laporan brontol: " + (err as Error).message);
+    }
+  };
+
+  const handleSaveMbb = async () => {
+    try {
+      await qcApi.createMeshBoltLog(mbbForm);
+      setIsMbbOpen(false);
+      fetchData();
+    } catch (err) {
+      alert("Gagal menyimpan form MBB: " + (err as Error).message);
+    }
+  };
+
+  const handleSaveMpb = async () => {
+    try {
+      await qcApi.createBrontolBladeLog(mpbForm);
+      setIsMpbOpen(false);
+      fetchData();
+    } catch (err) {
+      alert("Gagal menyimpan form MPB: " + (err as Error).message);
     }
   };
 
@@ -300,11 +391,35 @@ export default function BrontolAndReturnPage() {
       >
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="hidden sm:inline-flex">
-            Form REP-013-KSB
+            Form REP-013-KSB & QC-011
           </Badge>
           <Badge variant="default" className="bg-rose-600 hidden sm:inline-flex">
             Auto-Trigger on QC Fail
           </Badge>
+          {(activeTab === "mbb" || activeTab === "mpb") && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (activeTab === "mbb") exportMBBExcel(mbbList);
+                else if (activeTab === "mpb") exportMPBExcel(mpbList);
+              }}
+              className="flex items-center gap-1.5 text-emerald-700 border-emerald-300"
+            >
+              <Download className="h-4 w-4" />
+              Export {activeTab.toUpperCase()} Excel
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportMasterQC011Excel()}
+            className="flex items-center gap-1.5 text-emerald-700 border-emerald-500 hover:bg-emerald-50"
+            title="Download Master Workbook 9 Sheet (MNJ, MNG, MNP, MNB, MNM Mentah/Matang, MMV, MBB, MPB)"
+          >
+            <Download className="h-4 w-4" />
+            Export Master QC-011
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -315,12 +430,20 @@ export default function BrontolAndReturnPage() {
             Cetak Dokumen
           </Button>
           <Button
-            onClick={() => setIsCreateOpen(true)}
+            onClick={() => {
+              if (activeTab === "mbb") setIsMbbOpen(true);
+              else if (activeTab === "mpb") setIsMpbOpen(true);
+              else setIsCreateOpen(true);
+            }}
             size="sm"
             className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1"
           >
             <Plus className="h-4 w-4" />
-            Catat Brontol Manual
+            {activeTab === "mbb"
+              ? "Catat MBB Baru"
+              : activeTab === "mpb"
+              ? "Catat MPB Baru"
+              : "Catat Brontol Manual"}
           </Button>
         </div>
       </PageHeader>
@@ -398,18 +521,26 @@ export default function BrontolAndReturnPage() {
 
       {/* Main Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="bg-muted p-1 border">
+        <TabsList className="bg-muted p-1 border flex-wrap">
           <TabsTrigger value="brontol" className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4" />
-            Daftar Laporan Brontol ({reports.length})
+            Laporan Brontol ({reports.length})
           </TabsTrigger>
           <TabsTrigger value="returns" className="flex items-center gap-2">
             <Truck className="h-4 w-4" />
-            Laporan Retur Barang Reject ({returns.length})
+            Retur Barang ({returns.length})
           </TabsTrigger>
           <TabsTrigger value="stockcard" className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
-            Kartu Stok Brontol (REP-013-KSB)
+            Kartu Stok Brontol (REP-013)
+          </TabsTrigger>
+          <TabsTrigger value="mbb" className="flex items-center gap-2">
+            <Nut className="h-4 w-4 text-amber-600" />
+            Mur & Baut Brontol (MBB) ({mbbList.length})
+          </TabsTrigger>
+          <TabsTrigger value="mpb" className="flex items-center gap-2">
+            <Scissors className="h-4 w-4 text-rose-600" />
+            Bilah Pisau Brontol (MPB) ({mpbList.length})
           </TabsTrigger>
         </TabsList>
 
@@ -841,6 +972,176 @@ export default function BrontolAndReturnPage() {
               <div className="text-xs text-muted-foreground pt-2">
                 <p>* BM: Bahan Mentah | BO: Bahan Oven</p>
                 <p>* Saldo akhir brontol diakumulasi otomatis dari rangkaian pencatatan flow QC</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ─── TAB 4: MBB (MUR & BAUT BRONTOL) ─────────────────────────────────── */}
+        <TabsContent value="mbb" className="space-y-4">
+          <Card className="shadow-sm border">
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-muted/60 border-b text-muted-foreground font-semibold">
+                      <th className="p-3">No. Dokumen</th>
+                      <th className="p-3">Tanggal</th>
+                      <th className="p-3">Mesin Brontol</th>
+                      <th className="p-3">Pemeriksaan Awal</th>
+                      <th className="p-3">Pemeriksaan Akhir</th>
+                      <th className="p-3">Temuan & Tindakan</th>
+                      <th className="p-3">PIC (Operator)</th>
+                      <th className="p-3">QC / QA</th>
+                      <th className="p-3 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {mbbList.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="p-8 text-center text-muted-foreground">
+                          Belum ada log pemeriksaan Mur & Baut Mesin Brontol (MBB) untuk periode ini.
+                        </td>
+                      </tr>
+                    ) : (
+                      mbbList.map((item) => (
+                        <tr key={item.id} className="hover:bg-muted/30">
+                          <td className="p-3 font-mono font-medium text-primary">{item.documentNo}</td>
+                          <td className="p-3 whitespace-nowrap">{item.checkDate}</td>
+                          <td className="p-3 font-medium">{item.machineNo}</td>
+                          <td className="p-3">
+                            <div>{item.initialBoltCount} Baut Terpasang</div>
+                            <div className="text-[11px] text-muted-foreground">
+                              {item.initialIsComplete ? "Lengkap" : "Kurang"} | {item.initialIsTight ? "Kencang" : "Kendor"}
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div className={item.initialBoltCount !== item.finalBoltCount ? "text-rose-600 font-bold" : ""}>
+                              {item.finalBoltCount} Baut Terpasang
+                            </div>
+                            <div className="text-[11px] text-muted-foreground">
+                              {item.finalIsComplete ? "Lengkap" : "Kurang"} | {item.finalIsTight ? "Kencang" : "Kendor"}
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div>{item.finalFindings || "-"}</div>
+                            {item.finalAction && (
+                              <div className="text-[11px] text-muted-foreground">Aksi: {item.finalAction}</div>
+                            )}
+                          </td>
+                          <td className="p-3 font-medium text-gray-800">
+                            {item.picResponsible || item.finalPicName || "Sajiman"}
+                          </td>
+                          <td className="p-3">
+                            <div>QC: {item.finalQcName || "Staff QC"}</div>
+                            <div className="text-[11px] text-muted-foreground">QA: {item.qaVerifiedBy || "-"}</div>
+                          </td>
+                          <td className="p-3 text-center">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
+                                item.overallStatus === "passed"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : "bg-rose-100 text-rose-800"
+                              }`}
+                            >
+                              {item.overallStatus === "passed" ? (
+                                <CheckCircle2 className="h-3 w-3" />
+                              ) : (
+                                <AlertTriangle className="h-3 w-3" />
+                              )}
+                              {item.overallStatus === "passed" ? "LULUS" : "TINDAKAN"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ─── TAB 5: MPB (BILAH PISAU BRONTOL) ─────────────────────────────────── */}
+        <TabsContent value="mpb" className="space-y-4">
+          <Card className="shadow-sm border">
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-muted/60 border-b text-muted-foreground font-semibold">
+                      <th className="p-3">No. Dokumen</th>
+                      <th className="p-3">Tanggal</th>
+                      <th className="p-3">Mesin Brontol</th>
+                      <th className="p-3">Kondisi Pisau Awal</th>
+                      <th className="p-3">Kondisi Pisau Akhir</th>
+                      <th className="p-3">Temuan & Tindakan</th>
+                      <th className="p-3">PIC (Operator)</th>
+                      <th className="p-3">QC / QA</th>
+                      <th className="p-3 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {mpbList.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="p-8 text-center text-muted-foreground">
+                          Belum ada log pemeriksaan Bilah Pisau Mesin Brontol (MPB) untuk periode ini.
+                        </td>
+                      </tr>
+                    ) : (
+                      mpbList.map((item) => (
+                        <tr key={item.id} className="hover:bg-muted/30">
+                          <td className="p-3 font-mono font-medium text-primary">{item.documentNo}</td>
+                          <td className="p-3 whitespace-nowrap">{item.checkDate}</td>
+                          <td className="p-3 font-medium">{item.machineNo}</td>
+                          <td className="p-3">
+                            <div>{item.initialBladeCondition}</div>
+                            <div className="text-[11px] text-muted-foreground">
+                              {item.initialHasCrack ? "⚠️ Ada Retak/Gompal" : "Bebas Cacat"}
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div className={item.finalHasCrack ? "text-rose-600 font-bold" : ""}>
+                              {item.finalBladeCondition}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground">
+                              {item.finalHasCrack ? "⚠️ Ada Retak/Gompal" : "Bebas Cacat"}
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div>{item.finalFindings || "-"}</div>
+                            {item.finalAction && (
+                              <div className="text-[11px] text-muted-foreground">Aksi: {item.finalAction}</div>
+                            )}
+                          </td>
+                          <td className="p-3 font-medium text-gray-800">
+                            {item.picResponsible || item.finalPicName || "Sajiman"}
+                          </td>
+                          <td className="p-3">
+                            <div>QC: {item.finalQcName || "Staff QC"}</div>
+                            <div className="text-[11px] text-muted-foreground">QA: {item.qaVerifiedBy || "-"}</div>
+                          </td>
+                          <td className="p-3 text-center">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
+                                item.overallStatus === "passed"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : "bg-rose-100 text-rose-800"
+                              }`}
+                            >
+                              {item.overallStatus === "passed" ? (
+                                <CheckCircle2 className="h-3 w-3" />
+                              ) : (
+                                <AlertTriangle className="h-3 w-3" />
+                              )}
+                              {item.overallStatus === "passed" ? "LULUS" : "TINDAKAN"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
@@ -1385,6 +1686,237 @@ export default function BrontolAndReturnPage() {
               <Printer className="h-4 w-4" /> Cetak
             </Button>
             <Button onClick={() => setIsDetailOpen(false)}>Tutup</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── MODAL 4: CATAT FORM MBB (MUR & BAUT MESIN BRONTOL) ───────────── */}
+      <Dialog open={isMbbOpen} onOpenChange={setIsMbbOpen}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Nut className="h-5 w-5 text-amber-600" />
+              Form QC-011-MBB. 01: Monitoring Mur & Baut Mesin Brontol
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 text-xs">
+            <div>
+              <label className="font-semibold">Tanggal Pemeriksaan *</label>
+              <Input
+                type="date"
+                value={mbbForm.checkDate}
+                onChange={(e) => setMbbForm({ ...mbbForm, checkDate: e.target.value })}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="font-semibold">Nomor Mesin Brontol *</label>
+              <Input
+                value={mbbForm.machineNo}
+                onChange={(e) => setMbbForm({ ...mbbForm, machineNo: e.target.value })}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="font-semibold">Penanggung Jawab (PIC)</label>
+              <Input
+                value={mbbForm.picResponsible}
+                onChange={(e) =>
+                  setMbbForm({
+                    ...mbbForm,
+                    picResponsible: e.target.value,
+                    initialPicName: e.target.value,
+                    finalPicName: e.target.value,
+                  })
+                }
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="font-semibold">Verifikasi QA</label>
+              <Input
+                value={mbbForm.qaVerifiedBy}
+                onChange={(e) => setMbbForm({ ...mbbForm, qaVerifiedBy: e.target.value })}
+                className="mt-1"
+              />
+            </div>
+
+            <div className="col-span-2 border-t pt-2 font-semibold text-primary">
+              Kondisi Mur & Baut Mesin Brontol
+            </div>
+            <div>
+              <label className="font-medium">Jumlah Baut Awal</label>
+              <Input
+                type="number"
+                value={mbbForm.initialBoltCount}
+                onChange={(e) => setMbbForm({ ...mbbForm, initialBoltCount: parseInt(e.target.value) || 0 })}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="font-medium">Jumlah Baut Akhir</label>
+              <Input
+                type="number"
+                value={mbbForm.finalBoltCount}
+                onChange={(e) => setMbbForm({ ...mbbForm, finalBoltCount: parseInt(e.target.value) || 0 })}
+                className="mt-1"
+              />
+            </div>
+
+            {mbbForm.initialBoltCount !== mbbForm.finalBoltCount && (
+              <div className="col-span-2 p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-xs flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
+                <span>
+                  <strong>BAHAYA KONTAMINASI LOGAM:</strong> Jumlah baut akhir berbeda dengan awal! Produk gula yang
+                  diproses wajib ditahan dan diperiksa metal detector.
+                </span>
+              </div>
+            )}
+
+            <div className="col-span-2">
+              <label className="font-medium">Temuan / Catatan Khusus</label>
+              <Input
+                placeholder="Catatan kekencangan baut atau penggantian ring..."
+                value={mbbForm.finalFindings}
+                onChange={(e) => setMbbForm({ ...mbbForm, finalFindings: e.target.value })}
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setIsMbbOpen(false)}>
+              Batal
+            </Button>
+            <Button onClick={handleSaveMbb} className="bg-amber-600 hover:bg-amber-700">
+              Simpan Form MBB
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── MODAL 5: CATAT FORM MPB (BILAH PISAU MESIN BRONTOL) ───────────── */}
+      <Dialog open={isMpbOpen} onOpenChange={setIsMpbOpen}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Scissors className="h-5 w-5 text-rose-600" />
+              Form QC-011-MPB. 01: Monitoring Bilah Pisau Mesin Brontol
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 text-xs">
+            <div>
+              <label className="font-semibold">Tanggal Pemeriksaan *</label>
+              <Input
+                type="date"
+                value={mpbForm.checkDate}
+                onChange={(e) => setMpbForm({ ...mpbForm, checkDate: e.target.value })}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="font-semibold">Nomor Mesin Brontol *</label>
+              <Input
+                value={mpbForm.machineNo}
+                onChange={(e) => setMpbForm({ ...mpbForm, machineNo: e.target.value })}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="font-semibold">Penanggung Jawab (PIC)</label>
+              <Input
+                value={mpbForm.picResponsible}
+                onChange={(e) =>
+                  setMpbForm({
+                    ...mpbForm,
+                    picResponsible: e.target.value,
+                    initialPicName: e.target.value,
+                    finalPicName: e.target.value,
+                  })
+                }
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="font-semibold">Verifikasi QA</label>
+              <Input
+                value={mpbForm.qaVerifiedBy}
+                onChange={(e) => setMpbForm({ ...mpbForm, qaVerifiedBy: e.target.value })}
+                className="mt-1"
+              />
+            </div>
+
+            <div className="col-span-2 border-t pt-2 font-semibold text-primary">
+              Integritas Bilah Pisau Mesin Brontol
+            </div>
+            <div>
+              <label className="font-medium">Kondisi Pisau Awal</label>
+              <Input
+                value={mpbForm.initialBladeCondition}
+                onChange={(e) => setMpbForm({ ...mpbForm, initialBladeCondition: e.target.value })}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="font-medium">Kondisi Pisau Akhir</label>
+              <Input
+                value={mpbForm.finalBladeCondition}
+                onChange={(e) => setMpbForm({ ...mpbForm, finalBladeCondition: e.target.value })}
+                className="mt-1"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="initialHasCrack"
+                checked={mpbForm.initialHasCrack}
+                onChange={(e) => setMpbForm({ ...mpbForm, initialHasCrack: e.target.checked })}
+                className="rounded border-gray-300"
+              />
+              <label htmlFor="initialHasCrack" className="text-xs">
+                Ada Retak / Gompal di Awal
+              </label>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="finalHasCrack"
+                checked={mpbForm.finalHasCrack}
+                onChange={(e) => setMpbForm({ ...mpbForm, finalHasCrack: e.target.checked })}
+                className="rounded border-gray-300 text-rose-600"
+              />
+              <label htmlFor="finalHasCrack" className="text-xs font-semibold text-rose-700">
+                Ada Retak / Gompal di Akhir (Bahaya)
+              </label>
+            </div>
+
+            {mpbForm.finalHasCrack && (
+              <div className="col-span-2 p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-xs flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
+                <span>
+                  <strong>AUTO-TRIGGER BRONTOL REPORT:</strong> Bilah pisau mesin brontol terdeteksi gompal atau retak!
+                  Sistem otomatis mencatat laporan kegagalan mutu dan produk harus disaring metal detector ulang.
+                </span>
+              </div>
+            )}
+
+            <div className="col-span-2">
+              <label className="font-medium">Temuan / Tindakan Korektif</label>
+              <Input
+                placeholder="Tuliskan jika ada pengasahan, pergantian bilah pisau..."
+                value={mpbForm.finalFindings}
+                onChange={(e) => setMpbForm({ ...mpbForm, finalFindings: e.target.value })}
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setIsMpbOpen(false)}>
+              Batal
+            </Button>
+            <Button onClick={handleSaveMpb} className="bg-rose-600 hover:bg-rose-700">
+              Simpan Form MPB
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

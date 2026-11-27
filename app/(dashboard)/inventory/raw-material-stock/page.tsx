@@ -1351,7 +1351,7 @@ function RawMaterialStockContent() {
                   {/* PBD */}
                   <div className="p-3 rounded-lg bg-white border border-slate-200 space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-800">QC-001-PBD (Bahan)</span>
+                      <span className="text-xs font-bold text-slate-800">QC-002-PBD (Barang Datang)</span>
                       {renderQcPill("PBD", formData.pbdStatus || "missing")}
                     </div>
                     <div className="text-[11px] text-muted-foreground">

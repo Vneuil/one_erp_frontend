@@ -6,7 +6,7 @@ import {
   ClipboardCheck,
   Plus,
   Printer,
-  Calendar,
+  FileSpreadsheet,
   Box,
   CheckCircle2,
   XCircle,
@@ -17,8 +17,6 @@ import {
   Info,
   Droplets,
   Flame,
-  Scale,
-  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,27 +29,160 @@ import {
   qcApi,
   IncomingCheckItem,
   CreateIncomingCheckInput,
-  UpdateIncomingCheckInput,
 } from "@/lib/api/qc";
+import { rawMaterialStockApi, LBMInboundContext } from "@/lib/api/raw-material-stock";
+import { exportPBDExcel } from "@/lib/utils/export-qc-excel";
 
 const selectCls =
   "w-full h-9 px-3 rounded-lg border border-border bg-white text-xs text-foreground focus:ring-1 focus:ring-primary";
 
-export default function IncomingRawMaterialPage() {
+const CERT_OPTIONS = ["NATURAL", "ORGANIC EU", "ORGANIC USDA", "ORGANIC JAS"] as const;
+
+const ITEM_TYPE_OPTIONS = [
+  "Bahan Baku",
+  "Gula Semut",
+  "Gula Cair / Nira",
+  "VCO / Kelapa",
+  "Barang Jadi",
+  "Bahan Kemas",
+];
+
+const COLOR_SCORE_OPTIONS = [
+  { value: 1, label: "1 - Light Brown" },
+  { value: 2, label: "2 - Normal" },
+  { value: 3, label: "3 - Dark Brown" },
+];
+
+const MONTH_NAMES_ID = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
+
+function formatMonthYearID(monthStr?: string): { monthLabel: string; yearLabel: string } {
+  if (!monthStr || !/^\d{4}-\d{2}/.test(monthStr)) {
+    return { monthLabel: "", yearLabel: "" };
+  }
+  const [yr, mo] = monthStr.split("-");
+  const idx = parseInt(mo, 10) - 1;
+  return {
+    monthLabel: MONTH_NAMES_ID[idx] || mo,
+    yearLabel: yr,
+  };
+}
+
+function escHtml(v: unknown): string {
+  return String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function parseCerts(certs?: string): string[] {
+  if (!certs) return ["NATURAL"];
+  return certs
+    .split(",")
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean);
+}
+
+function defaultFormData(
+  lbmNo: string,
+  grId: string,
+  lbmCtx?: LBMInboundContext | null
+): CreateIncomingCheckInput {
+  const today = new Date().toISOString().slice(0, 10);
+  const firstLine = lbmCtx?.lines?.[0];
+  const rawCerts = (firstLine?.certifications || "").toUpperCase();
+  const matchedCerts = CERT_OPTIONS.filter((c) => rawCerts.includes(c));
+  if (matchedCerts.length === 0) {
+    matchedCerts.push(firstLine?.organicType?.toLowerCase().includes("organik") ? "ORGANIC EU" : "NATURAL");
+  }
+
+  const netWeight = firstLine?.weightNet ?? 0;
+  const grossWeight = firstLine?.weightGross ?? netWeight;
+
+  return {
+    fairtradeStatus: "NON FAIRTRADE",
+    certifications: matchedCerts.join(", "),
+    goodsReceiptId: grId || lbmCtx?.goodsReceiptId || undefined,
+    lbmNo: lbmCtx?.lbmNo || lbmNo || "",
+    checkDate: today,
+    checkMonth: today.slice(0, 7),
+    supplierId: lbmCtx?.supplierId || undefined,
+    supplierName: lbmCtx?.supplierName || "",
+    deliveryNoteNo: lbmCtx?.deliveryNoteNo || "",
+    poNo: lbmCtx?.poNo || "",
+    productName: firstLine?.productName || "Gula Semut Kelapa",
+    itemCode: firstLine?.lotNumber || firstLine?.productSku || "",
+    itemType: "Bahan Baku",
+    batchNo: firstLine?.lotNumber || "",
+    totalBags: firstLine?.bagCount || 0,
+    sampleBags: 13,
+    grossWeight,
+    netWeight,
+    acceptedWeight: netWeight,
+    rejectedWeight: 0,
+    checkPackaging: true,
+    checkShape: true,
+    checkTaste: true,
+    checkAroma: true,
+    colorScore: 2,
+    moistureContent: 1.8,
+    brixValue: undefined,
+    checkSolubility: true,
+    phValue: undefined,
+    checkPackageLabel: true,
+    passRatePercent: 100,
+    inspectionDecision: "LOLOS",
+    sugarCondition: lbmCtx?.sugarCondition || "Baik, Sesuai Spesifikasi",
+    colorAppearance: "2 - Normal",
+    aromaFlavor: "Khas Gula Kelapa Normal",
+    foreignMatterClean: true,
+    packagingCondition: lbmCtx?.packageCondition || "Kemasan & Label Baik",
+    meshSize: "",
+    recommendedAction: "",
+    qcName: "Adin (QC)",
+    qaName: "Mario (QA)",
+    notes: "",
+  };
+}
+
+export default function IncomingGoodsQualityPage() {
   const searchParams = useSearchParams();
   const initialLbmNo = searchParams.get("lbmNo") || "";
   const initialGrId = searchParams.get("goodsReceiptId") || "";
 
+  const currentMonthStr = new Date().toISOString().slice(0, 7);
   const [reload, setReload] = React.useState(0);
+  const [filterMonth, setFilterMonth] = React.useState(initialLbmNo ? "" : currentMonthStr);
   const [filterDate, setFilterDate] = React.useState("");
   const [filterLbm, setFilterLbm] = React.useState(initialLbmNo);
   const [searchKeyword, setSearchKeyword] = React.useState("");
+  const [lbmContext, setLbmContext] = React.useState<LBMInboundContext | null>(null);
 
-  const { data: rawChecks, loading, error } = useReport(
-    `qc-incoming|${reload}|${filterDate}|${filterLbm}`,
+  React.useEffect(() => {
+    if (!initialGrId) return;
+    let active = true;
+    rawMaterialStockApi
+      .getLbmContext(initialGrId)
+      .then((res) => {
+        if (active && res.data) {
+          setLbmContext(res.data);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [initialGrId]);
+
+  const { data: rawChecks, loading } = useReport(
+    `qc-incoming|${reload}|${filterMonth}|${filterDate}|${filterLbm}`,
     () =>
       qcApi
         .listIncomingChecks({
+          month: filterMonth || undefined,
           date: filterDate || undefined,
           lbmNo: filterLbm || undefined,
         })
@@ -59,7 +190,6 @@ export default function IncomingRawMaterialPage() {
   );
   const checks: IncomingCheckItem[] = rawChecks ?? [];
 
-  // Filter in memory for search
   const filteredChecks = React.useMemo(() => {
     if (!searchKeyword.trim()) return checks;
     const q = searchKeyword.toLowerCase();
@@ -67,6 +197,8 @@ export default function IncomingRawMaterialPage() {
       (c) =>
         c.supplierName.toLowerCase().includes(q) ||
         c.productName.toLowerCase().includes(q) ||
+        (c.itemCode && c.itemCode.toLowerCase().includes(q)) ||
+        (c.itemType && c.itemType.toLowerCase().includes(q)) ||
         (c.batchNo && c.batchNo.toLowerCase().includes(q)) ||
         (c.lbmNo && c.lbmNo.toLowerCase().includes(q)) ||
         (c.deliveryNoteNo && c.deliveryNoteNo.toLowerCase().includes(q))
@@ -77,79 +209,22 @@ export default function IncomingRawMaterialPage() {
   const totalChecks = checks.length;
   const passedChecks = checks.filter((c) => c.overallStatus === "passed").length;
   const conditionalChecks = checks.filter((c) => c.overallStatus === "conditional").length;
-  const rejectedChecks = checks.filter((c) => c.overallStatus === "rejected").length;
+  const rejectedChecks = checks.filter((c) => c.overallStatus === "rejected" || c.inspectionDecision === "DITOLAK").length;
 
-  // Dialog State (Create / Edit)
+  // Dialog State
   const [isOpen, setIsOpen] = React.useState(false);
   const [editTarget, setEditTarget] = React.useState<IncomingCheckItem | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
-
-  // Detail View Modal
   const [viewItem, setViewItem] = React.useState<IncomingCheckItem | null>(null);
 
-  // Form State
-  const [formData, setFormData] = React.useState<CreateIncomingCheckInput>({
-    goodsReceiptId: initialGrId || undefined,
-    lbmNo: initialLbmNo,
-    checkDate: new Date().toISOString().slice(0, 10),
-    checkMonth: new Date().toISOString().slice(0, 7),
-    supplierName: "",
-    deliveryNoteNo: "",
-    poNo: "",
-    productName: "Gula Kelapa Semut Mentah",
-    batchNo: `RAW-${new Date().toISOString().slice(2, 4)}${new Date().toISOString().slice(5, 7)}-01`,
-    totalBags: 200,
-    sampleBags: 10,
-    grossWeight: 5000,
-    netWeight: 4940,
-    acceptedWeight: 4940,
-    rejectedWeight: 0,
-    sugarCondition: "Kering, Bersih, Sesuai Standar",
-    colorAppearance: "Coklat Keemasan Cerah",
-    aromaFlavor: "Khas Gula Kelapa Segar, Tidak Sangit",
-    foreignMatterClean: true,
-    packagingCondition: "Sak Karung Utuh & Bersih, Lapisan Inner Rapat",
-    moistureContent: 1.8,
-    brixValue: undefined,
-    meshSize: "Mesh 16 - 18",
-    recommendedAction: "Lolos Standar - Dapat Langsung ke Ayak Matang / Produksi (Kadar Air <= 2.0%)",
-    qcName: "Adin (QC Inspector)",
-    qaName: "Mario (QA Spv)",
-    notes: "",
-  });
+  const [formData, setFormData] = React.useState<CreateIncomingCheckInput>(() =>
+    defaultFormData(initialLbmNo, initialGrId, null)
+  );
 
   const handleOpenCreate = () => {
     setEditTarget(null);
-    setFormData({
-      goodsReceiptId: initialGrId || undefined,
-      lbmNo: filterLbm || "",
-      checkDate: new Date().toISOString().slice(0, 10),
-      checkMonth: new Date().toISOString().slice(0, 7),
-      supplierName: "",
-      deliveryNoteNo: "",
-      poNo: "",
-      productName: "Gula Kelapa Semut Mentah",
-      batchNo: `RAW-${new Date().toISOString().slice(2, 4)}${new Date().toISOString().slice(5, 7)}-01`,
-      totalBags: 200,
-      sampleBags: 10,
-      grossWeight: 5000,
-      netWeight: 4940,
-      acceptedWeight: 4940,
-      rejectedWeight: 0,
-      sugarCondition: "Kering, Bersih, Sesuai Standar",
-      colorAppearance: "Coklat Keemasan Cerah",
-      aromaFlavor: "Khas Gula Kelapa Segar, Tidak Sangit",
-      foreignMatterClean: true,
-      packagingCondition: "Sak Karung Utuh & Bersih, Lapisan Inner Rapat",
-      moistureContent: 1.8,
-      brixValue: undefined,
-      meshSize: "Mesh 16 - 18",
-      recommendedAction: "Lolos Standar - Dapat Langsung ke Ayak Matang / Produksi (Kadar Air <= 2.0%)",
-      qcName: "Adin (QC Inspector)",
-      qaName: "Mario (QA Spv)",
-      notes: "",
-    });
+    setFormData(defaultFormData(filterLbm || initialLbmNo, initialGrId, lbmContext));
     setFormError(null);
     setIsOpen(true);
   };
@@ -157,6 +232,8 @@ export default function IncomingRawMaterialPage() {
   const handleOpenEdit = (item: IncomingCheckItem) => {
     setEditTarget(item);
     setFormData({
+      fairtradeStatus: item.fairtradeStatus || "NON FAIRTRADE",
+      certifications: item.certifications || "NATURAL",
       goodsReceiptId: item.goodsReceiptId,
       lbmNo: item.lbmNo || "",
       checkDate: item.checkDate,
@@ -166,20 +243,32 @@ export default function IncomingRawMaterialPage() {
       deliveryNoteNo: item.deliveryNoteNo || "",
       poNo: item.poNo || "",
       productName: item.productName,
-      batchNo: item.batchNo || "",
+      itemCode: item.itemCode || item.batchNo || "",
+      itemType: item.itemType || "Bahan Baku",
+      batchNo: item.batchNo || item.itemCode || "",
       totalBags: item.totalBags,
       sampleBags: item.sampleBags,
       grossWeight: item.grossWeight,
       netWeight: item.netWeight,
       acceptedWeight: item.acceptedWeight,
       rejectedWeight: item.rejectedWeight,
+      checkPackaging: item.checkPackaging ?? true,
+      checkShape: item.checkShape ?? true,
+      checkTaste: item.checkTaste ?? true,
+      checkAroma: item.checkAroma ?? true,
+      colorScore: item.colorScore || 2,
+      moistureContent: item.moistureContent,
+      brixValue: item.brixValue,
+      checkSolubility: item.checkSolubility ?? true,
+      phValue: item.phValue,
+      checkPackageLabel: item.checkPackageLabel ?? true,
+      passRatePercent: item.passRatePercent ?? 100,
+      inspectionDecision: item.inspectionDecision || (item.overallStatus === "rejected" ? "DITOLAK" : "LOLOS"),
       sugarCondition: item.sugarCondition,
       colorAppearance: item.colorAppearance || "",
       aromaFlavor: item.aromaFlavor || "",
       foreignMatterClean: item.foreignMatterClean,
       packagingCondition: item.packagingCondition || "",
-      moistureContent: item.moistureContent,
-      brixValue: item.brixValue,
       meshSize: item.meshSize || "",
       recommendedAction: item.recommendedAction || "",
       qcName: item.qcName || "",
@@ -190,36 +279,51 @@ export default function IncomingRawMaterialPage() {
     setIsOpen(true);
   };
 
+  const toggleCertification = (cert: string) => {
+    const current = parseCerts(formData.certifications);
+    const exists = current.includes(cert);
+    const next = exists ? current.filter((c) => c !== cert) : [...current, cert];
+    setFormData((p) => ({
+      ...p,
+      certifications: next.length > 0 ? next.join(", ") : "NATURAL",
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.supplierName.trim()) {
-      setFormError("Nama supplier wajib diisi");
+      setFormError("Supplier wajib diisi");
       return;
     }
     if (!formData.productName.trim()) {
-      setFormError("Nama komoditas bahan baku wajib diisi");
+      setFormError("Nama Barang wajib diisi");
       return;
     }
 
     setIsSubmitting(true);
     setFormError(null);
     try {
+      const payload: CreateIncomingCheckInput = {
+        ...formData,
+        batchNo: formData.itemCode || formData.batchNo || "",
+        itemCode: formData.itemCode || formData.batchNo || "",
+      };
       if (editTarget) {
-        await qcApi.updateIncomingCheck(editTarget.id, formData);
+        await qcApi.updateIncomingCheck(editTarget.id, payload);
       } else {
-        await qcApi.createIncomingCheck(formData);
+        await qcApi.createIncomingCheck(payload);
       }
       setIsOpen(false);
       setReload((p) => p + 1);
     } catch (err: unknown) {
-      setFormError(errText(err, "Gagal menyimpan data pemeriksaan bahan datang"));
+      setFormError(errText(err, "Gagal menyimpan data pemeriksaan kualitas barang datang"));
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Hapus catatan pemeriksaan bahan datang ini?")) return;
+    if (!confirm("Hapus catatan pemeriksaan kualitas barang datang ini?")) return;
     try {
       await qcApi.deleteIncomingCheck(id);
       setReload((p) => p + 1);
@@ -228,7 +332,7 @@ export default function IncomingRawMaterialPage() {
     }
   };
 
-  // Cetak Dokumen Resmi QC-001-PBD. 02
+  // Cetak Formulir Resmi QC-002-PBD Rev. 05
   const handlePrintDocument = (item?: IncomingCheckItem) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
@@ -237,112 +341,164 @@ export default function IncomingRawMaterialPage() {
     }
 
     const itemsToPrint = item ? [item] : filteredChecks;
+    const sample = itemsToPrint[0];
+    const periodSource = filterMonth || sample?.checkMonth || currentMonthStr;
+    const { monthLabel, yearLabel } = formatMonthYearID(periodSource);
 
-    const rowsHtml = itemsToPrint
-      .map(
-        (c, idx) => `
+    const ft = sample?.fairtradeStatus || "";
+    const ftHeader =
+      ft === "FAIRTRADE"
+        ? `FAIRTRADE / <span style="text-decoration:line-through; color:#666;">NON FAIRTRADE</span>`
+        : ft === "NON FAIRTRADE"
+          ? `<span style="text-decoration:line-through; color:#666;">FAIRTRADE</span> / NON FAIRTRADE`
+          : `FAIRTRADE / NON FAIRTRADE`;
+
+    const allCerts = itemsToPrint.map((d) => (d.certifications || "").toUpperCase()).join(",");
+    const certBox = (label: string) =>
+      `<span style="display:inline-flex; align-items:center; gap:3px; margin-left:10px;"><span style="display:inline-block; width:10px; height:10px; border:1px solid #000; text-align:center; line-height:9px; font-size:8pt;">${allCerts.includes(label) ? "✓" : ""}</span> ${label}</span>`;
+
+    const minRows = Math.max(15, itemsToPrint.length);
+    const rowsHtml = Array.from({ length: minRows }, (_, idx) => {
+      const c = itemsToPrint[idx];
+      if (!c) {
+        return `<tr>${Array.from({ length: 20 }, () => `<td style="border:1px solid #000; height:18px;">&nbsp;</td>`).join("")}</tr>`;
+      }
+      const mk = (ok: boolean) => (ok ? "✓" : "✗");
+      const decision = c.inspectionDecision || (c.overallStatus === "rejected" ? "DITOLAK" : "LOLOS");
+      const ket = c.notes ? `${decision} (${c.notes})` : decision;
+      return `
         <tr>
-          <td style="text-align: center; border: 1px solid #333; padding: 4px;">${idx + 1}</td>
-          <td style="text-align: center; border: 1px solid #333; padding: 4px;">${c.checkDate}</td>
-          <td style="border: 1px solid #333; padding: 4px;"><strong>${c.lbmNo || "-"}</strong></td>
-          <td style="border: 1px solid #333; padding: 4px;">${c.supplierName}</td>
-          <td style="border: 1px solid #333; padding: 4px;"><strong>${c.productName}</strong><br/><small style="font-family: monospace;">${c.batchNo || "-"}</small></td>
-          <td style="text-align: right; border: 1px solid #333; padding: 4px; font-weight: bold;">${c.netWeight.toLocaleString("id-ID")} kg<br/><small>${c.totalBags} sak</small></td>
-          <td style="text-align: center; border: 1px solid #333; padding: 4px; font-weight: bold; color: ${c.moistureContent && c.moistureContent > 2.0 ? "#b45309" : "#15803d"};">
-            ${c.moistureContent !== undefined && c.moistureContent !== null ? `${c.moistureContent.toFixed(2)} %` : "-"}
-          </td>
-          <td style="border: 1px solid #333; padding: 4px; font-size: 8pt;">${c.sugarCondition}</td>
-          <td style="border: 1px solid #333; padding: 4px; font-size: 8pt;">${c.colorAppearance || "-"}</td>
-          <td style="text-align: center; border: 1px solid #333; padding: 4px;">
-            ${c.foreignMatterClean ? '<span style="color: #15803d; font-weight: bold;">✓ Bebas Benda Asing</span>' : '<span style="color: #b91c1c; font-weight: bold;">✗ Ada Kontaminan</span>'}
-          </td>
-          <td style="border: 1px solid #333; padding: 4px; font-size: 8pt; font-weight: 600;">${c.recommendedAction || "-"}</td>
+          <td style="text-align:center; border:1px solid #000; padding:2px 3px;">${idx + 1}</td>
+          <td style="text-align:center; border:1px solid #000; padding:2px 3px;">${escHtml(c.checkDate)}</td>
+          <td style="border:1px solid #000; padding:2px 4px;">${escHtml(c.supplierName)}</td>
+          <td style="border:1px solid #000; padding:2px 4px;">${escHtml(c.productName)}</td>
+          <td style="text-align:center; border:1px solid #000; padding:2px 3px; font-family:monospace;">${escHtml(c.itemCode || c.batchNo || "-")}</td>
+          <td style="border:1px solid #000; padding:2px 4px;">${escHtml(c.itemType || "Bahan Baku")}</td>
+          <td style="text-align:center; border:1px solid #000; padding:2px;">${mk(c.checkPackaging ?? true)}</td>
+          <td style="text-align:center; border:1px solid #000; padding:2px;">${mk(c.checkShape ?? true)}</td>
+          <td style="text-align:center; border:1px solid #000; padding:2px;">${mk(c.checkTaste ?? true)}</td>
+          <td style="text-align:center; border:1px solid #000; padding:2px;">${mk(c.checkAroma ?? true)}</td>
+          <td style="text-align:center; border:1px solid #000; padding:2px;">${c.colorScore || 2}</td>
+          <td style="text-align:center; border:1px solid #000; padding:2px;">${c.moistureContent !== undefined && c.moistureContent !== null ? c.moistureContent.toFixed(2) : "-"}</td>
+          <td style="text-align:center; border:1px solid #000; padding:2px;">${c.brixValue !== undefined && c.brixValue !== null ? c.brixValue : "-"}</td>
+          <td style="text-align:center; border:1px solid #000; padding:2px;">${mk(c.checkSolubility ?? true)}</td>
+          <td style="text-align:center; border:1px solid #000; padding:2px;">${c.phValue !== undefined && c.phValue !== null ? c.phValue : "-"}</td>
+          <td style="text-align:center; border:1px solid #000; padding:2px;">${mk(c.checkPackageLabel ?? true)}</td>
+          <td style="text-align:center; border:1px solid #000; padding:2px;">${c.passRatePercent ?? 100}%</td>
+          <td style="text-align:center; border:1px solid #000; padding:2px;">${c.sampleBags || 0}</td>
+          <td style="border:1px solid #000; padding:2px 4px; font-weight:bold;">${escHtml(ket)}</td>
+          <td style="text-align:center; border:1px solid #000; padding:2px 3px;">${escHtml(c.qcName || "")}</td>
         </tr>
-      `
-      )
-      .join("");
+      `;
+    }).join("");
 
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Form QC-001-PBD. 02 - Pemeriksaan Bahan Datang</title>
+        <title>QC-002-PBD - Pemeriksaan Kualitas Barang Datang</title>
         <style>
-          @page { size: landscape; margin: 12mm; }
-          body { font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 8.5pt; color: #000; margin: 0; }
-          .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 8px; }
-          .company { font-weight: bold; font-size: 13pt; text-transform: uppercase; }
-          .title { text-align: center; font-size: 11pt; font-weight: bold; margin: 8px 0; }
-          .meta { display: flex; gap: 30px; margin-bottom: 10px; font-weight: bold; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 8pt; }
-          th { border: 1px solid #000; background-color: #f1f5f9; padding: 5px; font-size: 7.5pt; text-align: center; }
-          .notes-box { font-size: 7.5pt; border: 1px solid #666; padding: 8px; background: #fafafa; margin-bottom: 16px; border-radius: 4px; }
-          .signatures { display: flex; justify-content: flex-end; gap: 60px; margin-top: 15px; }
-          .sig-box { width: 160px; text-align: center; }
-          .sig-line { margin-top: 45px; border-bottom: 1px solid #000; }
+          @page { size: landscape; margin: 10mm; }
+          body { font-family: Arial, Helvetica, sans-serif; font-size: 7.5pt; color: #000; margin: 0; }
+          .top-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
+          .title { text-align: center; font-size: 11pt; font-weight: bold; margin: 4px 0 8px 0; line-height: 1.25; }
+          .meta-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 8pt; }
+          table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+          th { border: 1px solid #000; padding: 3px 2px; font-size: 7pt; font-weight: bold; text-align: center; vertical-align: middle; background: #fff; }
+          td { font-size: 7pt; word-wrap: break-word; }
+          .footer { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 8px; font-size: 7.5pt; }
+          .notes { line-height: 1.45; }
+          .qa-box { width: 160px; border: 1px solid #000; text-align: center; }
+          .qa-head { border-bottom: 1px solid #000; padding: 2px 4px; font-weight: bold; }
+          .qa-body { height: 52px; padding: 3px 5px; text-align: left; display: flex; flex-direction: column; justify-content: space-between; }
+          .qa-foot { border-top: 1px solid #000; padding: 2px 4px; font-weight: bold; }
+          .rev { text-align: center; margin-top: 8px; font-size: 7.5pt; }
         </style>
       </head>
       <body>
-        <div class="header">
-          <div>
-            <div class="company">CV. Manna Anugerah Sejahtera</div>
-            <div style="font-size: 8pt; color: #444;">Food Safety & Quality Control System</div>
+        <div class="top-row">
+          <div style="line-height: 1.35;">
+            <div style="font-weight: bold;">CV. Manna Anugerah Sejahtera</div>
+            <div>CU 820674 D-11</div>
+            <div>104464OC</div>
+            <div>FLO-ID 43683</div>
           </div>
-          <div style="text-align: right;">
-            <div style="font-weight: bold; font-size: 9pt;">form-QC-001-PBD. 02</div>
-            <div style="font-size: 7.5pt;">(Pemeriksaan Bahan Datang)</div>
+          <div style="text-align: right; line-height: 1.35; font-weight: bold;">
+            <div>QC-002-PBD</div>
+            <div>${ftHeader}</div>
           </div>
         </div>
 
-        <div class="title">PEMERIKSAAN KUALITAS BAHAN DATANG (PBD)</div>
+        <div class="title">
+          Pemeriksaan Kualitas Barang Datang<br/>(PBD)
+        </div>
 
-        <div class="meta">
-          <div>Tanggal / Periode: <u>${filterDate || "Semua"}</u></div>
-          <div>Ref. LBM: <u>${filterLbm || "Semua"}</u></div>
+        <div class="meta-bar">
+          <div>
+            <span style="margin-right: 40px;">Bulan : <strong>${escHtml(monthLabel)}</strong></span>
+            <span>Tahun : <strong>${escHtml(yearLabel)}</strong></span>
+          </div>
+          <div style="font-size: 7.5pt;">
+            ${certBox("NATURAL")}
+            ${certBox("ORGANIC EU")}
+            ${certBox("ORGANIC USDA")}
+            ${certBox("ORGANIC JAS")}
+          </div>
         </div>
 
         <table>
           <thead>
             <tr>
-              <th style="width: 25px;">No</th>
-              <th style="width: 65px;">Tanggal</th>
-              <th style="width: 80px;">No. LBM</th>
-              <th style="width: 120px;">Supplier</th>
-              <th>Bahan / No. Lot</th>
-              <th style="width: 85px;">Kuantitas Netto</th>
-              <th style="width: 70px;">Kadar Air (%)</th>
-              <th style="width: 110px;">Kondisi Fisik</th>
-              <th style="width: 90px;">Kenampakan / Warna</th>
-              <th style="width: 90px;">Uji Benda Asing</th>
-              <th>Rekomendasi Alur Produksi</th>
+              <th rowspan="2" style="width: 24px;">No</th>
+              <th rowspan="2" style="width: 58px;">Tgl/<br/>Bulan</th>
+              <th rowspan="2" style="width: 85px;">Supplier</th>
+              <th rowspan="2" style="width: 95px;">Nama<br/>Barang</th>
+              <th rowspan="2" style="width: 65px;">Kode Barang</th>
+              <th rowspan="2" style="width: 60px;">Jenis<br/>Barang</th>
+              <th colspan="10">Pengecekan</th>
+              <th rowspan="2" style="width: 44px;">Tingkat<br/>lolos (%)</th>
+              <th rowspan="2" style="width: 48px;">Jumlah<br/>Sampling</th>
+              <th rowspan="2" style="width: 85px;">Ket</th>
+              <th rowspan="2" style="width: 48px;">Paraf</th>
+            </tr>
+            <tr>
+              <th style="width: 38px;">Kemasan</th>
+              <th style="width: 34px;">Bentuk</th>
+              <th style="width: 30px;">Rasa</th>
+              <th style="width: 34px;">Aroma</th>
+              <th style="width: 34px;">Warna*</th>
+              <th style="width: 38px;">Kadar<br/>air (%)</th>
+              <th style="width: 28px;">Brix</th>
+              <th style="width: 40px;">Kelarutan</th>
+              <th style="width: 26px;">pH</th>
+              <th style="width: 42px;">Label<br/>Kemasan</th>
             </tr>
           </thead>
           <tbody>
-            ${rowsHtml || `<tr><td colspan="11" style="text-align: center; padding: 10px;">Tidak ada data pemeriksaan bahan datang.</td></tr>`}
+            ${rowsHtml}
           </tbody>
         </table>
 
-        <div class="notes-box">
-          <strong>Kriteria Mutu & Aturan Alur Produksi (BRL-01):</strong><br/>
-          &bull; <strong>Kadar Air &le; 2.0%:</strong> Bahan kering prima, direkomendasikan langsung masuk tahap <strong>Line 3 (Ayak Matang)</strong> tanpa melalui oven.<br/>
-          &bull; <strong>Kadar Air &gt; 2.0%:</strong> Wajib diproses melalui <strong>Line 1 (Ayak Mentah)</strong> lalu <strong>Line 2 (Oven Pengering)</strong> sampai kadar air &lt; 2.0%.<br/>
-          &bull; <strong>Kontaminan Benda Asing:</strong> Wajib bebas serangga, kotoran, atau partikel keras/logam yang membahayakan sanitasi pangan.
+        <div class="footer">
+          <div class="notes">
+            <strong>Catatan :</strong><br/>
+            &bull; Ceklis apabila dalam keadaan baik<br/>
+            &bull; Bandingkan hasil yang diperoleh dengan Spesifikasi bahan baku dan barang jadi sesuai jenis barang<br/>
+            &bull; Beri label LOLOS / DITOLAK berdasarkan hasil pemeriksaan pada tiap barang datang<br/>
+            * Warna, beri angka 1 (light brown), 2 (normal), 3 (dark brown)<br/>
+            * Metode sampling dilakukan menggunakan military standard dengan AQL (<em>Acceptable Quality Level</em> ) 0,1 dan 2,5
+          </div>
+          <div class="qa-box">
+            <div class="qa-head">Diverifikasi Oleh :</div>
+            <div class="qa-body">
+              <div>Tgl. ${escHtml(sample?.qaDate ? sample.qaDate.slice(0, 10) : "")}</div>
+              <div style="text-align:center; font-weight:bold;">${escHtml(sample?.qaName || "")}</div>
+            </div>
+            <div class="qa-foot">QA</div>
+          </div>
         </div>
 
-        <div class="signatures">
-          <div class="sig-box">
-            <div>Diperiksa Oleh,</div>
-            <div style="font-size: 7.5pt; color: #666; margin-top: 2px;">Tgl: ....................</div>
-            <div class="sig-line"></div>
-            <div style="font-weight: bold; margin-top: 4px;">QC Inspector</div>
-          </div>
-          <div class="sig-box">
-            <div>Diverifikasi Oleh,</div>
-            <div style="font-size: 7.5pt; color: #666; margin-top: 2px;">Tgl: ....................</div>
-            <div class="sig-line"></div>
-            <div style="font-weight: bold; margin-top: 4px;">QA / Spv Produksi</div>
-          </div>
-        </div>
+        <div class="rev">Rev. 05</div>
 
         <script>
           window.onload = function() { window.print(); };
@@ -356,122 +512,126 @@ export default function IncomingRawMaterialPage() {
   const columns: Column<IncomingCheckItem>[] = [
     {
       key: "checkDate",
-      header: "Tanggal / Ref",
+      header: "Tgl/Bulan & Ref",
       render: (item: IncomingCheckItem) => (
         <div className="space-y-0.5">
           <div className="font-semibold text-slate-900">{item.checkDate}</div>
-          {item.lbmNo ? (
-            <span className="font-mono text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border">
-              LBM: {item.lbmNo}
-            </span>
-          ) : (
-            <span className="text-[10px] text-muted-foreground">-</span>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "supplierName",
-      header: "Supplier & SJ",
-      render: (item: IncomingCheckItem) => (
-        <div className="space-y-0.5">
-          <div className="font-medium text-slate-800">{item.supplierName}</div>
-          {item.deliveryNoteNo && (
-            <div className="text-[11px] text-muted-foreground font-mono">SJ: {item.deliveryNoteNo}</div>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "productName",
-      header: "Bahan Baku & Lot",
-      render: (item: IncomingCheckItem) => (
-        <div className="space-y-0.5">
-          <div className="font-semibold text-slate-900">{item.productName}</div>
-          {item.batchNo && (
-            <span className="font-mono text-[10px] bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200">
-              Lot: {item.batchNo}
-            </span>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "netWeight",
-      header: "Kuantitas Masuk",
-      render: (item: IncomingCheckItem) => (
-        <div className="text-right space-y-0.5">
-          <div className="font-bold text-slate-900">{item.netWeight.toLocaleString("id-ID")} kg</div>
-          <div className="text-[10px] text-muted-foreground">
-            {item.totalBags} sak (Sampel: {item.sampleBags})
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: "moistureContent",
-      header: "Kadar Air (%)",
-      render: (item: IncomingCheckItem) => {
-        if (item.moistureContent === undefined || item.moistureContent === null) {
-          return <span className="text-muted-foreground text-xs">-</span>;
-        }
-        const isDry = item.moistureContent <= 2.0;
-        return (
-          <div className="space-y-1">
-            <div
-              className={`inline-flex items-center gap-1 font-mono font-bold text-xs px-2 py-0.5 rounded border ${
-                isDry
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                  : "bg-amber-50 text-amber-700 border-amber-300"
-              }`}
-            >
-              <Droplets className="h-3 w-3" />
-              <span>{item.moistureContent.toFixed(2)} %</span>
-            </div>
-            <div className="text-[10px] text-muted-foreground">
-              {isDry ? "Bypass Oven (Ayak Matang)" : "Wajib Oven"}
-            </div>
-          </div>
-        );
-      },
-    },
-    {
-      key: "sugarCondition",
-      header: "Fisik & Organoleptik",
-      render: (item: IncomingCheckItem) => (
-        <div className="text-xs text-slate-700 space-y-0.5">
-          <div className="font-medium text-slate-800">{item.sugarCondition}</div>
-          <div className="text-[11px] text-muted-foreground flex items-center gap-2">
-            <span>{item.colorAppearance || "Warna standard"}</span>
-            {item.foreignMatterClean ? (
-              <span className="text-emerald-700 font-semibold">✓ Bersih</span>
-            ) : (
-              <span className="text-rose-600 font-semibold">✗ Ada Kotoran</span>
+          <div className="flex flex-wrap gap-1">
+            {item.documentNo && (
+              <span className="font-mono text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border">
+                {item.documentNo}
+              </span>
+            )}
+            {item.lbmNo && (
+              <span className="font-mono text-[10px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-200">
+                {item.lbmNo}
+              </span>
             )}
           </div>
         </div>
       ),
     },
     {
-      key: "overallStatus",
-      header: "Keputusan QC",
+      key: "supplierName",
+      header: "Supplier",
+      render: (item: IncomingCheckItem) => (
+        <div className="space-y-0.5">
+          <div className="font-medium text-slate-800">{item.supplierName}</div>
+          <div className="text-[10px] text-muted-foreground">
+            {item.fairtradeStatus || "NON FAIRTRADE"}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "productName",
+      header: "Barang, Kode & Jenis",
+      render: (item: IncomingCheckItem) => (
+        <div className="space-y-0.5">
+          <div className="font-semibold text-slate-900">{item.productName}</div>
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="font-mono text-[10px] bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200">
+              {item.itemCode || item.batchNo || "-"}
+            </span>
+            <span className="text-[10px] text-slate-600">{item.itemType || "Bahan Baku"}</span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "pengecekan",
+      header: "Pengecekan (QC-002-PBD)",
       render: (item: IncomingCheckItem) => {
-        let badgeCls = "bg-emerald-50 text-emerald-700 border-emerald-200";
-        let label = "Lolos Standar";
-        if (item.overallStatus === "conditional") {
-          badgeCls = "bg-amber-50 text-amber-700 border-amber-200";
-          label = "Diterima Bersyarat";
-        } else if (item.overallStatus === "rejected") {
-          badgeCls = "bg-rose-50 text-rose-700 border-rose-200";
-          label = "Ditolak / Retur";
-        }
+        const checksOk = [
+          { k: "Kms", ok: item.checkPackaging ?? true },
+          { k: "Btk", ok: item.checkShape ?? true },
+          { k: "Rsa", ok: item.checkTaste ?? true },
+          { k: "Arm", ok: item.checkAroma ?? true },
+          { k: "Klr", ok: item.checkSolubility ?? true },
+          { k: "Lbl", ok: item.checkPackageLabel ?? true },
+        ];
         return (
           <div className="space-y-1">
-            <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded border ${badgeCls}`}>
-              {label}
+            <div className="flex flex-wrap gap-1">
+              {checksOk.map((p) => (
+                <span
+                  key={p.k}
+                  className={`text-[10px] px-1 rounded border font-medium ${
+                    p.ok
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : "bg-rose-50 text-rose-700 border-rose-200"
+                  }`}
+                >
+                  {p.ok ? "✓" : "✗"} {p.k}
+                </span>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-700 font-mono">
+              <span>Warna:{item.colorScore || 2}</span>
+              <span>•</span>
+              <span className={item.moistureContent && item.moistureContent > 2.0 ? "text-amber-700 font-bold" : "text-emerald-700 font-bold"}>
+                Air:{item.moistureContent != null ? `${item.moistureContent.toFixed(2)}%` : "-"}
+              </span>
+              {item.brixValue != null && <span>• Brix:{item.brixValue}</span>}
+              {item.phValue != null && <span>• pH:{item.phValue}</span>}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: "passRatePercent",
+      header: "Lolos & Sampling",
+      render: (item: IncomingCheckItem) => (
+        <div className="text-right space-y-0.5">
+          <div className="font-bold text-slate-900 font-mono">
+            {(item.passRatePercent ?? 100).toFixed(1)}%
+          </div>
+          <div className="text-[10px] text-muted-foreground">
+            Sampling: <strong>{item.sampleBags || 0}</strong> ({item.netWeight.toLocaleString("id-ID")} kg)
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "inspectionDecision",
+      header: "Ket & Paraf",
+      render: (item: IncomingCheckItem) => {
+        const decision = item.inspectionDecision || (item.overallStatus === "rejected" ? "DITOLAK" : "LOLOS");
+        const isReject = decision === "DITOLAK" || item.overallStatus === "rejected";
+        const isCond = !isReject && item.overallStatus === "conditional";
+        const badgeCls = isReject
+          ? "bg-rose-50 text-rose-700 border-rose-200"
+          : isCond
+            ? "bg-amber-50 text-amber-700 border-amber-200"
+            : "bg-emerald-50 text-emerald-700 border-emerald-200";
+        return (
+          <div className="space-y-1">
+            <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded border ${badgeCls}`}>
+              {decision}{isCond ? " (Bersyarat)" : ""}
             </span>
-            <div className="text-[10px] text-slate-600 max-w-[150px] truncate" title={item.recommendedAction}>
-              {item.recommendedAction || "-"}
+            <div className="text-[10px] text-slate-600 truncate max-w-[140px]" title={item.notes || item.recommendedAction}>
+              {item.qcName || "-"} {item.notes ? `• ${item.notes}` : ""}
             </div>
           </div>
         );
@@ -496,7 +656,7 @@ export default function IncomingRawMaterialPage() {
             size="sm"
             className="h-7 w-7 p-0 text-slate-600 hover:text-slate-900"
             onClick={() => handlePrintDocument(item)}
-            title="Cetak Formulir PBD (QC-001)"
+            title="Cetak Formulir QC-002-PBD"
           >
             <Printer className="h-3.5 w-3.5" />
           </Button>
@@ -526,10 +686,20 @@ export default function IncomingRawMaterialPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
       <PageHeader
-        title="Pemeriksaan Bahan Datang (PBD)"
-        description="Dokumen QC-001-PBD. 02 — Pengujian mutu organoleptik, kebersihan bahan baku, dan kadar air gula kelapa datang sebelum masuk lini produksi."
+        title="Pemeriksaan Kualitas Barang Datang (PBD)"
+        description="Form QC-002-PBD Rev. 05 — Pemeriksaan kualitas organoleptik, fisik, kadar air, Brix, pH, kelarutan, label kemasan, dan sampling AQL 0,1 & 2,5."
       >
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+            onClick={() => exportPBDExcel(filteredChecks, filterMonth)}
+            disabled={filteredChecks.length === 0}
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            Export Excel (QC-002-PBD)
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -538,11 +708,11 @@ export default function IncomingRawMaterialPage() {
             disabled={filteredChecks.length === 0}
           >
             <Printer className="h-3.5 w-3.5 text-slate-500" />
-            Cetak Rekap PBD (QC-001)
+            Cetak Form QC-002-PBD
           </Button>
           <Button variant="default" size="sm" className="h-8 gap-1.5 text-xs font-semibold" onClick={handleOpenCreate}>
             <Plus className="h-3.5 w-3.5" />
-            Pemeriksaan Bahan Baru
+            Pemeriksaan Barang Baru
           </Button>
         </div>
       </PageHeader>
@@ -552,7 +722,7 @@ export default function IncomingRawMaterialPage() {
         <Card className="shadow-none border border-slate-200">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Total Penerimaan Diuji</p>
+              <p className="text-xs text-muted-foreground font-medium">Total Barang Datang Diuji</p>
               <h3 className="text-xl font-bold text-slate-900 mt-1">{totalChecks}</h3>
             </div>
             <div className="h-9 w-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">
@@ -564,7 +734,7 @@ export default function IncomingRawMaterialPage() {
         <Card className="shadow-none border border-emerald-200 bg-emerald-50/20">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs text-emerald-800 font-medium">Lolos Standar (&le; 2.0%)</p>
+              <p className="text-xs text-emerald-800 font-medium">LOLOS Standar (&le; 2.0%)</p>
               <h3 className="text-xl font-bold text-emerald-700 mt-1">{passedChecks}</h3>
             </div>
             <div className="h-9 w-9 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700">
@@ -588,7 +758,7 @@ export default function IncomingRawMaterialPage() {
         <Card className="shadow-none border border-rose-200 bg-rose-50/20">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs text-rose-800 font-medium">Ditolak / Retur Supplier</p>
+              <p className="text-xs text-rose-800 font-medium">DITOLAK / Retur Supplier</p>
               <h3 className="text-xl font-bold text-rose-700 mt-1">{rejectedChecks}</h3>
             </div>
             <div className="h-9 w-9 rounded-lg bg-rose-100 flex items-center justify-center text-rose-700">
@@ -598,21 +768,21 @@ export default function IncomingRawMaterialPage() {
         </Card>
       </div>
 
-      {/* Dokumen Acuan Card */}
+      {/* Panduan QC-002-PBD */}
       <div className="p-3.5 rounded-lg border border-amber-100 bg-gradient-to-r from-amber-50/60 to-orange-50/40 text-xs text-slate-800 space-y-1.5">
         <div className="flex items-center gap-1.5 font-bold text-amber-950">
           <Info className="h-4 w-4 text-amber-600" />
-          <span>Panduan Pengujian Mutu Bahan Datang (QC-001-PBD. 02):</span>
+          <span>Pedoman Resmi Form QC-002-PBD (Rev. 05):</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 pt-1 text-[11px]">
           <div className="bg-white/85 p-2 rounded border border-amber-100">
-            <strong className="text-emerald-800">Kadar Air &le; 2.0%:</strong> Kering prima, bebas gumpalan basah. Dapat langsung dialirkan ke <strong>Line 3 (Ayak Matang)</strong>.
+            <strong className="text-emerald-800">Ceklis &amp; Warna*:</strong> Centang bila Kemasan, Bentuk, Rasa, Aroma, Kelarutan &amp; Label Kemasan baik. Warna: <strong>1</strong> (Light Brown), <strong>2</strong> (Normal), <strong>3</strong> (Dark Brown).
           </div>
           <div className="bg-white/85 p-2 rounded border border-amber-100">
-            <strong className="text-amber-800">Kadar Air &gt; 2.0%:</strong> Lembab/basah. Wajib dialirkan ke <strong>Line 1 (Ayak Mentah)</strong> lalu <strong>Line 2 (Oven)</strong>.
+            <strong className="text-amber-800">Uji Lab &amp; AQL:</strong> Catat Kadar Air (%), Brix, dan pH sesuai spesifikasi jenis barang. Sampling mengacu <em>Military Standard</em> AQL <strong>0,1</strong> dan <strong>2,5</strong>.
           </div>
           <div className="bg-white/85 p-2 rounded border border-amber-100">
-            <strong className="text-rose-800">Kontaminan & Kemasan:</strong> Sak tidak boleh basah/sobek. Wajib 100% bebas benda asing (serangga/kerikil).
+            <strong className="text-rose-800">Label Keputusan:</strong> Beri label <strong>LOLOS</strong> atau <strong>DITOLAK</strong> pada tiap barang datang, lalu verifikasi oleh QA.
           </div>
         </div>
       </div>
@@ -620,6 +790,16 @@ export default function IncomingRawMaterialPage() {
       {/* Filter Toolbar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 rounded-lg border border-slate-200">
         <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">Bulan:</span>
+            <Input
+              type="month"
+              value={filterMonth}
+              onChange={(e) => setFilterMonth(e.target.value)}
+              className="h-8 w-36 text-xs"
+            />
+          </div>
+
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-muted-foreground whitespace-nowrap">Tanggal:</span>
             <Input
@@ -636,16 +816,17 @@ export default function IncomingRawMaterialPage() {
               placeholder="Cth: LBM-001-1126"
               value={filterLbm}
               onChange={(e) => setFilterLbm(e.target.value)}
-              className="h-8 w-40 text-xs font-mono"
+              className="h-8 w-36 text-xs font-mono"
             />
           </div>
 
-          {(filterDate || filterLbm) && (
+          {(filterMonth || filterDate || filterLbm) && (
             <Button
               variant="ghost"
               size="sm"
               className="h-8 text-xs text-muted-foreground"
               onClick={() => {
+                setFilterMonth("");
                 setFilterDate("");
                 setFilterLbm("");
               }}
@@ -657,7 +838,7 @@ export default function IncomingRawMaterialPage() {
 
         <div className="w-full sm:w-64">
           <Input
-            placeholder="Cari supplier / bahan baku / lot..."
+            placeholder="Cari supplier / barang / kode..."
             value={searchKeyword}
             onChange={(e) => setSearchKeyword(e.target.value)}
             className="h-8 text-xs"
@@ -665,20 +846,17 @@ export default function IncomingRawMaterialPage() {
         </div>
       </div>
 
-      {/* Main Table */}
-      <DataTable
-        columns={columns}
-        data={filteredChecks}
-        isLoading={loading}
-      />
+      <DataTable columns={columns} data={filteredChecks} isLoading={loading} />
 
-      {/* Dialog: Create / Edit Form PBD */}
+      {/* Dialog: Create / Edit Form QC-002-PBD */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
               <ClipboardCheck className="h-5 w-5 text-indigo-600" />
-              {editTarget ? "Edit Pemeriksaan Bahan Datang" : "Catat Pemeriksaan Bahan Datang (Form QC-001-PBD. 02)"}
+              {editTarget
+                ? "Edit Pemeriksaan Kualitas Barang Datang (QC-002-PBD)"
+                : "Catat Pemeriksaan Kualitas Barang Datang (Form QC-002-PBD Rev. 05)"}
             </DialogTitle>
           </DialogHeader>
 
@@ -690,15 +868,15 @@ export default function IncomingRawMaterialPage() {
               </div>
             )}
 
-            {/* Bagian 1: Kedatangan & Dokumen */}
+            {/* Bagian 1: Header & Sertifikasi */}
             <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-3">
               <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b pb-1.5">
-                1. Data Penerimaan & Dokumen Pengantar
+                1. Periode, Klasifikasi &amp; Referensi Kedatangan
               </h4>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Tanggal Pemeriksaan *</label>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Tgl/Bulan Pemeriksaan *</label>
                   <Input
                     type="date"
                     value={formData.checkDate}
@@ -715,6 +893,18 @@ export default function IncomingRawMaterialPage() {
                 </div>
 
                 <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Status Fairtrade</label>
+                  <select
+                    className={selectCls}
+                    value={formData.fairtradeStatus || "NON FAIRTRADE"}
+                    onChange={(e) => setFormData((p) => ({ ...p, fairtradeStatus: e.target.value }))}
+                  >
+                    <option value="NON FAIRTRADE">NON FAIRTRADE</option>
+                    <option value="FAIRTRADE">FAIRTRADE</option>
+                  </select>
+                </div>
+
+                <div>
                   <label className="text-xs font-semibold text-slate-700 mb-1 block">Nomor LBM (Ref Gudang)</label>
                   <Input
                     placeholder="LBM-001-1126"
@@ -725,7 +915,7 @@ export default function IncomingRawMaterialPage() {
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1 block">No. Surat Jalan Vendor</label>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">No. Surat Jalan</label>
                   <Input
                     placeholder="SJ-XXXXX"
                     value={formData.deliveryNoteNo || ""}
@@ -735,9 +925,38 @@ export default function IncomingRawMaterialPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
+                  Sertifikasi Organik / Natural (Header Form)
+                </label>
+                <div className="flex flex-wrap gap-3 bg-white border border-slate-200 rounded-lg px-3 py-2">
+                  {CERT_OPTIONS.map((cert) => {
+                    const checked = parseCerts(formData.certifications).includes(cert);
+                    return (
+                      <label key={cert} className="flex items-center gap-1.5 text-xs font-medium cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleCertification(cert)}
+                          className="rounded border-slate-300 text-indigo-600"
+                        />
+                        <span>{cert}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Bagian 2: Identitas Barang Datang */}
+            <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-3">
+              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b pb-1.5">
+                2. Identitas Supplier &amp; Barang Datang
+              </h4>
+
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Nama Supplier *</label>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Supplier *</label>
                   <Input
                     placeholder="Nama petani / supplier..."
                     value={formData.supplierName}
@@ -748,9 +967,9 @@ export default function IncomingRawMaterialPage() {
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Komoditas Bahan Baku *</label>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Nama Barang *</label>
                   <Input
-                    placeholder="Gula Kelapa Semut Mentah / Kelapa Butir"
+                    placeholder="Gula Semut Kelapa..."
                     value={formData.productName}
                     onChange={(e) => setFormData((p) => ({ ...p, productName: e.target.value }))}
                     required
@@ -759,62 +978,220 @@ export default function IncomingRawMaterialPage() {
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Nomor Lot / Batch Masuk</label>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Kode Barang / Lot</label>
                   <Input
-                    placeholder="Cth: 26N48PW01 / RAW-001"
-                    value={formData.batchNo || ""}
-                    onChange={(e) => setFormData((p) => ({ ...p, batchNo: e.target.value }))}
+                    placeholder="Cth: 26N48PW01"
+                    value={formData.itemCode || ""}
+                    onChange={(e) =>
+                      setFormData((p) => ({ ...p, itemCode: e.target.value, batchNo: e.target.value }))
+                    }
                     className="h-9 text-xs font-mono font-semibold text-indigo-700"
                   />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Jenis Barang</label>
+                  <select
+                    className={selectCls}
+                    value={formData.itemType || "Bahan Baku"}
+                    onChange={(e) => setFormData((p) => ({ ...p, itemType: e.target.value }))}
+                  >
+                    {ITEM_TYPE_OPTIONS.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
 
-            {/* Bagian 2: Kuantitas */}
-            <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-3">
+            {/* Bagian 3: 10 Parameter Pengecekan QC-002-PBD */}
+            <div className="border border-slate-200 rounded-lg p-3 bg-white space-y-3">
               <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b pb-1.5 flex items-center justify-between">
-                <span>2. Kuantitas Kedatangan (Timbangan & Sak)</span>
-                <span className="text-[11px] font-normal lowercase text-muted-foreground">
-                  Diterima: <strong>{formData.acceptedWeight} kg</strong> | Ditolak: <strong>{formData.rejectedWeight} kg</strong>
-                </span>
+                <span>3. Pengecekan Kualitas (10 Parameter QC-002-PBD)</span>
+                <span className="text-[11px] font-semibold text-indigo-700">Ceklis apabila dalam keadaan baik</span>
               </h4>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                {[
+                  { key: "checkPackaging" as const, label: "Kemasan" },
+                  { key: "checkShape" as const, label: "Bentuk" },
+                  { key: "checkTaste" as const, label: "Rasa" },
+                  { key: "checkAroma" as const, label: "Aroma" },
+                  { key: "checkSolubility" as const, label: "Kelarutan" },
+                  { key: "checkPackageLabel" as const, label: "Label Kemasan" },
+                ].map((item) => {
+                  const val = formData[item.key] ?? true;
+                  return (
+                    <label
+                      key={item.key}
+                      className={`flex items-center justify-between px-2.5 py-2 rounded-lg border text-xs font-semibold cursor-pointer transition-colors ${
+                        val
+                          ? "bg-emerald-50/70 border-emerald-300 text-emerald-900"
+                          : "bg-rose-50/70 border-rose-300 text-rose-900"
+                      }`}
+                    >
+                      <span>{item.label}</span>
+                      <input
+                        type="checkbox"
+                        checked={val}
+                        onChange={(e) => setFormData((p) => ({ ...p, [item.key]: e.target.checked }))}
+                        className="rounded border-slate-300 text-emerald-600"
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-1">
                 <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Total Sak Karung</label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={formData.totalBags || ""}
-                    onChange={(e) => setFormData((p) => ({ ...p, totalBags: Number(e.target.value) }))}
-                    className="h-9 text-xs font-semibold"
-                  />
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Warna* (1 / 2 / 3)</label>
+                  <select
+                    className={selectCls}
+                    value={formData.colorScore || 2}
+                    onChange={(e) => setFormData((p) => ({ ...p, colorScore: Number(e.target.value) }))}
+                  >
+                    {COLOR_SCORE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Sampel Diuji (Sak)</label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={formData.sampleBags || ""}
-                    onChange={(e) => setFormData((p) => ({ ...p, sampleBags: Number(e.target.value) }))}
-                    className="h-9 text-xs font-semibold"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Berat Bruto (kg)</label>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Kadar Air (%)</label>
                   <Input
                     type="number"
                     step="0.01"
-                    value={formData.grossWeight || ""}
-                    onChange={(e) => setFormData((p) => ({ ...p, grossWeight: Number(e.target.value) }))}
-                    className="h-9 text-xs"
+                    placeholder="1.85"
+                    value={formData.moistureContent ?? ""}
+                    onChange={(e) =>
+                      setFormData((p) => ({
+                        ...p,
+                        moistureContent: e.target.value ? Number(e.target.value) : undefined,
+                      }))
+                    }
+                    className="h-9 text-xs font-mono font-bold"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Berat Netto (kg)</label>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Brix (°Bx)</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    placeholder="Opsional"
+                    value={formData.brixValue ?? ""}
+                    onChange={(e) =>
+                      setFormData((p) => ({
+                        ...p,
+                        brixValue: e.target.value ? Number(e.target.value) : undefined,
+                      }))
+                    }
+                    className="h-9 text-xs font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">pH</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="Opsional"
+                    value={formData.phValue ?? ""}
+                    onChange={(e) =>
+                      setFormData((p) => ({
+                        ...p,
+                        phValue: e.target.value ? Number(e.target.value) : undefined,
+                      }))
+                    }
+                    className="h-9 text-xs font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Bebas Benda Asing</label>
+                  <select
+                    className={selectCls}
+                    value={formData.foreignMatterClean ? "true" : "false"}
+                    onChange={(e) =>
+                      setFormData((p) => ({ ...p, foreignMatterClean: e.target.value === "true" }))
+                    }
+                  >
+                    <option value="true">✓ Bebas Kontaminan</option>
+                    <option value="false">✗ Ada Benda Asing</option>
+                  </select>
+                </div>
+              </div>
+
+              {formData.moistureContent !== undefined && (
+                <div className="text-[11px] flex items-center gap-1.5">
+                  <Droplets className="h-3.5 w-3.5 text-indigo-600" />
+                  {formData.moistureContent <= 2.0 ? (
+                    <span className="text-emerald-700 font-semibold">
+                      Kadar Air &le; 2.0% — Memenuhi standar kering prima (dapat langsung ke Ayak Matang).
+                    </span>
+                  ) : (
+                    <span className="text-amber-700 font-semibold">
+                      Kadar Air &gt; 2.0% — Perlu pengeringan Oven sebelum Ayak Matang.
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Bagian 4: AQL Sampling, Tingkat Lolos, Bobot LBM & Keputusan */}
+            <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-3">
+              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b pb-1.5">
+                4. Sampling AQL, Tingkat Lolos &amp; Keputusan (LOLOS / DITOLAK)
+              </h4>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Tingkat Lolos (%)</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    value={formData.passRatePercent ?? 100}
+                    onChange={(e) =>
+                      setFormData((p) => ({ ...p, passRatePercent: Number(e.target.value) }))
+                    }
+                    className="h-9 text-xs font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Jumlah Sampling</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={formData.sampleBags ?? 0}
+                    onChange={(e) => setFormData((p) => ({ ...p, sampleBags: Number(e.target.value) }))}
+                    className="h-9 text-xs font-mono font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Label Keputusan *</label>
+                  <select
+                    className={selectCls}
+                    value={formData.inspectionDecision || "LOLOS"}
+                    onChange={(e) => {
+                      const decision = e.target.value;
+                      setFormData((p) => ({
+                        ...p,
+                        inspectionDecision: decision,
+                        passRatePercent: decision === "DITOLAK" ? 0 : p.passRatePercent === 0 ? 100 : p.passRatePercent,
+                      }));
+                    }}
+                  >
+                    <option value="LOLOS">LOLOS</option>
+                    <option value="DITOLAK">DITOLAK</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Netto LBM (kg)</label>
                   <Input
                     type="number"
                     step="0.01"
@@ -827,154 +1204,32 @@ export default function IncomingRawMaterialPage() {
                         acceptedWeight: Math.max(0, net - (p.rejectedWeight || 0)),
                       }));
                     }}
-                    className="h-9 text-xs font-bold text-slate-900"
+                    className="h-9 text-xs font-mono"
                   />
                 </div>
-              </div>
-            </div>
 
-            {/* Bagian 3: Parameter Uji Lab & Organoleptik */}
-            <div className="border border-slate-200 rounded-lg p-3 bg-white space-y-3">
-              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b pb-1.5 flex items-center justify-between">
-                <span>3. Uji Mutu Organoleptik & Laboratorium</span>
-                <span className="text-[11px] font-semibold text-indigo-700">BRL-01: Kadar Air Max 2.0%</span>
-              </h4>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="p-2.5 rounded-lg border border-amber-200 bg-amber-50/40 space-y-1">
-                  <label className="text-xs font-bold text-amber-900 block">Kadar Air (% Moisture) *</label>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Ditolak (kg)</label>
                   <Input
                     type="number"
                     step="0.01"
-                    placeholder="Cth: 1.85"
-                    value={formData.moistureContent ?? ""}
-                    onChange={(e) =>
+                    value={formData.rejectedWeight || 0}
+                    onChange={(e) => {
+                      const rej = Number(e.target.value);
                       setFormData((p) => ({
                         ...p,
-                        moistureContent: e.target.value ? Number(e.target.value) : undefined,
-                      }))
-                    }
-                    className="h-8 text-xs font-mono font-bold bg-white text-slate-900"
-                  />
-                  <span className="text-[10px] text-muted-foreground block">
-                    {formData.moistureContent !== undefined && formData.moistureContent <= 2.0 ? (
-                      <span className="text-emerald-700 font-semibold">✓ Standar (&le; 2.0%, skip oven)</span>
-                    ) : (
-                      <span className="text-amber-700 font-semibold">⚠️ Di atas 2.0% (wajib oven)</span>
-                    )}
-                  </span>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Derajat Brix (°Bx) (Opsional)</label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    placeholder="Untuk nira / gula cair..."
-                    value={formData.brixValue ?? ""}
-                    onChange={(e) =>
-                      setFormData((p) => ({
-                        ...p,
-                        brixValue: e.target.value ? Number(e.target.value) : undefined,
-                      }))
-                    }
-                    className="h-8 text-xs font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Ukuran Mesh / Granulasi</label>
-                  <Input
-                    placeholder="Cth: Mesh 16 - 18"
-                    value={formData.meshSize || ""}
-                    onChange={(e) => setFormData((p) => ({ ...p, meshSize: e.target.value }))}
-                    className="h-8 text-xs"
+                        rejectedWeight: rej,
+                        acceptedWeight: Math.max(0, (p.netWeight || 0) - rej),
+                      }));
+                    }}
+                    className="h-9 text-xs font-mono"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Kondisi Fisik Gula *</label>
-                  <select
-                    className={selectCls}
-                    value={formData.sugarCondition}
-                    onChange={(e) => setFormData((p) => ({ ...p, sugarCondition: e.target.value }))}
-                  >
-                    <option value="Kering, Bersih, Sesuai Standar">Kering, Bersih, Sesuai Standar</option>
-                    <option value="Lembab (Perlu Pengeringan Oven)">Lembab (Perlu Pengeringan Oven)</option>
-                    <option value="Menggumpal / Lembab Tinggi">Menggumpal / Lembab Tinggi</option>
-                    <option value="Basah / Rusak (Reject)">Basah / Rusak (Reject)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Warna & Kenampakan</label>
-                  <Input
-                    placeholder="Cth: Coklat Keemasan Cerah / Coklat Normal"
-                    value={formData.colorAppearance || ""}
-                    onChange={(e) => setFormData((p) => ({ ...p, colorAppearance: e.target.value }))}
-                    className="h-9 text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Aroma & Rasa</label>
-                  <Input
-                    placeholder="Cth: Khas Gula Kelapa Segar, Tidak Sangit/Asam"
-                    value={formData.aromaFlavor || ""}
-                    onChange={(e) => setFormData((p) => ({ ...p, aromaFlavor: e.target.value }))}
-                    className="h-9 text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Kebersihan Dari Benda Asing</label>
-                  <div className="flex items-center gap-4 h-9 px-3 bg-slate-50 border rounded-lg text-xs">
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="radio"
-                        checked={formData.foreignMatterClean === true}
-                        onChange={() => setFormData((p) => ({ ...p, foreignMatterClean: true }))}
-                        className="text-emerald-600"
-                      />
-                      <span className="text-emerald-700 font-semibold">✓ Bebas Kotoran</span>
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="radio"
-                        checked={formData.foreignMatterClean === false}
-                        onChange={() => setFormData((p) => ({ ...p, foreignMatterClean: false }))}
-                        className="text-rose-600"
-                      />
-                      <span className="text-rose-600 font-semibold">✗ Ada Kontaminan</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Bagian 4: Rekomendasi & Verifikasi */}
-            <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-3">
-              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider border-b pb-1.5">
-                4. Rekomendasi Alur Produksi & Verifikator
-              </h4>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-700 mb-1 block">Rekomendasi Penanganan Alur Produksi</label>
-                <Input
-                  placeholder="Cth: Dapat langsung ke Ayak Matang / Wajib masuk Oven Pengering"
-                  value={formData.recommendedAction || ""}
-                  onChange={(e) => setFormData((p) => ({ ...p, recommendedAction: e.target.value }))}
-                  className="h-9 text-xs font-semibold text-indigo-900"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Diperiksa Oleh (QC Inspector)</label>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Paraf Pemeriksa (QC)</label>
                   <Input
                     value={formData.qcName || ""}
                     onChange={(e) => setFormData((p) => ({ ...p, qcName: e.target.value }))}
@@ -983,23 +1238,23 @@ export default function IncomingRawMaterialPage() {
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Diverifikasi Oleh (QA / Spv)</label>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Diverifikasi Oleh (QA)</label>
                   <Input
                     value={formData.qaName || ""}
                     onChange={(e) => setFormData((p) => ({ ...p, qaName: e.target.value }))}
                     className="h-9 text-xs"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="text-xs font-semibold text-slate-700 mb-1 block">Catatan Tambahan</label>
-                <Input
-                  placeholder="Catatan penanganan bahan baku..."
-                  value={formData.notes || ""}
-                  onChange={(e) => setFormData((p) => ({ ...p, notes: e.target.value }))}
-                  className="h-9 text-xs"
-                />
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 mb-1 block">Ket / Catatan</label>
+                  <Input
+                    placeholder="Keterangan tambahan..."
+                    value={formData.notes || ""}
+                    onChange={(e) => setFormData((p) => ({ ...p, notes: e.target.value }))}
+                    className="h-9 text-xs"
+                  />
+                </div>
               </div>
             </div>
 
@@ -1015,15 +1270,15 @@ export default function IncomingRawMaterialPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal: View Detail PBD */}
+      {/* Modal: Detail QC-002-PBD */}
       {viewItem && (
         <Dialog open={!!viewItem} onOpenChange={(open) => !open && setViewItem(null)}>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-xl">
             <DialogHeader>
               <DialogTitle className="text-sm font-bold text-slate-900 flex items-center justify-between">
-                <span>Rincian Form QC-001-PBD. 02</span>
+                <span>Rincian Form QC-002-PBD (Rev. 05)</span>
                 <span className="font-mono text-xs bg-slate-100 text-slate-800 px-2 py-0.5 rounded border">
-                  {viewItem.batchNo || "RAW"}
+                  {viewItem.itemCode || viewItem.batchNo || viewItem.documentNo}
                 </span>
               </DialogTitle>
             </DialogHeader>
@@ -1031,70 +1286,68 @@ export default function IncomingRawMaterialPage() {
             <div className="space-y-3 py-2 text-xs">
               <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded border border-slate-200">
                 <div>
-                  <span className="text-muted-foreground block text-[10px]">Tanggal:</span>
-                  <span className="font-semibold text-slate-800">{viewItem.checkDate}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block text-[10px]">Ref LBM:</span>
-                  <span className="font-mono font-semibold text-slate-800">{viewItem.lbmNo || "-"}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block text-[10px]">Supplier:</span>
-                  <span className="font-semibold text-slate-800">{viewItem.supplierName}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block text-[10px]">Surat Jalan:</span>
-                  <span className="font-mono text-slate-800">{viewItem.deliveryNoteNo || "-"}</span>
-                </div>
-              </div>
-
-              <div className="border border-slate-200 rounded p-2.5 space-y-1.5">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Komoditas:</span>
-                  <span className="font-bold text-slate-900">{viewItem.productName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Kuantitas Netto:</span>
-                  <span className="font-bold text-slate-900">{viewItem.netWeight.toLocaleString("id-ID")} kg ({viewItem.totalBags} sak)</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Kadar Air (%):</span>
-                  <span className="font-mono font-bold text-indigo-700">
-                    {viewItem.moistureContent !== undefined ? `${viewItem.moistureContent.toFixed(2)} %` : "-"}
+                  <span className="text-muted-foreground block text-[10px]">Tgl/Bulan &amp; Fairtrade:</span>
+                  <span className="font-semibold text-slate-800">
+                    {viewItem.checkDate} • {viewItem.fairtradeStatus || "NON FAIRTRADE"}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Kondisi Fisik:</span>
-                  <span>{viewItem.sugarCondition}</span>
+                <div>
+                  <span className="text-muted-foreground block text-[10px]">Sertifikasi:</span>
+                  <span className="font-semibold text-slate-800">{viewItem.certifications || "NATURAL"}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Warna / Kenampakan:</span>
-                  <span>{viewItem.colorAppearance || "-"}</span>
+                <div>
+                  <span className="text-muted-foreground block text-[10px]">Supplier &amp; Ref LBM:</span>
+                  <span className="font-semibold text-slate-800">
+                    {viewItem.supplierName} ({viewItem.lbmNo || "-"})
+                  </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Aroma & Rasa:</span>
-                  <span>{viewItem.aromaFlavor || "-"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Benda Asing:</span>
-                  <span>{viewItem.foreignMatterClean ? "✓ Bebas Kotoran" : "✗ Ada Temuan"}</span>
+                <div>
+                  <span className="text-muted-foreground block text-[10px]">Nama &amp; Jenis Barang:</span>
+                  <span className="font-semibold text-slate-800">
+                    {viewItem.productName} ({viewItem.itemType || "Bahan Baku"})
+                  </span>
                 </div>
               </div>
 
-              <div className="bg-indigo-50 border border-indigo-200 p-2.5 rounded space-y-1">
-                <span className="text-[10px] font-bold text-indigo-900 uppercase block">Rekomendasi Alur Produksi:</span>
-                <div className="text-xs font-semibold text-indigo-950">{viewItem.recommendedAction || "Sesuai Standar"}</div>
+              <div className="border border-slate-200 rounded p-2.5 space-y-2">
+                <div className="font-bold text-slate-800 border-b pb-1">Pengecekan Kualitas</div>
+                <div className="grid grid-cols-3 gap-1.5 text-[11px]">
+                  <div>Kemasan: <strong>{viewItem.checkPackaging ? "✓ Baik" : "✗ Tidak"}</strong></div>
+                  <div>Bentuk: <strong>{viewItem.checkShape ? "✓ Baik" : "✗ Tidak"}</strong></div>
+                  <div>Rasa: <strong>{viewItem.checkTaste ? "✓ Baik" : "✗ Tidak"}</strong></div>
+                  <div>Aroma: <strong>{viewItem.checkAroma ? "✓ Baik" : "✗ Tidak"}</strong></div>
+                  <div>Kelarutan: <strong>{viewItem.checkSolubility ? "✓ Baik" : "✗ Tidak"}</strong></div>
+                  <div>Label Kemasan: <strong>{viewItem.checkPackageLabel ? "✓ Baik" : "✗ Tidak"}</strong></div>
+                  <div>Warna*: <strong>{viewItem.colorScore || 2}</strong></div>
+                  <div>Kadar Air: <strong>{viewItem.moistureContent != null ? `${viewItem.moistureContent.toFixed(2)}%` : "-"}</strong></div>
+                  <div>Brix / pH: <strong>{viewItem.brixValue ?? "-"} / {viewItem.phValue ?? "-"}</strong></div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 bg-indigo-50 border border-indigo-200 p-2.5 rounded">
+                <div>
+                  <span className="text-[10px] text-indigo-800 block">Tingkat Lolos:</span>
+                  <strong className="text-indigo-950 font-mono">{viewItem.passRatePercent ?? 100}%</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-indigo-800 block">Jumlah Sampling:</span>
+                  <strong className="text-indigo-950 font-mono">{viewItem.sampleBags || 0}</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] text-indigo-800 block">Keputusan:</span>
+                  <strong className="text-indigo-950">{viewItem.inspectionDecision || "LOLOS"}</strong>
+                </div>
               </div>
 
               {viewItem.notes && (
                 <div className="text-[11px] text-slate-700 bg-amber-50/60 border border-amber-200 p-2 rounded">
-                  <strong>Catatan:</strong> {viewItem.notes}
+                  <strong>Ket:</strong> {viewItem.notes}
                 </div>
               )}
 
               <div className="border-t pt-2 flex justify-between text-muted-foreground text-[11px]">
-                <div>QC: {viewItem.qcName || "-"}</div>
-                <div>QA: {viewItem.qaName || "-"}</div>
+                <div>Paraf QC: {viewItem.qcName || "-"}</div>
+                <div>Diverifikasi QA: {viewItem.qaName || "-"}</div>
               </div>
             </div>
 
@@ -1105,7 +1358,7 @@ export default function IncomingRawMaterialPage() {
                 className="gap-1.5 text-xs"
                 onClick={() => handlePrintDocument(viewItem)}
               >
-                <Printer className="h-3.5 w-3.5" /> Cetak Form
+                <Printer className="h-3.5 w-3.5" /> Cetak QC-002-PBD
               </Button>
               <Button variant="default" size="sm" onClick={() => setViewItem(null)}>
                 Tutup
